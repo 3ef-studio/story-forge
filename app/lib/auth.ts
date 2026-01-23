@@ -1,7 +1,7 @@
 import NextAuth from 'next-auth';
 import type { NextAuthConfig } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
-import { compare } from 'bcrypt';
+//import { compare } from 'bcrypt';
 import { prisma } from './db';
 
 export const authConfig: NextAuthConfig = {
@@ -28,7 +28,7 @@ export const authConfig: NextAuthConfig = {
         if (!user) {
           return null;
         }
-
+        const { compare } = await import('bcrypt');  
         const isPasswordValid = await compare(password, user.passwordHash);
 
         if (!isPasswordValid) {

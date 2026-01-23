@@ -1,61 +1,32 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/app/lib/auth';
 import { prisma } from '@/app/lib/db';
-import {
-  getActionById,
-  applyActionEffects,
-  getCooldownExpiry,
-  rollForEncounter,
-  selectEncounterType,
-  getEncounterDifficulty,
-} from '@/app/data/actions';
+import { getActionById, applyActionEffects, getCooldownExpiry, rollForEncounter, selectEncounterType, getEncounterDifficulty } from '@/app/data/actions';
 import { calculateReputationImpact, getFactionById } from '@/app/data/factions';
-import {
-  getAvailableEncounters,
-  selectRandomEncounter,
-  type EncounterTemplate,
-} from '@/app/data/encounter-templates';
+import { getAvailableEncounters, selectRandomEncounter, type EncounterTemplate } from '@/app/data/encounter-templates';
 import { findCachedEncounter, cacheEncounter } from '@/app/lib/ai/encounter-cache';
-
-// Ensure this route runs on Node.js runtime (Prisma + Edge can break)
-export const runtime = 'nodejs';
-// Ensure Next doesn't try to statically optimize anything about this route
-export const dynamic = 'force-dynamic';
-
-type ExecuteActionBody = {
-  actionId: string;
-};
-
-function isExecuteActionBody(value: unknown): value is ExecuteActionBody {
-  if (!value || typeof value !== 'object') return false;
-  const v = value as Record<string, unknown>;
-  return typeof v.actionId === 'string' && v.actionId.length > 0;
-}
+import { generateEncounterForAction, toEncounterTemplate } from '@/app/lib/ai/encounter-generator';
 
 export async function POST(request: Request) {
   try {
     const session = await auth();
 
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
     }
 
-    let rawBody: unknown;
-    try {
-      rawBody = await request.json();
-    } catch {
-      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
-    }
-
-    if (!isExecuteActionBody(rawBody)) {
-      return NextResponse.json({ error: 'Missing or invalid actionId' }, { status: 400 });
-    }
-
-    const { actionId } = rawBody;
+    const body = await request.json();
+    const { actionId } = body;
 
     const action = getActionById(actionId);
     if (!action) {
-      return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Invalid action' },
+        { status: 400 }
+      );
     }
 
     // Get character with all data
@@ -70,7 +41,10 @@ export async function POST(request: Request) {
     });
 
     if (!character) {
-      return NextResponse.json({ error: 'Character not found' }, { status: 404 });
+      return NextResponse.json(
+        { error: 'Character not found' },
+        { status: 404 }
+      );
     }
 
     // Check cooldown
@@ -78,14 +52,17 @@ export async function POST(request: Request) {
       (cd) => cd.actionId === actionId && cd.expiresAt > new Date()
     );
     if (existingCooldown) {
-      return NextResponse.json({ error: 'Action is on cooldown' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Action is on cooldown' },
+        { status: 400 }
+      );
     }
 
     // Build attribute map
     const attributesMap: Record<string, number> = {};
-    for (const attr of character.attributes) {
+    character.attributes.forEach((attr) => {
       attributesMap[attr.attributeId] = attr.currentValue;
-    }
+    });
 
     // Build powers list
     const powersList = character.powers.map((p) => p.powerId);
@@ -93,12 +70,18 @@ export async function POST(request: Request) {
     // Check energy (handle rest action which restores energy)
     const energyCost = action.energyCost;
     if (energyCost > 0 && character.currentEnergy < energyCost) {
-      return NextResponse.json({ error: 'Not enough energy' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Not enough energy' },
+        { status: 400 }
+      );
     }
 
     // Check level requirement
     if (action.minLevel && character.level < action.minLevel) {
-      return NextResponse.json({ error: 'Level too low' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Level too low' },
+        { status: 400 }
+      );
     }
 
     // Check attribute requirements
@@ -118,7 +101,10 @@ export async function POST(request: Request) {
     if (action.requiredPowers?.length) {
       const hasPower = action.requiredPowers.some((p) => powersList.includes(p));
       if (!hasPower) {
-        return NextResponse.json({ error: 'Missing required power' }, { status: 400 });
+        return NextResponse.json(
+          { error: 'Missing required power' },
+          { status: 400 }
+        );
       }
     }
 
@@ -127,20 +113,19 @@ export async function POST(request: Request) {
 
     // Build faction reputation map
     const factionReputations: Record<string, number> = {};
-    for (const rep of character.factionReputations) {
+    character.factionReputations.forEach((rep) => {
       factionReputations[rep.factionId] = rep.reputation;
-    }
+    });
 
     // Calculate cascading reputation changes
     const allReputationChanges: Record<string, number> = {};
     for (const [factionId, change] of Object.entries(effects.reputationChanges)) {
       const faction = getFactionById(factionId);
-      if (!faction) continue;
-
-      const cascadeChanges = calculateReputationImpact(faction, change, factionReputations);
-      for (const [cascadeFactionId, cascadeChange] of Object.entries(cascadeChanges)) {
-        allReputationChanges[cascadeFactionId] =
-          (allReputationChanges[cascadeFactionId] || 0) + cascadeChange;
+      if (faction) {
+        const cascadeChanges = calculateReputationImpact(faction, change, factionReputations);
+        for (const [cascadeFactionId, cascadeChange] of Object.entries(cascadeChanges)) {
+          allReputationChanges[cascadeFactionId] = (allReputationChanges[cascadeFactionId] || 0) + cascadeChange;
+        }
       }
     }
 
@@ -156,8 +141,13 @@ export async function POST(request: Request) {
       const involvedFactions = action.likelyFactions;
       const location = action.locationTypes[0];
 
-      // 1) Try cache first
-      encounter = await findCachedEncounter(encounterType, difficulty, involvedFactions, location);
+      // 1. Try cache first
+      encounter = await findCachedEncounter(
+        encounterType,
+        difficulty,
+        involvedFactions,
+        location
+      );
 
       if (encounter) {
         console.log('[Encounter] Using cached encounter:', encounter.id);
@@ -165,15 +155,9 @@ export async function POST(request: Request) {
         cachedEncounterId = encounter.id;
       }
 
-      // 2) Generate with AI if no cache hit
+      // 2. Generate with AI if no cache hit
       if (!encounter) {
         console.log('[Encounter] Generating with AI...');
-
-        // IMPORTANT: Lazy import to prevent build-time evaluation crashes on Vercel
-        const { generateEncounterForAction, toEncounterTemplate } = await import(
-          '@/app/lib/ai/encounter-generator'
-        );
-
         const aiEncounter = await generateEncounterForAction(
           character,
           actionId,
@@ -185,7 +169,6 @@ export async function POST(request: Request) {
 
         if (aiEncounter) {
           encounter = toEncounterTemplate(aiEncounter);
-
           // Cache the successful generation
           cachedEncounterId = await cacheEncounter(encounter, involvedFactions, location);
           if (cachedEncounterId) {
@@ -193,12 +176,11 @@ export async function POST(request: Request) {
             // Update encounter ID to use cached ID for resolution
             encounter = { ...encounter, id: cachedEncounterId };
           }
-
           console.log('[Encounter] AI generated and cached:', encounter.id);
         }
       }
 
-      // 3) Fallback to templates if AI failed
+      // 3. Fallback to templates if AI failed
       if (!encounter) {
         console.log('[Encounter] Falling back to templates...');
         const availableEncounters = getAvailableEncounters(
@@ -215,10 +197,7 @@ export async function POST(request: Request) {
     }
 
     // Calculate new energy (handle rest which restores energy)
-    const newEnergy = Math.max(
-      0,
-      Math.min(character.maxEnergy, character.currentEnergy - energyCost)
-    );
+    const newEnergy = Math.max(0, Math.min(character.maxEnergy, character.currentEnergy - energyCost));
 
     // Calculate XP and check for level up
     const xpGained = action.baseXPReward;
@@ -347,6 +326,9 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('Action execution error:', error);
-    return NextResponse.json({ error: 'An error occurred' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'An error occurred' },
+      { status: 500 }
+    );
   }
 }
