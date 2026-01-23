@@ -2,21 +2,34 @@ import { PrismaClient } from '@prisma/client';
 
 declare global {
   // eslint-disable-next-line no-var
-  var prisma: PrismaClient | undefined;
+  var __prisma: PrismaClient | undefined;
 }
+
+let prismaClient: PrismaClient | undefined =
+  global.__prisma ?? undefined;
 
 /**
- * Prisma singleton for Next.js (dev + serverless).
- * - Reuses the same client in dev to avoid exhausting connections.
- * - Keeps initialization predictable for build/runtime evaluation.
+ * Lazily create PrismaClient on first actual use.
+ * This avoids build-time module evaluation crashes on Vercel/Next.
  */
-export const prisma =
-  global.prisma ??
-  new PrismaClient({
-    log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
-  });
+function getPrisma(): PrismaClient {
+  if (!prismaClient) {
+    prismaClient = new PrismaClient({
+      log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+    });
 
-if (process.env.NODE_ENV !== 'production') {
-  global.prisma = prisma;
+    if (process.env.NODE_ENV !== 'production') {
+      global.__prisma = prismaClient;
+    }
+  }
+  return prismaClient;
 }
 
+// Proxy preserves the normal `prisma.model.method()` API
+export const prisma = new Proxy({} as PrismaClient, {
+  get(_target, prop) {
+    const client = getPrisma();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (client as any)[prop];
+  },
+});
