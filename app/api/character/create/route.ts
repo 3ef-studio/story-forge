@@ -5,6 +5,9 @@ import { getOriginById, initializeCharacterFromOrigin } from '@/app/data/origins
 import { factions } from '@/app/data/factions';
 import { attributes } from '@/app/data/attributes';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: Request) {
   try {
     const session = await auth();
