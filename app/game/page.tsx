@@ -365,7 +365,6 @@ export default function GamePage() {
 
           <div className="flex items-center gap-2">
             <Button
-              variant="ghost"
               size="sm"
               onClick={() => router.push('/profile')}
               className="hidden sm:flex"
@@ -374,7 +373,6 @@ export default function GamePage() {
               Profile
             </Button>
             <Button
-              variant="ghost"
               size="sm"
               onClick={() => router.push('/help')}
               className="hidden sm:flex"
@@ -383,7 +381,6 @@ export default function GamePage() {
               Help
             </Button>
             <Button
-              variant="ghost"
               size="sm"
               onClick={() => signOut({ callbackUrl: '/' })}
             >
@@ -393,7 +390,6 @@ export default function GamePage() {
 
             {/* Mobile menu button */}
             <Button
-              variant="ghost"
               size="icon"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="sm:hidden"
@@ -408,7 +404,6 @@ export default function GamePage() {
       {mobileMenuOpen && (
         <div className="sm:hidden bg-white border-b p-4 space-y-2">
           <Button
-            variant="ghost"
             className="w-full justify-start"
             onClick={() => {
               router.push('/profile');
@@ -419,7 +414,6 @@ export default function GamePage() {
             Profile
           </Button>
           <Button
-            variant="ghost"
             className="w-full justify-start"
             onClick={() => {
               router.push('/help');
@@ -468,7 +462,7 @@ export default function GamePage() {
             )}
 
             {gameState === 'executing' && (
-              <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-lg border border-indigo-200 p-8">
+              <div className="bg-linear-to-br from-indigo-50 to-purple-50 rounded-lg border border-indigo-200 p-8">
                 <div className="text-center space-y-6">
                   {/* Animated icon */}
                   <div className="relative mx-auto w-16 h-16">
@@ -495,7 +489,7 @@ export default function GamePage() {
                   <div className="w-full max-w-xs mx-auto">
                     <div className="h-2 bg-indigo-100 rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-500 ease-out rounded-full"
+                        className="h-full bg-linear-to-r from-indigo-500 to-purple-500 transition-all duration-500 ease-out rounded-full"
                         style={{ width: `${loadingProgress}%` }}
                       />
                     </div>
@@ -539,7 +533,7 @@ export default function GamePage() {
       {/* Level Up Modal */}
       {levelUpModal !== null && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 animate-fade-in">
-          <div className="bg-gradient-to-br from-yellow-50 to-amber-50 rounded-2xl p-8 max-w-md mx-4 text-center shadow-2xl border-2 border-yellow-300 animate-bounce-in">
+          <div className="bg-linear-to-br from-yellow-50 to-amber-50 rounded-2xl p-8 max-w-md mx-4 text-center shadow-2xl border-2 border-yellow-300 animate-bounce-in">
             {/* Celebration icons */}
             <div className="flex justify-center gap-2 mb-4">
               <Sparkles className="h-8 w-8 text-yellow-500 animate-pulse" />
@@ -547,7 +541,7 @@ export default function GamePage() {
               <Sparkles className="h-8 w-8 text-yellow-500 animate-pulse" />
             </div>
 
-            <h2 className="text-3xl font-bold bg-gradient-to-r from-yellow-600 to-amber-600 bg-clip-text text-transparent mb-2">
+            <h2 className="text-3xl font-bold bg-linear-to-r from-yellow-600 to-amber-600 bg-clip-text text-transparent mb-2">
               Level Up!
             </h2>
 
@@ -575,7 +569,7 @@ export default function GamePage() {
             <Button
               onClick={handleLevelUpClose}
               size="lg"
-              className="bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-600 hover:to-amber-600 text-white font-semibold px-8"
+              className="bg-linear-to-r from-yellow-500 to-amber-500 hover:from-yellow-600 hover:to-amber-600 text-white font-semibold px-8"
             >
               Continue Your Journey
             </Button>

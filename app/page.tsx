@@ -29,9 +29,9 @@ export default async function Home() {
       </div>
 
       {/* Navigation */}
-      <nav className="relative border-b border-gray-700/50 backdrop-blur-sm bg-gray-900/50 sticky top-0 z-50">
+      <nav className="relative border-b border-gray-700/50 backdrop-blur-sm bg-gray-900/50 top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+          <h1 className="text-2xl font-bold bg-linear-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
             Story Forge
           </h1>
           <div className="flex gap-4">
@@ -43,7 +43,7 @@ export default async function Home() {
             </Link>
             <Link
               href="/signup"
-              className="px-6 py-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 rounded-lg transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-blue-500/25 font-medium"
+              className="px-6 py-2 bg-linear-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 rounded-lg transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-blue-500/25 font-medium"
             >
               Get Started
             </Link>
@@ -117,7 +117,7 @@ export default async function Home() {
         {/* Features Grid */}
         <div className="grid md:grid-cols-3 gap-6 mb-20">
           <div className="group bg-gray-800/50 backdrop-blur-sm rounded-2xl p-6 border border-gray-700/50 hover:border-blue-500/50 transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/10 hover:-translate-y-1">
-            <div className="w-14 h-14 bg-gradient-to-br from-blue-500/20 to-blue-600/20 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+            <div className="w-14 h-14 bg-linear-to-br from-blue-500/20 to-blue-600/20 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
               <svg
                 className="w-7 h-7 text-blue-400"
                 fill="none"
@@ -140,7 +140,7 @@ export default async function Home() {
           </div>
 
           <div className="group bg-gray-800/50 backdrop-blur-sm rounded-2xl p-6 border border-gray-700/50 hover:border-green-500/50 transition-all duration-300 hover:shadow-xl hover:shadow-green-500/10 hover:-translate-y-1">
-            <div className="w-14 h-14 bg-gradient-to-br from-green-500/20 to-green-600/20 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+            <div className="w-14 h-14 bg-linear-to-br from-green-500/20 to-green-600/20 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
               <svg
                 className="w-7 h-7 text-green-400"
                 fill="none"
@@ -163,7 +163,7 @@ export default async function Home() {
           </div>
 
           <div className="group bg-gray-800/50 backdrop-blur-sm rounded-2xl p-6 border border-gray-700/50 hover:border-purple-500/50 transition-all duration-300 hover:shadow-xl hover:shadow-purple-500/10 hover:-translate-y-1">
-            <div className="w-14 h-14 bg-gradient-to-br from-purple-500/20 to-purple-600/20 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+            <div className="w-14 h-14 bg-linear-to-br from-purple-500/20 to-purple-600/20 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
               <svg
                 className="w-7 h-7 text-purple-400"
                 fill="none"
@@ -187,12 +187,12 @@ export default async function Home() {
         </div>
 
         {/* Path Selection Preview */}
-        <div className="bg-gradient-to-br from-gray-800/80 to-gray-900/80 backdrop-blur-sm rounded-2xl p-8 border border-gray-700/50 mb-20">
+        <div className="bg-linear-to-br from-gray-800/80 to-gray-900/80 backdrop-blur-sm rounded-2xl p-8 border border-gray-700/50 mb-20">
           <h3 className="text-2xl font-bold mb-2 text-center">Choose Your Path</h3>
           <p className="text-gray-400 text-center mb-8">Your moral compass shapes your journey</p>
           <div className="grid md:grid-cols-3 gap-6">
             <div className="group text-center p-6 rounded-xl hover:bg-blue-500/10 transition-all duration-300 cursor-pointer">
-              <div className="w-20 h-20 bg-gradient-to-br from-blue-500/20 to-blue-600/30 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform shadow-lg shadow-blue-500/10">
+              <div className="w-20 h-20 bg-linear-to-br from-blue-500/20 to-blue-600/30 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform shadow-lg shadow-blue-500/10">
                 <span className="text-4xl">🦸</span>
               </div>
               <h4 className="text-xl font-semibold text-blue-400 mb-2">Hero</h4>
