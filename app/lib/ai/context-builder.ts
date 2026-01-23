@@ -4,7 +4,7 @@ import { getOriginById } from '@/app/data/origins'
 import { getPowerById } from '@/app/data/powers'
 import { getFactionById, getReputationDescriptor } from '@/app/data/factions'
 import { getActionById } from '@/app/data/actions'
-import type { CharacterContext, ActionContext, EncounterGenerationRequest } from './types'
+import type { CharacterContext, ActionContext, EncounterGenerationRequest, PreviousEncounter } from './types'
 
 // Significant attribute threshold
 const SIGNIFICANT_ATTRIBUTE_THRESHOLD = 15
@@ -75,6 +75,48 @@ export async function buildCharacterContext(
     },
   })
 
+  // Get last 3 encounter events for narrative continuity
+  const encounterEvents = await prisma.storyEvent.findMany({
+    where: {
+      characterId: character.id,
+      eventType: { in: ['encounter_success', 'encounter_failure'] },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 3,
+    select: {
+      eventType: true,
+      summary: true,
+      fullDescription: true,
+      tags: true,
+      createdAt: true,
+    },
+  })
+
+  // Parse encounter events into PreviousEncounter format
+  const previousEncounters: PreviousEncounter[] = encounterEvents.map(event => {
+    // Extract info from the full description - format is typically:
+    // "Encounter: [name]. Choice: [choice]. Outcome: [description]"
+    const fullDesc = event.fullDescription || event.summary
+
+    // Parse encounter name from summary (usually starts with it)
+    const nameMatch = event.summary.match(/^([^:]+):/) || event.summary.match(/^(.+?)\./)
+    const encounterName = nameMatch ? nameMatch[1].trim() : event.summary.split('.')[0]
+
+    // Extract factions from tags (tags starting with faction_)
+    const factionTags = event.tags.filter(t => t.startsWith('faction_'))
+      .map(t => t.replace('faction_', ''))
+
+    return {
+      name: encounterName,
+      description: event.summary,
+      choiceMade: '', // Will be populated from fullDescription if available
+      outcome: fullDesc,
+      wasSuccess: event.eventType === 'encounter_success',
+      factionsInvolved: factionTags,
+      timestamp: event.createdAt,
+    }
+  })
+
   return {
     name: character.name,
     level: character.level,
@@ -92,6 +134,7 @@ export async function buildCharacterContext(
     significantAttributes,
     factionStandings,
     recentStoryEvents: recentEvents,
+    previousEncounters,
   }
 }
 

@@ -56,6 +56,15 @@ GUIDELINES:
 9. Make encounters feel personal to THIS character, not generic
 10. Use vivid, cinematic descriptions
 
+NARRATIVE CONTINUITY:
+- You will receive the character's previous 3 encounters if available
+- Reference these past events naturally in the new encounter when appropriate
+- Create callbacks to past successes or failures (e.g., "Word of your last intervention has spread...")
+- Bring back NPCs, locations, or consequences from previous encounters when it makes sense
+- Build escalating storylines (if they failed to stop a gang before, the gang might be bolder now)
+- Acknowledge the character's growing reputation based on their past choices
+- DO NOT force connections - only reference past encounters when it enhances the narrative
+
 VALID FACTION IDS:
 - metro_police
 - syndicate
@@ -90,6 +99,17 @@ export function buildUserPrompt(request: EncounterGenerationRequest): string {
     .map(e => e.summary)
     .join('\n  - ')
 
+  // Build previous encounters list for narrative continuity
+  const previousEncountersList = character.previousEncounters
+    .map((enc, i) => {
+      const result = enc.wasSuccess ? 'SUCCESS' : 'FAILURE'
+      const factions = enc.factionsInvolved.length > 0
+        ? ` (Factions: ${enc.factionsInvolved.join(', ')})`
+        : ''
+      return `${i + 1}. "${enc.name}" [${result}]${factions}\n     ${enc.outcome}`
+    })
+    .join('\n  ')
+
   return `Generate a unique encounter for this character and situation:
 
 CHARACTER:
@@ -114,6 +134,9 @@ FACTION STANDINGS:
 RECENT STORY EVENTS:
   - ${recentEventsList || 'No significant events yet'}
 
+PREVIOUS ENCOUNTERS (last 3, most recent first):
+${previousEncountersList || '  No previous encounters yet - this is early in the character\'s story'}
+
 CURRENT ACTION:
 - Action: ${action.name}
 - Category: ${action.category}
@@ -132,6 +155,7 @@ Create an encounter that:
 4. Matches the ${encounterType} category and difficulty ${difficulty}
 5. Takes place in a ${location} setting
 6. Builds on their recent story events if possible
+7. References or connects to previous encounters when narratively appropriate (callbacks, consequences, recurring elements)
 
 Remember to output ONLY valid JSON matching the required structure.`
 }

@@ -5,6 +5,17 @@ import type { Faction } from '@/app/data/factions'
 import type { Action } from '@/app/data/actions'
 import type { EncounterTemplate } from '@/app/data/encounter-templates'
 
+// Previous encounter summary for narrative continuity
+export type PreviousEncounter = {
+  name: string
+  description: string
+  choiceMade: string
+  outcome: string
+  wasSuccess: boolean
+  factionsInvolved: string[]
+  timestamp: Date
+}
+
 // Character context for AI prompts
 export type CharacterContext = {
   name: string
@@ -41,6 +52,7 @@ export type CharacterContext = {
     tags: string[]
     narrativeWeight: number
   }[]
+  previousEncounters: PreviousEncounter[]
 }
 
 // Action context for AI prompts

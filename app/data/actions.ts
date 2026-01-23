@@ -55,7 +55,7 @@ export const actions: Action[] = [
       { attributeId: 'perception', chance: 0.4 },
       { attributeId: 'reputation', chance: 0.3 }
     ],
-    encounterChance: 0.65,
+    encounterChance: 0.75,
     encounterTypes: [
       'crime_in_progress',
       'civilian_in_danger',
@@ -90,6 +90,7 @@ export const actions: Action[] = [
     encounterTypes: [
       'gang_violence',
       'protection_racket',
+      'villain_hideout',
       'desperate_civilians',
       'vigilante_encounter',
       'turf_war'
