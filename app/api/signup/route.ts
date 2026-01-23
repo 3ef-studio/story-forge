@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { hash } from 'bcrypt';
 import { prisma } from '@/app/lib/db';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
