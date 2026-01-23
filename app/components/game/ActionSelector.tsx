@@ -136,24 +136,33 @@ export function ActionSelector({
                 key={action.id}
                 onClick={() => onSelectAction(action)}
                 disabled={disabled || !available || !!disabledReason}
-                className={`text-left p-3 rounded-lg border transition-all ${
+                className={`group text-left p-4 rounded-xl border-2 transition-all duration-200 ${
                   !available || disabledReason
                     ? 'bg-gray-50 border-gray-200 opacity-60 cursor-not-allowed'
-                    : 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-sm cursor-pointer'
+                    : 'bg-white border-gray-200 hover:border-blue-400 hover:shadow-md hover:shadow-blue-100 hover:-translate-y-0.5 cursor-pointer active:translate-y-0 active:shadow-sm'
                 }`}
               >
-                <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start justify-between gap-3">
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <span className={`p-1 rounded ${info.color} text-white`}>{info.icon}</span>
-                      <span className="font-medium text-sm">{action.name}</span>
+                      <span className={`p-1.5 rounded-lg ${info.color} text-white shadow-sm group-hover:scale-110 transition-transform`}>
+                        {info.icon}
+                      </span>
+                      <span className="font-semibold text-sm text-gray-800 group-hover:text-blue-600 transition-colors">
+                        {action.name}
+                      </span>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1 line-clamp-2">{action.description}</p>
+                    <p className="text-xs text-gray-500 mt-1.5 line-clamp-2 leading-relaxed">
+                      {action.description}
+                    </p>
                   </div>
 
-                  <div className="flex flex-col items-end gap-1">
+                  <div className="flex flex-col items-end gap-1.5">
                     {/* Energy Cost */}
-                    <Badge variant={action.energyCost <= 0 ? 'success' : 'warning'} className="text-xs">
+                    <Badge
+                      variant={action.energyCost <= 0 ? 'success' : 'warning'}
+                      className="text-xs font-medium shadow-sm"
+                    >
                       <Zap className="h-3 w-3 mr-1" />
                       {action.energyCost <= 0 ? `+${Math.abs(action.energyCost)}` : action.energyCost}
                     </Badge>
@@ -170,9 +179,9 @@ export function ActionSelector({
 
                 {/* Disabled reason */}
                 {disabledReason && (
-                  <div className="mt-2 flex items-center gap-1 text-xs text-red-500">
-                    <AlertCircle className="h-3 w-3" />
-                    {disabledReason}
+                  <div className="mt-2.5 flex items-center gap-1.5 text-xs text-red-500 bg-red-50 rounded-lg px-2 py-1.5">
+                    <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                    <span>{disabledReason}</span>
                   </div>
                 )}
               </button>

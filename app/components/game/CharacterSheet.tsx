@@ -50,15 +50,19 @@ export function CharacterSheet({ character }: CharacterSheetProps) {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center justify-between">
-            <span>{character.name}</span>
-            <Badge variant="outline">Lv. {character.level}</Badge>
-          </CardTitle>
-          <p className="text-sm text-gray-500">{origin?.name}</p>
-        </CardHeader>
-        <CardContent className="space-y-3">
+      <Card className="overflow-hidden">
+        <div className="bg-gradient-to-r from-blue-500 to-purple-600 px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-white">{character.name}</h2>
+              <p className="text-blue-100 text-sm">{origin?.name}</p>
+            </div>
+            <Badge className="bg-white/20 text-white border-0 backdrop-blur-sm">
+              Level {character.level}
+            </Badge>
+          </div>
+        </div>
+        <CardContent className="space-y-3 pt-4">
           {/* HP Bar */}
           <Progress
             value={character.currentHp}
@@ -87,9 +91,12 @@ export function CharacterSheet({ character }: CharacterSheetProps) {
           />
 
           {/* Money */}
-          <div className="flex justify-between text-sm pt-2">
-            <span className="text-gray-600">Money</span>
-            <span className="font-medium">${character.money}</span>
+          <div className="flex justify-between items-center text-sm pt-2 px-1">
+            <span className="text-gray-600 flex items-center gap-1">
+              <span className="text-green-600 font-medium">$</span>
+              Money
+            </span>
+            <span className="font-bold text-green-600">${character.money}</span>
           </div>
         </CardContent>
       </Card>

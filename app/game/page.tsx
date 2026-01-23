@@ -9,11 +9,25 @@ import { ActionSelector } from '@/app/components/game/ActionSelector';
 import { EncounterDisplay } from '@/app/components/game/EncounterDisplay';
 import { OutcomeDisplay } from '@/app/components/game/OutcomeDisplay';
 import { StoryLog } from '@/app/components/game/StoryLog';
+import { useToast } from '@/app/components/ui/toast';
+import { getFactionById } from '@/app/data/factions';
 import type { Action } from '@/app/data/actions';
 import type { EncounterTemplate } from '@/app/data/encounter-templates';
-import { LogOut, User, HelpCircle, Menu, X } from 'lucide-react';
+import { LogOut, User, HelpCircle, Menu, X, Sparkles, Trophy } from 'lucide-react';
 
 type GameState = 'idle' | 'executing' | 'encounter' | 'resolving' | 'outcome';
+
+// Flavor messages for AI generation loading
+const AI_LOADING_MESSAGES = [
+  "The threads of fate are weaving...",
+  "Your story takes shape...",
+  "Destiny unfolds before you...",
+  "The universe responds to your actions...",
+  "Something stirs in the shadows...",
+  "Your path becomes clearer...",
+  "Forces align around you...",
+  "The narrative deepens...",
+];
 
 interface CharacterData {
   id: string;
@@ -62,6 +76,7 @@ interface EncounterChoice {
 
 export default function GamePage() {
   const router = useRouter();
+  const { showFactionChange, addToast } = useToast();
   const [character, setCharacter] = useState<CharacterData | null>(null);
   const [gameState, setGameState] = useState<GameState>('idle');
   const [currentEncounter, setCurrentEncounter] = useState<EncounterTemplate | null>(null);
@@ -71,6 +86,9 @@ export default function GamePage() {
   const [loading, setLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [levelUpModal, setLevelUpModal] = useState<number | null>(null);
+  const [isCachedEncounter, setIsCachedEncounter] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState(AI_LOADING_MESSAGES[0]);
+  const [loadingProgress, setLoadingProgress] = useState(0);
 
   const fetchCharacter = useCallback(async () => {
     try {
@@ -105,6 +123,18 @@ export default function GamePage() {
 
     setGameState('executing');
     setError(null);
+    setLoadingProgress(0);
+    setLoadingMessage(AI_LOADING_MESSAGES[0]);
+
+    // Start loading animation - cycle through messages
+    let messageIndex = 0;
+    let progress = 0;
+    const loadingInterval = setInterval(() => {
+      messageIndex = (messageIndex + 1) % AI_LOADING_MESSAGES.length;
+      setLoadingMessage(AI_LOADING_MESSAGES[messageIndex]);
+      progress = Math.min(progress + 8, 90); // Progress up to 90%
+      setLoadingProgress(progress);
+    }, 2000);
 
     try {
       const response = await fetch('/api/action/execute', {
@@ -112,6 +142,9 @@ export default function GamePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ actionId: action.id }),
       });
+
+      clearInterval(loadingInterval);
+      setLoadingProgress(100);
 
       const data = await response.json();
 
@@ -135,6 +168,7 @@ export default function GamePage() {
         // Set up encounter
         const encounter = data.encounter as EncounterTemplate;
         setCurrentEncounter(encounter);
+        setIsCachedEncounter(data.isCachedEncounter || false);
 
         // Build choices with availability
         const choices = encounter.choices.map((choice) => {
@@ -232,6 +266,7 @@ export default function GamePage() {
         body: JSON.stringify({
           encounterId: currentEncounter.id,
           choiceId,
+          isCached: isCachedEncounter,
         }),
       });
 
@@ -253,6 +288,27 @@ export default function GamePage() {
       });
       setGameState('outcome');
 
+      // Show toast notifications for faction changes
+      if (data.outcome.factionChanges?.length > 0) {
+        // Stagger the toasts
+        data.outcome.factionChanges.forEach((change: { factionId: string; change: number }, index: number) => {
+          setTimeout(() => {
+            const faction = getFactionById(change.factionId);
+            if (faction) {
+              showFactionChange(faction.shortName || faction.name, change.change);
+            }
+          }, index * 500);
+        });
+      }
+
+      // Show success/failure toast
+      addToast({
+        type: data.success ? 'success' : 'warning',
+        title: data.success ? 'Success!' : 'Failed',
+        message: `${data.outcome.xpGained} XP gained`,
+        duration: 3000,
+      });
+
       // Check for level up
       if (data.leveledUp) {
         setLevelUpModal(data.newLevel);
@@ -268,6 +324,7 @@ export default function GamePage() {
     setCurrentEncounter(null);
     setEncounterChoices([]);
     setCurrentOutcome(null);
+    setIsCachedEncounter(false);
     setGameState('idle');
     await fetchCharacter();
   };
@@ -411,10 +468,38 @@ export default function GamePage() {
             )}
 
             {gameState === 'executing' && (
-              <div className="bg-white rounded-lg border p-6 flex items-center justify-center">
-                <div className="text-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
-                  <p className="mt-2 text-gray-600">Taking action...</p>
+              <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-lg border border-indigo-200 p-8">
+                <div className="text-center space-y-6">
+                  {/* Animated icon */}
+                  <div className="relative mx-auto w-16 h-16">
+                    <div className="absolute inset-0 rounded-full border-4 border-indigo-200"></div>
+                    <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-indigo-500 animate-spin"></div>
+                    <div className="absolute inset-2 rounded-full bg-indigo-100 flex items-center justify-center">
+                      <svg className="w-6 h-6 text-indigo-600 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  {/* Loading message */}
+                  <div className="space-y-2">
+                    <p className="text-lg font-medium text-indigo-900 animate-pulse">
+                      {loadingMessage}
+                    </p>
+                    <p className="text-sm text-indigo-600">
+                      Generating your unique encounter...
+                    </p>
+                  </div>
+
+                  {/* Progress bar */}
+                  <div className="w-full max-w-xs mx-auto">
+                    <div className="h-2 bg-indigo-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-500 ease-out rounded-full"
+                        style={{ width: `${loadingProgress}%` }}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -453,15 +538,46 @@ export default function GamePage() {
 
       {/* Level Up Modal */}
       {levelUpModal !== null && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md mx-4 text-center">
-            <h2 className="text-2xl font-bold text-green-600 mb-2">Level Up!</h2>
-            <p className="text-4xl font-bold mb-4">Level {levelUpModal}</p>
-            <p className="text-gray-600 mb-4">
-              Your maximum HP has increased by 10 and maximum Energy by 5!
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 animate-fade-in">
+          <div className="bg-gradient-to-br from-yellow-50 to-amber-50 rounded-2xl p-8 max-w-md mx-4 text-center shadow-2xl border-2 border-yellow-300 animate-bounce-in">
+            {/* Celebration icons */}
+            <div className="flex justify-center gap-2 mb-4">
+              <Sparkles className="h-8 w-8 text-yellow-500 animate-pulse" />
+              <Trophy className="h-10 w-10 text-yellow-600" />
+              <Sparkles className="h-8 w-8 text-yellow-500 animate-pulse" />
+            </div>
+
+            <h2 className="text-3xl font-bold bg-gradient-to-r from-yellow-600 to-amber-600 bg-clip-text text-transparent mb-2">
+              Level Up!
+            </h2>
+
+            <div className="relative my-6">
+              <div className="text-7xl font-black text-yellow-600 animate-pulse-glow rounded-full inline-block px-6 py-2">
+                {levelUpModal}
+              </div>
+            </div>
+
+            <div className="space-y-2 mb-6">
+              <div className="flex items-center justify-center gap-2 text-green-600">
+                <span className="text-lg">+10</span>
+                <span className="text-sm">Maximum HP</span>
+              </div>
+              <div className="flex items-center justify-center gap-2 text-yellow-600">
+                <span className="text-lg">+5</span>
+                <span className="text-sm">Maximum Energy</span>
+              </div>
+            </div>
+
+            <p className="text-gray-600 mb-6 text-sm">
+              Your power grows stronger. New challenges await!
             </p>
-            <Button onClick={handleLevelUpClose} size="lg">
-              Continue
+
+            <Button
+              onClick={handleLevelUpClose}
+              size="lg"
+              className="bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-600 hover:to-amber-600 text-white font-semibold px-8"
+            >
+              Continue Your Journey
             </Button>
           </div>
         </div>
