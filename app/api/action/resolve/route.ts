@@ -7,7 +7,9 @@ import {
   type EncounterTemplate,
 } from '@/app/data/encounter-templates';
 import { calculateReputationImpact, getFactionById } from '@/app/data/factions';
-import { getCachedEncounterById } from '@/app/lib/ai/encounter-cache';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 type ResolveActionBody = {
   encounterId: string;
@@ -62,6 +64,8 @@ export async function POST(request: Request) {
     let encounter: EncounterTemplate | null | undefined = null;
 
     if (isCached || isUuidLike(encounterId)) {
+      // IMPORTANT: lazy import prevents build-time module evaluation failures on Vercel
+      const { getCachedEncounterById } = await import('@/app/lib/ai/encounter-cache');
       encounter = await getCachedEncounterById(encounterId);
     }
 
@@ -167,7 +171,9 @@ export async function POST(request: Request) {
 
     // Calculate HP change
     const hpLoss =
-      !success && 'hpLoss' in result && typeof (result as { hpLoss?: unknown }).hpLoss === 'number'
+      !success &&
+      'hpLoss' in result &&
+      typeof (result as { hpLoss?: unknown }).hpLoss === 'number'
         ? (result as { hpLoss?: number }).hpLoss ?? 0
         : 0;
 
@@ -201,8 +207,9 @@ export async function POST(request: Request) {
       const attributeGrowth =
         'attributeGrowth' in result &&
         Array.isArray((result as { attributeGrowth?: unknown }).attributeGrowth)
-          ? (result as { attributeGrowth?: Array<{ attributeId: string; amount: number }> })
-              .attributeGrowth ?? []
+          ? (result as {
+              attributeGrowth?: Array<{ attributeId: string; amount: number }>;
+            }).attributeGrowth ?? []
           : [];
 
       for (const growth of attributeGrowth) {
@@ -263,8 +270,9 @@ export async function POST(request: Request) {
         attributeGrowth:
           'attributeGrowth' in result &&
           Array.isArray((result as { attributeGrowth?: unknown }).attributeGrowth)
-            ? (result as { attributeGrowth?: Array<{ attributeId: string; amount: number }> })
-                .attributeGrowth ?? []
+            ? (result as {
+                attributeGrowth?: Array<{ attributeId: string; amount: number }>;
+              }).attributeGrowth ?? []
             : [],
       },
       leveledUp,
