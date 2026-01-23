@@ -1,0 +1,163 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// Users table for auth
+model User {
+  id           String      @id @default(uuid()) @db.Uuid
+  email        String      @unique
+  passwordHash String      @map("password_hash")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+  character    Character?
+
+  @@map("users")
+}
+
+// Characters
+model Character {
+  id              String               @id @default(uuid()) @db.Uuid
+  userId          String               @unique @map("user_id") @db.Uuid
+  name            String
+  originId        String               @map("origin_id")
+  level           Int                  @default(1)
+  currentXp       Int                  @default(0) @map("current_xp")
+  currentHp       Int                  @default(100) @map("current_hp")
+  maxHp           Int                  @default(100) @map("max_hp")
+  currentEnergy   Int                  @default(100) @map("current_energy")
+  maxEnergy       Int                  @default(100) @map("max_energy")
+  money           Int                  @default(0)
+  lastEnergyReset DateTime             @default(now()) @map("last_energy_reset")
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+
+  user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attributes       CharacterAttribute[]
+  powers           CharacterPower[]
+  factionReputations FactionReputation[]
+  inventoryItems   InventoryItem[]
+  storyEvents      StoryEvent[]
+  actionCooldowns  ActionCooldown[]
+
+  @@map("characters")
+}
+
+// Character Attributes (strength, intelligence, etc.)
+model CharacterAttribute {
+  id           String    @id @default(uuid()) @db.Uuid
+  characterId  String    @map("character_id") @db.Uuid
+  attributeId  String    @map("attribute_id")
+  currentValue Int       @map("current_value")
+
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, attributeId])
+  @@index([characterId])
+  @@map("character_attributes")
+}
+
+// Character Powers
+model CharacterPower {
+  id           String    @id @default(uuid()) @db.Uuid
+  characterId  String    @map("character_id") @db.Uuid
+  powerId      String    @map("power_id")
+  currentLevel Int       @default(1) @map("current_level")
+  currentXp    Int       @default(0) @map("current_xp")
+  timesUsed    Int       @default(0) @map("times_used")
+
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, powerId])
+  @@index([characterId])
+  @@map("character_powers")
+}
+
+// Faction Reputations
+model FactionReputation {
+  id          String    @id @default(uuid()) @db.Uuid
+  characterId String    @map("character_id") @db.Uuid
+  factionId   String    @map("faction_id")
+  reputation  Int       @default(0)
+
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, factionId])
+  @@index([characterId])
+  @@map("faction_reputations")
+}
+
+// Inventory
+model InventoryItem {
+  id            String    @id @default(uuid()) @db.Uuid
+  characterId   String    @map("character_id") @db.Uuid
+  itemId        String    @map("item_id")
+  quantity      Int       @default(1)
+  isEquipped    Boolean   @default(false) @map("is_equipped")
+  equipmentSlot String?   @map("equipment_slot")
+
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, itemId])
+  @@index([characterId])
+  @@map("inventory_items")
+}
+
+// Story Events (for AI context and player history)
+model StoryEvent {
+  id              String    @id @default(uuid()) @db.Uuid
+  characterId     String    @map("character_id") @db.Uuid
+  eventType       String    @map("event_type")
+  summary         String
+  fullDescription String?   @map("full_description")
+  narrativeWeight Int       @default(5) @map("narrative_weight")
+  tags            String[]
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@index([characterId])
+  @@index([createdAt(sort: Desc)])
+  @@map("story_events")
+}
+
+// Cached Encounters (for cost optimization)
+model CachedEncounter {
+  id            String    @id @default(uuid()) @db.Uuid
+  encounterType String    @map("encounter_type")
+  difficulty    Int
+  factionContext String[] @map("faction_context")
+  locationType  String?   @map("location_type")
+  description   String
+  choices       Json
+  outcomes      Json
+  timesUsed     Int       @default(0) @map("times_used")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  lastUsedAt    DateTime? @map("last_used_at")
+
+  @@index([encounterType, difficulty])
+  @@map("cached_encounters")
+}
+
+// Action Cooldowns
+model ActionCooldown {
+  id          String    @id @default(uuid()) @db.Uuid
+  characterId String    @map("character_id") @db.Uuid
+  actionId    String    @map("action_id")
+  expiresAt   DateTime  @map("expires_at")
+
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, actionId])
+  @@index([characterId])
+  @@index([expiresAt])
+  @@map("action_cooldowns")
+}
