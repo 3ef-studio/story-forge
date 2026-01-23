@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
-import { ScrollText, ChevronDown, ChevronUp, Filter, Star, Swords, Zap, Users, Trophy } from 'lucide-react';
+import { ScrollText, ChevronDown, ChevronUp, Star, Swords, Zap, Users, Trophy } from 'lucide-react';
 
 interface StoryEvent {
   id: string;
@@ -121,7 +121,7 @@ export function StoryLog({ events, maxDisplay = 10 }: StoryLogProps) {
                 key={event.id}
                 className={`p-3 rounded-lg border transition-all duration-300 hover:shadow-sm ${
                   event.weight >= 7
-                    ? 'bg-gradient-to-r from-yellow-50 to-amber-50 border-yellow-200'
+                    ? 'bg-linear-to-r from-yellow-50 to-amber-50 border-yellow-200'
                     : 'bg-gray-50 border-gray-100 hover:bg-gray-100'
                 }`}
                 style={{ animationDelay: `${index * 50}ms` }}

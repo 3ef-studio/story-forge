@@ -20,7 +20,7 @@ export default async function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 text-white overflow-hidden">
+    <div className="min-h-screen bg-linear-to-b from-gray-900 via-gray-800 to-gray-900 text-white overflow-hidden">
       {/* Animated background elements */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl animate-pulse" />
@@ -63,7 +63,7 @@ export default async function Home() {
           <h2 className="text-5xl md:text-6xl lg:text-7xl font-bold mb-6 leading-tight">
             Your Powers. Your Choices.
             <br />
-            <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+            <span className="bg-linear-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
               Your Story.
             </span>
           </h2>
@@ -76,7 +76,7 @@ export default async function Home() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
             <Link
               href="/signup"
-              className="group px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 rounded-xl text-lg font-semibold transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-blue-500/25 flex items-center gap-2"
+              className="group px-8 py-4 bg-linear-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 rounded-xl text-lg font-semibold transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-blue-500/25 flex items-center gap-2"
             >
               Start Your Story
               <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -201,7 +201,7 @@ export default async function Home() {
               </p>
             </div>
             <div className="group text-center p-6 rounded-xl hover:bg-gray-500/10 transition-all duration-300 cursor-pointer">
-              <div className="w-20 h-20 bg-gradient-to-br from-gray-500/20 to-gray-600/30 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform shadow-lg shadow-gray-500/10">
+              <div className="w-20 h-20 bg-linear-to-br from-gray-500/20 to-gray-600/30 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform shadow-lg shadow-gray-500/10">
                 <span className="text-4xl">🕶️</span>
               </div>
               <h4 className="text-xl font-semibold text-gray-300 mb-2">Anti-Hero</h4>
@@ -210,7 +210,7 @@ export default async function Home() {
               </p>
             </div>
             <div className="group text-center p-6 rounded-xl hover:bg-red-500/10 transition-all duration-300 cursor-pointer">
-              <div className="w-20 h-20 bg-gradient-to-br from-red-500/20 to-red-600/30 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform shadow-lg shadow-red-500/10">
+              <div className="w-20 h-20 bg-linear-to-br from-red-500/20 to-red-600/30 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform shadow-lg shadow-red-500/10">
                 <span className="text-4xl">🦹</span>
               </div>
               <h4 className="text-xl font-semibold text-red-400 mb-2">Villain</h4>
@@ -232,7 +232,7 @@ export default async function Home() {
               { step: '4', title: 'Shape Your Story', desc: 'Every choice builds your legend' },
             ].map((item, i) => (
               <div key={i} className="text-center">
-                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4 text-xl font-bold">
+                <div className="w-12 h-12 bg-linear-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4 text-xl font-bold">
                   {item.step}
                 </div>
                 <h4 className="font-semibold mb-2">{item.title}</h4>
@@ -243,14 +243,14 @@ export default async function Home() {
         </div>
 
         {/* CTA */}
-        <div className="text-center bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-pink-500/10 rounded-2xl p-12 border border-gray-700/50">
+        <div className="text-center bg-linear-to-r from-blue-500/10 via-purple-500/10 to-pink-500/10 rounded-2xl p-12 border border-gray-700/50">
           <h3 className="text-3xl font-bold mb-4">Ready to Begin?</h3>
           <p className="text-gray-300 mb-8 max-w-xl mx-auto">
             Your powers are awakening. The city awaits. What kind of legend will you become?
           </p>
           <Link
             href="/signup"
-            className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 rounded-xl text-lg font-semibold transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-blue-500/25"
+            className="inline-flex items-center gap-2 px-8 py-4 bg-linear-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 rounded-xl text-lg font-semibold transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-blue-500/25"
           >
             Create Your Character
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -265,7 +265,7 @@ export default async function Home() {
         <div className="max-w-6xl mx-auto px-4">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <span className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+              <span className="text-xl font-bold bg-linear-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
                 Story Forge
               </span>
               <span className="text-gray-500">|</span>

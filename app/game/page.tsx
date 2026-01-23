@@ -357,10 +357,10 @@ export default function GamePage() {
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Top Nav */}
-      <header className="bg-white border-b sticky top-0 z-50">
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <h1 className="font-bold text-lg">Story Forge</h1>
+            <h1 className="font-bold text-lg text-gray-900">Story Forge</h1>
           </div>
 
           <div className="flex items-center gap-2">
