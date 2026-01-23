@@ -28,7 +28,7 @@ export const authConfig: NextAuthConfig = {
         if (!user) {
           return null;
         }
-        const { compare } = await import('bcrypt');  
+        const { compare } = await import('bcryptjs');  
         const isPasswordValid = await compare(password, user.passwordHash);
 
         if (!isPasswordValid) {
