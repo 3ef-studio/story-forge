@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/app/lib/auth';
 import { prisma } from '@/app/lib/db';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+
 export async function GET() {
   try {
     const session = await auth();
