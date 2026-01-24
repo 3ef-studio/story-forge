@@ -51,7 +51,7 @@ export function CharacterSheet({ character }: CharacterSheetProps) {
     <div className="space-y-4">
       {/* Header */}
       <Card className="overflow-hidden">
-        <div className="bg-gradient-to-r from-blue-500 to-purple-600 px-4 py-3">
+        <div className="bg-linear-to-r from-blue-500 to-purple-600 px-4 py-3">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-bold text-white">{character.name}</h2>

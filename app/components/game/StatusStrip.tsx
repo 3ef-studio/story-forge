@@ -33,7 +33,7 @@ export function StatusStrip({
       <div className="flex items-center justify-between gap-2 text-xs">
         {/* HP */}
         <div className="flex items-center gap-1 flex-1">
-          <Heart className="h-3.5 w-3.5 text-red-500 flex-shrink-0" />
+          <Heart className="h-3.5 w-3.5 text-red-500 shrink-0" />
           <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
             <div
               className="h-full bg-red-500 rounded-full transition-all"
@@ -45,7 +45,7 @@ export function StatusStrip({
 
         {/* Energy */}
         <div className="flex items-center gap-1 flex-1">
-          <Zap className="h-3.5 w-3.5 text-yellow-500 flex-shrink-0" />
+          <Zap className="h-3.5 w-3.5 text-yellow-500 shrink-0" />
           <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
             <div
               className="h-full bg-yellow-500 rounded-full transition-all"
@@ -57,7 +57,7 @@ export function StatusStrip({
 
         {/* Level + XP */}
         <div className="flex items-center gap-1">
-          <TrendingUp className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />
+          <TrendingUp className="h-3.5 w-3.5 text-blue-500 shrink-0" />
           <span className="font-semibold text-gray-800">Lv{level}</span>
           <div className="w-10 h-1.5 bg-gray-200 rounded-full overflow-hidden">
             <div
@@ -71,7 +71,7 @@ export function StatusStrip({
       {/* Bottom row: Active goal (if any) */}
       {activeGoalTitle && (
         <div className="flex items-center gap-1.5 mt-1.5 text-xs text-gray-600">
-          <Star className="h-3 w-3 text-yellow-500 flex-shrink-0" />
+          <Star className="h-3 w-3 text-yellow-500 shrink-0" />
           <span className="truncate">{activeGoalTitle}</span>
         </div>
       )}

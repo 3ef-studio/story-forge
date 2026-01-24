@@ -69,7 +69,7 @@ export function useToast() {
 
 function ToastContainer({ toasts, onRemove }: { toasts: Toast[]; onRemove: (id: string) => void }) {
   return (
-    <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 max-w-sm">
+    <div className="fixed bottom-4 right-4 z-100 flex flex-col gap-2 max-w-sm">
       {toasts.map((toast) => (
         <ToastItem key={toast.id} toast={toast} onRemove={onRemove} />
       ))}
@@ -121,17 +121,17 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
 
   return (
     <div
-      className={`${bg} ${border} ${text} border rounded-lg shadow-lg p-4 flex items-start gap-3 animate-slide-in-right min-w-[280px]`}
+      className={`${bg} ${border} ${text} border rounded-lg shadow-lg p-4 flex items-start gap-3 animate-slide-in-right min-w-70`}
       role="alert"
     >
-      <div className="flex-shrink-0">{icon}</div>
+      <div className="shrink-0">{icon}</div>
       <div className="flex-1 min-w-0">
         <p className="font-medium">{toast.title}</p>
         {toast.message && <p className="text-sm opacity-80 mt-0.5">{toast.message}</p>}
       </div>
       <button
         onClick={() => onRemove(toast.id)}
-        className="flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+        className="shrink-0 opacity-60 hover:opacity-100 transition-opacity"
       >
         <X className="h-4 w-4" />
       </button>
