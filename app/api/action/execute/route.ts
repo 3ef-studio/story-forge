@@ -4,8 +4,12 @@ import { prisma } from '@/app/lib/db';
 import { getActionById, applyActionEffects, getCooldownExpiry, rollForEncounter, selectEncounterType, getEncounterDifficulty } from '@/app/data/actions';
 import { calculateReputationImpact, getFactionById } from '@/app/data/factions';
 import { getAvailableEncounters, selectRandomEncounter, type EncounterTemplate } from '@/app/data/encounter-templates';
-import { findCachedEncounter, cacheEncounter } from '@/app/lib/ai/encounter-cache';
-import { generateEncounterForAction, toEncounterTemplate } from '@/app/lib/ai/encounter-generator';
+import { findCachedSeed, cacheSeed, getCachedEncounterById } from '@/app/lib/ai/encounter-cache';
+import { generateSeed, buildSeedInput } from '@/app/lib/ai/encounter-seed-generator';
+import { personalizeSeed, toEncounterTemplate as personalizedToTemplate } from '@/app/lib/ai/encounter-personalizer';
+import { buildCharacterContext } from '@/app/lib/ai/context-builder';
+import type { EncounterSeed } from '@/app/lib/ai/types';
+import { applyGoalProgressOnAction, checkAndCompleteGoals, getActiveGoals } from '@/app/lib/game-logic/goal-manager';
 
 export async function POST(request: Request) {
   try {
@@ -141,48 +145,97 @@ export async function POST(request: Request) {
       const involvedFactions = action.likelyFactions;
       const location = action.locationTypes[0];
 
-      // 1. Try cache first
-      encounter = await findCachedEncounter(
+      // Build seed input for cache lookup
+      const seedInput = buildSeedInput(
+        actionId,
+        action.category,
         encounterType,
         difficulty,
-        involvedFactions,
-        location
+        location,
+        involvedFactions
       );
 
-      if (encounter) {
-        console.log('[Encounter] Using cached encounter:', encounter.id);
+      let seed: EncounterSeed | null = null;
+
+      // 1. Try seed cache first (deterministic key lookup)
+      seed = await findCachedSeed(seedInput);
+
+      if (seed) {
+        console.log('[Encounter] SEED CACHE HIT:', seed.seedId);
+        cachedEncounterId = seed.seedId;
         isCachedEncounter = true;
-        cachedEncounterId = encounter.id;
       }
 
-      // 2. Generate with AI if no cache hit
-      if (!encounter) {
-        console.log('[Encounter] Generating with AI...');
-        const aiEncounter = await generateEncounterForAction(
-          character,
-          actionId,
-          encounterType,
-          difficulty,
-          involvedFactions,
-          location
-        );
+      // 2. Generate seed with AI if no cache hit
+      if (!seed) {
+        console.log('[Encounter] SEED CACHE MISS - Generating with AI...');
+        seed = await generateSeed(seedInput);
 
-        if (aiEncounter) {
-          encounter = toEncounterTemplate(aiEncounter);
-          // Cache the successful generation
-          cachedEncounterId = await cacheEncounter(encounter, involvedFactions, location);
+        if (seed) {
+          // Cache the successful seed generation
+          cachedEncounterId = await cacheSeed(seed, seedInput);
           if (cachedEncounterId) {
+            seed.seedId = cachedEncounterId;
             isCachedEncounter = true;
-            // Update encounter ID to use cached ID for resolution
-            encounter = { ...encounter, id: cachedEncounterId };
+            console.log('[Encounter] Seed generated and cached:', cachedEncounterId);
           }
-          console.log('[Encounter] AI generated and cached:', encounter.id);
         }
       }
 
-      // 3. Fallback to templates if AI failed
+      // 3. Personalize seed if we have one
+      if (seed) {
+        try {
+          // Build character context for personalization
+          const characterContext = await buildCharacterContext(character);
+
+          // Personalize the seed (deterministic, no AI call)
+          const personalized = personalizeSeed({
+            seed,
+            characterName: characterContext.name,
+            originName: characterContext.origin.name,
+            powerNames: characterContext.powers.map(p => p.name),
+            reputationTiers: characterContext.factionStandings.map(fs => ({
+              factionId: fs.factionId,
+              tier: fs.reputation <= -50 ? 'hostile' as const :
+                    fs.reputation <= -20 ? 'unfriendly' as const :
+                    fs.reputation >= 50 ? 'allied' as const :
+                    fs.reputation >= 20 ? 'friendly' as const : 'neutral' as const,
+            })),
+            recentEncounterTags: characterContext.previousEncounters
+              .slice(0, 3)
+              .flatMap(e => e.factionsInvolved),
+          });
+
+          // Convert to EncounterTemplate for API compatibility
+          encounter = personalizedToTemplate(personalized, seed.seedId);
+          console.log('[Encounter] Personalized encounter ready:', encounter.name);
+        } catch (personalizeError) {
+          console.error('[Encounter] Personalization failed, using seed directly:', personalizeError);
+          // Fallback: use seed with minimal personalization
+          encounter = {
+            id: seed.seedId,
+            name: seed.title,
+            category: seed.category,
+            difficulty: seed.difficulty,
+            description: seed.situationSummary,
+            choices: seed.choices.map(c => ({
+              id: c.id,
+              text: c.genericLabel,
+              requiredPowers: c.requiredPowers,
+              requiredAttributes: c.requiredAttributes,
+              narrativeDescription: c.genericLabel,
+            })),
+            outcomes: seed.outcomes,
+            narrativeTags: seed.tags,
+            canBeReused: true,
+            timesUsed: 0,
+          };
+        }
+      }
+
+      // 4. Fallback to static templates if seed generation failed
       if (!encounter) {
-        console.log('[Encounter] Falling back to templates...');
+        console.log('[Encounter] Falling back to static templates...');
         const availableEncounters = getAvailableEncounters(
           encounterType,
           difficulty,
@@ -193,11 +246,16 @@ export async function POST(request: Request) {
           location
         );
         encounter = selectRandomEncounter(availableEncounters);
+        isCachedEncounter = false;
       }
     }
 
     // Calculate new energy (handle rest which restores energy)
     const newEnergy = Math.max(0, Math.min(character.maxEnergy, character.currentEnergy - energyCost));
+
+    // Calculate HP restoration if action has hpRestore
+    const hpRestored = action.hpRestore ?? 0;
+    const newHp = Math.min(character.maxHp, character.currentHp + hpRestored);
 
     // Calculate XP and check for level up
     const xpGained = action.baseXPReward;
@@ -219,6 +277,7 @@ export async function POST(request: Request) {
         where: { id: character.id },
         data: {
           currentEnergy: newEnergy,
+          currentHp: newHp,
           currentXp: newXp,
           level: newLevel,
           maxHp: leveledUp ? character.maxHp + 10 : character.maxHp,
@@ -307,6 +366,8 @@ export async function POST(request: Request) {
       return {
         energySpent: energyCost,
         newEnergy,
+        newHp,
+        hpRestored,
         xpGained,
         newXp,
         leveledUp,
@@ -320,9 +381,23 @@ export async function POST(request: Request) {
       };
     });
 
+    // Apply goal progress for action execution
+    await applyGoalProgressOnAction(character.id, action);
+
+    // Check if any goals completed
+    const { completedGoals, xpAwarded: goalXp } = await checkAndCompleteGoals(character.id);
+
+    // Get updated active goals
+    const activeGoals = await getActiveGoals(character.id);
+
     return NextResponse.json({
       success: true,
       ...result,
+      goals: {
+        active: activeGoals,
+        completed: completedGoals,
+        xpAwarded: goalXp,
+      },
     });
   } catch (error) {
     console.error('Action execution error:', error);

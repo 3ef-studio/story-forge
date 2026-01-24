@@ -96,3 +96,113 @@ export type CachedEncounterData = {
   createdAt: Date
   lastUsedAt: Date | null
 }
+
+// ============================================
+// SEED + PERSONALIZER ARCHITECTURE (V1)
+// ============================================
+
+// Seed generation inputs - NO player-specific data
+export type SeedGenerationInput = {
+  actionId: string
+  actionCategory: string
+  encounterType: string
+  difficulty: number
+  difficultyBucket: 'easy' | 'medium' | 'hard' // For cache key grouping
+  location: string
+  involvedFactions: string[] // Sorted for deterministic cache key
+}
+
+// A single seed choice - generic, no personalization
+export type SeedChoice = {
+  id: string // Stable ID (choice_1, choice_2, etc.)
+  genericLabel: string // Generic action description
+  approach: 'direct' | 'subtle' | 'diplomatic' | 'tactical' // Approach type
+  requiredAttributes?: { attributeId: string; minValue: number }[]
+  requiredPowers?: string[]
+}
+
+// Seed outcome - full mechanical data
+export type SeedOutcome = {
+  choiceId: string
+  successChance: number
+  successResult: {
+    description: string // Generic success description
+    xpGain: number
+    factionChanges: { factionId: string; change: number }[]
+    attributeGrowth?: { attributeId: string; amount: number }[]
+  }
+  failureResult: {
+    description: string // Generic failure description
+    xpGain: number
+    factionChanges: { factionId: string; change: number }[]
+    hpLoss?: number
+  }
+}
+
+// Encounter Seed - cacheable, no player references
+export type EncounterSeed = {
+  seedId: string // UUID assigned after caching
+  title: string // Generic title
+  situationSummary: string // 1-2 sentences, neutral
+  category: string
+  difficulty: number
+  choices: [SeedChoice, SeedChoice, SeedChoice, SeedChoice] // Exactly 4 choices
+  outcomes: SeedOutcome[]
+  tags: string[] // Metadata for matching/filtering
+  involvedFactions: string[]
+  location: string
+}
+
+// Cache key components for deterministic lookup
+export type SeedCacheKey = {
+  encounterType: string
+  difficultyBucket: 'easy' | 'medium' | 'hard'
+  location: string
+  factionKey: string // Sorted, joined faction IDs
+  actionCategory: string
+}
+
+// Personalizer input - character context for flavoring
+export type PersonalizerInput = {
+  seed: EncounterSeed
+  characterName: string
+  originName: string
+  powerNames: string[]
+  reputationTiers: { factionId: string; tier: 'hostile' | 'unfriendly' | 'neutral' | 'friendly' | 'allied' }[]
+  recentEncounterTags: string[] // Tags from last 3 encounters
+}
+
+// Personalized encounter output - adds flavor without changing structure
+export type PersonalizedEncounter = {
+  // From seed (unchanged)
+  seedId: string
+  category: string
+  difficulty: number
+  outcomes: SeedOutcome[]
+  tags: string[]
+
+  // Personalized content
+  name: string // Personalized title
+  description: string // Personalized narrative intro (2-4 sentences)
+  flavorText?: string // Optional atmospheric detail
+  choices: {
+    id: string // Same as seed
+    text: string // Personalized choice label
+    requiredPowers?: string[]
+    requiredAttributes?: { attributeId: string; minValue: number }[]
+    narrativeDescription: string // Personalized description
+  }[]
+}
+
+// Helper to convert difficulty to bucket
+export function getDifficultyBucket(difficulty: number): 'easy' | 'medium' | 'hard' {
+  if (difficulty <= 3) return 'easy'
+  if (difficulty <= 6) return 'medium'
+  return 'hard'
+}
+
+// Helper to generate deterministic cache key
+export function generateSeedCacheKey(input: SeedGenerationInput): string {
+  const factionKey = [...input.involvedFactions].sort().join('|')
+  return `${input.encounterType}:${input.difficultyBucket}:${input.location}:${factionKey}:${input.actionCategory}`
+}

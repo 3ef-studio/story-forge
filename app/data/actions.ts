@@ -33,9 +33,12 @@ export type Action = {
   // Rewards
   baseXPReward: number
   baseMoneyReward: number // If we add currency later
-  
+
   // Cooldown (optional - prevents spam)
   cooldownHours?: number
+
+  // HP restoration (optional - for healing actions)
+  hpRestore?: number
 }
 
 export const actions: Action[] = [
@@ -624,7 +627,8 @@ export const actions: Action[] = [
     narrativeContext: 'Player takes downtime to heal and recover',
     locationTypes: ['safehouses', 'home', 'hideouts', 'safe_locations'],
     baseXPReward: 5,
-    baseMoneyReward: 0
+    baseMoneyReward: 0,
+    hpRestore: 30
   }
 ]
 

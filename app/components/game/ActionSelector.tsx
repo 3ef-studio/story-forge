@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/ca
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
 import { actions, type Action, type ActionCategory, getAvailableActions } from '@/app/data/actions';
-import { AlertCircle, Circle, Clock, Dumbbell, Shield, Skull, Users, Zap } from 'lucide-react';
+import { AlertCircle, Circle, Clock, Dumbbell, Shield, Skull, Star, Users, Zap } from 'lucide-react';
+import type { GoalRecord } from '@/app/components/game/ActiveGoalsPanel';
 
 interface ActionSelectorProps {
   playerLevel: number;
@@ -16,6 +17,7 @@ interface ActionSelectorProps {
   cooldowns: Record<string, string>;
   onSelectAction: (action: Action) => void;
   disabled?: boolean;
+  activeGoals?: GoalRecord[];
 }
 
 const categoryInfo: Record<ActionCategory, { label: string; icon: ReactNode; color: string }> = {
@@ -26,6 +28,30 @@ const categoryInfo: Record<ActionCategory, { label: string; icon: ReactNode; col
   social: { label: 'Social', icon: <Users className="h-4 w-4" />, color: 'bg-purple-500' },
 };
 
+// Check if an action advances any active goal
+function doesActionAdvanceGoal(
+  action: Action,
+  goals: GoalRecord[]
+): boolean {
+  for (const goal of goals) {
+    if (!goal.isActive || goal.currentProgress >= goal.targetValue) continue;
+    const meta = goal.metadata;
+
+    switch (goal.goalType) {
+      case 'action_count':
+        if (meta?.actionId === action.id) return true;
+        break;
+      case 'category_count':
+        if (meta?.category === action.category) return true;
+        break;
+      case 'location_count':
+        if (meta?.location && action.locationTypes.includes(meta.location)) return true;
+        break;
+    }
+  }
+  return false;
+}
+
 export function ActionSelector({
   playerLevel,
   playerAttributes,
@@ -34,6 +60,7 @@ export function ActionSelector({
   cooldowns,
   onSelectAction,
   disabled = false,
+  activeGoals = [],
 }: ActionSelectorProps) {
   const [selectedCategory, setSelectedCategory] = useState<ActionCategory | 'all'>('all');
   const [now, setNow] = useState<number>(() => Date.now());
@@ -130,6 +157,7 @@ export function ActionSelector({
             const available = isActionAvailable(action);
             const disabledReason = getActionDisabledReason(action);
             const info = categoryInfo[action.category];
+            const advancesGoal = doesActionAdvanceGoal(action, activeGoals);
 
             return (
               <button
@@ -139,6 +167,8 @@ export function ActionSelector({
                 className={`group text-left p-4 rounded-xl border-2 transition-all duration-200 ${
                   !available || disabledReason
                     ? 'bg-gray-50 border-gray-200 opacity-60 cursor-not-allowed'
+                    : advancesGoal
+                    ? 'bg-yellow-50 border-yellow-300 hover:border-yellow-400 hover:shadow-md hover:shadow-yellow-100 hover:-translate-y-0.5 cursor-pointer active:translate-y-0 active:shadow-sm'
                     : 'bg-white border-gray-200 hover:border-blue-400 hover:shadow-md hover:shadow-blue-100 hover:-translate-y-0.5 cursor-pointer active:translate-y-0 active:shadow-sm'
                 }`}
               >
@@ -151,6 +181,12 @@ export function ActionSelector({
                       <span className="font-semibold text-sm text-gray-800 group-hover:text-blue-600 transition-colors">
                         {action.name}
                       </span>
+                      {advancesGoal && (
+                        <span className="flex items-center gap-1 text-xs text-yellow-600 bg-yellow-100 px-1.5 py-0.5 rounded-full">
+                          <Star className="h-3 w-3 fill-yellow-500" />
+                          Goal
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-gray-500 mt-1.5 line-clamp-2 leading-relaxed">
                       {action.description}

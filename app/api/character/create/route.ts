@@ -4,6 +4,7 @@ import { prisma } from '@/app/lib/db';
 import { getOriginById, initializeCharacterFromOrigin } from '@/app/data/origins';
 import { factions } from '@/app/data/factions';
 import { attributes } from '@/app/data/attributes';
+import { initializeGoalsForNewCharacter } from '@/app/lib/game-logic/goal-manager';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -129,6 +130,9 @@ export async function POST(request: Request) {
 
       return newCharacter;
     });
+
+    // Initialize starting goals for the character
+    await initializeGoalsForNewCharacter(character.id, originId);
 
     return NextResponse.json(
       {

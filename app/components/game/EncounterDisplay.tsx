@@ -4,13 +4,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/ca
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import type { EncounterTemplate } from '@/app/data/encounter-templates';
-import { AlertTriangle, CheckCircle, XCircle, Star } from 'lucide-react';
+import { getPowerById } from '@/app/data/powers';
+import { AlertTriangle, CheckCircle, XCircle, Star, Zap } from 'lucide-react';
 
 interface EncounterChoice {
   id: string;
   text: string;
   available: boolean;
   reason?: string;
+  requiredPowers?: string[];
 }
 
 interface EncounterDisplayProps {
@@ -75,7 +77,17 @@ export function EncounterDisplay({
                     )}
                   </div>
                   <div className="flex-1">
-                    <span className="font-medium">{choice.text}</span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium">{choice.text}</span>
+                      {choice.requiredPowers && choice.requiredPowers.length > 0 && (
+                        <span className="inline-flex items-center gap-1 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                          <Zap className="h-3 w-3" />
+                          {choice.requiredPowers
+                            .map((powerId) => getPowerById(powerId)?.name || powerId)
+                            .join(', ')}
+                        </span>
+                      )}
+                    </div>
                     {!choice.available && choice.reason && (
                       <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
                         <AlertTriangle className="h-3 w-3" />

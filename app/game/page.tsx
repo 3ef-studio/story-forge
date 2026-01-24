@@ -9,6 +9,8 @@ import { ActionSelector } from '@/app/components/game/ActionSelector';
 import { EncounterDisplay } from '@/app/components/game/EncounterDisplay';
 import { OutcomeDisplay } from '@/app/components/game/OutcomeDisplay';
 import { StoryLog } from '@/app/components/game/StoryLog';
+import { ActiveGoalsPanel, type GoalRecord } from '@/app/components/game/ActiveGoalsPanel';
+import { GoalChoiceModal, type GoalChoice } from '@/app/components/game/GoalChoiceModal';
 import { useToast } from '@/app/components/ui/toast';
 import { getFactionById } from '@/app/data/factions';
 import type { Action } from '@/app/data/actions';
@@ -72,6 +74,7 @@ interface EncounterChoice {
   text: string;
   available: boolean;
   reason?: string;
+  requiredPowers?: string[];
 }
 
 export default function GamePage() {
@@ -90,6 +93,71 @@ export default function GamePage() {
   const [loadingMessage, setLoadingMessage] = useState(AI_LOADING_MESSAGES[0]);
   const [loadingProgress, setLoadingProgress] = useState(0);
 
+  // Goals state
+  const [activeGoals, setActiveGoals] = useState<GoalRecord[]>([]);
+  const [completedGoals, setCompletedGoals] = useState<GoalRecord[]>([]);
+  const [goalChoices, setGoalChoices] = useState<GoalChoice[]>([]);
+  const [showGoalChoice, setShowGoalChoice] = useState(false);
+
+  const fetchGoals = useCallback(async () => {
+    try {
+      const response = await fetch('/api/goals');
+      if (!response.ok) return;
+      const data = await response.json();
+      setActiveGoals(data.activeGoals || []);
+      if (data.needsChoice && data.choices?.length > 0) {
+        setGoalChoices(data.choices);
+        setShowGoalChoice(true);
+      }
+    } catch (err) {
+      console.error('Error fetching goals:', err);
+    }
+  }, []);
+
+  const handleAcceptGoal = async (goalTemplateId: string) => {
+    try {
+      const response = await fetch('/api/goals/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ goalTemplateId }),
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        addToast({
+          type: 'error',
+          title: 'Failed to accept goal',
+          message: data.error || 'Please try again',
+          duration: 3000,
+        });
+        return;
+      }
+      const data = await response.json();
+      // Update active goals with the new goal
+      setActiveGoals(data.activeGoals || []);
+      // Check if more choices are needed
+      if (data.needsChoice && data.choices?.length > 0) {
+        setGoalChoices(data.choices);
+      } else {
+        setShowGoalChoice(false);
+        setGoalChoices([]);
+      }
+      addToast({
+        type: 'success',
+        title: 'New Goal Accepted!',
+        message: data.newGoal?.title || 'Your journey continues',
+        duration: 3000,
+      });
+    } catch (err) {
+      console.error('Error accepting goal:', err);
+      addToast({
+        type: 'error',
+        title: 'Error',
+        message: 'Failed to accept goal',
+        duration: 3000,
+      });
+    }
+  };
+
   const fetchCharacter = useCallback(async () => {
     try {
       const response = await fetch('/api/character/get');
@@ -106,13 +174,15 @@ export default function GamePage() {
         setError('Energy fully restored!');
         setTimeout(() => setError(null), 3000);
       }
+      // Fetch goals after character loads
+      fetchGoals();
     } catch (err) {
       console.error('Error fetching character:', err);
       setError('Failed to load character data');
     } finally {
       setLoading(false);
     }
-  }, [router]);
+  }, [router, fetchGoals]);
 
   useEffect(() => {
     fetchCharacter();
@@ -202,6 +272,7 @@ export default function GamePage() {
             text: choice.text,
             available,
             reason,
+            requiredPowers: choice.requiredPowers,
           };
         });
 
@@ -244,6 +315,25 @@ export default function GamePage() {
         // Show level up modal if applicable
         if (data.leveledUp) {
           setLevelUpModal(data.newLevel);
+        }
+      }
+
+      // Process goals from API response
+      if (data.goals) {
+        setActiveGoals(data.goals.active || []);
+        if (data.goals.completed?.length > 0) {
+          setCompletedGoals(data.goals.completed);
+          // Show toast for each completed goal
+          data.goals.completed.forEach((goal: GoalRecord) => {
+            addToast({
+              type: 'success',
+              title: 'Goal Completed!',
+              message: `${goal.title} (+${goal.xpReward} XP)`,
+              duration: 4000,
+            });
+          });
+          // Clear completed goals after showing
+          setTimeout(() => setCompletedGoals([]), 5000);
         }
       }
     } catch (err) {
@@ -312,6 +402,25 @@ export default function GamePage() {
       // Check for level up
       if (data.leveledUp) {
         setLevelUpModal(data.newLevel);
+      }
+
+      // Process goals from API response
+      if (data.goals) {
+        setActiveGoals(data.goals.active || []);
+        if (data.goals.completed?.length > 0) {
+          setCompletedGoals(data.goals.completed);
+          // Show toast for each completed goal
+          data.goals.completed.forEach((goal: GoalRecord) => {
+            addToast({
+              type: 'success',
+              title: 'Goal Completed!',
+              message: `${goal.title} (+${goal.xpReward} XP)`,
+              duration: 4000,
+            });
+          });
+          // Clear completed goals after showing
+          setTimeout(() => setCompletedGoals([]), 5000);
+        }
       }
     } catch (err) {
       console.error('Resolve error:', err);
@@ -444,9 +553,10 @@ export default function GamePage() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-4">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          {/* Left Sidebar - Character Sheet */}
+          {/* Left Sidebar - Character Sheet & Goals */}
           <aside className="lg:col-span-3 space-y-4">
             <CharacterSheet character={character} />
+            <ActiveGoalsPanel goals={activeGoals} completedGoals={completedGoals} />
           </aside>
 
           {/* Center - Story Display */}
@@ -525,6 +635,7 @@ export default function GamePage() {
               cooldowns={character.cooldowns}
               onSelectAction={handleSelectAction}
               disabled={gameState !== 'idle'}
+              activeGoals={activeGoals}
             />
           </aside>
         </div>
@@ -575,6 +686,15 @@ export default function GamePage() {
             </Button>
           </div>
         </div>
+      )}
+
+      {/* Goal Choice Modal */}
+      {showGoalChoice && goalChoices.length > 0 && (
+        <GoalChoiceModal
+          choices={goalChoices}
+          onAccept={handleAcceptGoal}
+          onClose={() => setShowGoalChoice(false)}
+        />
       )}
     </div>
   );

@@ -7,6 +7,7 @@ import {
   type EncounterTemplate,
 } from '@/app/data/encounter-templates';
 import { calculateReputationImpact, getFactionById } from '@/app/data/factions';
+import { applyGoalProgressOnEncounterResolution, checkAndCompleteGoals, getActiveGoals } from '@/app/lib/game-logic/goal-manager';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -257,6 +258,22 @@ export async function POST(request: Request) {
       }
     });
 
+    // Apply goal progress for encounter resolution
+    // Determine used powers from choice (if choice required powers, consider them used)
+    const usedPowerIds = choice.requiredPowers ?? [];
+
+    await applyGoalProgressOnEncounterResolution(character.id, {
+      won: success,
+      usedPowerIds,
+      reputationChanges: allReputationChanges,
+    });
+
+    // Check if any goals completed
+    const { completedGoals, xpAwarded: goalXp } = await checkAndCompleteGoals(character.id);
+
+    // Get updated active goals
+    const activeGoals = await getActiveGoals(character.id);
+
     return NextResponse.json({
       success,
       outcome: {
@@ -277,6 +294,11 @@ export async function POST(request: Request) {
       },
       leveledUp,
       newLevel: leveledUp ? newLevel : undefined,
+      goals: {
+        active: activeGoals,
+        completed: completedGoals,
+        xpAwarded: goalXp,
+      },
     });
   } catch (error) {
     console.error('Encounter resolution error:', error);
