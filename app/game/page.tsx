@@ -8,9 +8,11 @@ import { CharacterSheet } from '@/app/components/game/CharacterSheet';
 import { ActionSelector } from '@/app/components/game/ActionSelector';
 import { EncounterDisplay } from '@/app/components/game/EncounterDisplay';
 import { OutcomeDisplay } from '@/app/components/game/OutcomeDisplay';
-import { StoryLog } from '@/app/components/game/StoryLog';
 import { ActiveGoalsPanel, type GoalRecord } from '@/app/components/game/ActiveGoalsPanel';
 import { GoalChoiceModal, type GoalChoice } from '@/app/components/game/GoalChoiceModal';
+import { StatusStrip } from '@/app/components/game/StatusStrip';
+import { MobileTabBar, type MobileTab } from '@/app/components/game/MobileTabBar';
+import { StoryLogPanel } from '@/app/components/game/StoryLogPanel';
 import { useToast } from '@/app/components/ui/toast';
 import { getFactionById } from '@/app/data/factions';
 import type { Action } from '@/app/data/actions';
@@ -19,16 +21,11 @@ import { LogOut, User, HelpCircle, Menu, X, Sparkles, Trophy } from 'lucide-reac
 
 type GameState = 'idle' | 'executing' | 'encounter' | 'resolving' | 'outcome';
 
-// Flavor messages for AI generation loading
-const AI_LOADING_MESSAGES = [
-  "The threads of fate are weaving...",
-  "Your story takes shape...",
-  "Destiny unfolds before you...",
-  "The universe responds to your actions...",
-  "Something stirs in the shadows...",
-  "Your path becomes clearer...",
-  "Forces align around you...",
-  "The narrative deepens...",
+// 3-step loading messages that cycle every ~800ms
+const LOADING_STEPS = [
+  'Reading the city...',
+  'Tracking factions...',
+  'Shaping your options...',
 ];
 
 interface CharacterData {
@@ -90,8 +87,10 @@ export default function GamePage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [levelUpModal, setLevelUpModal] = useState<number | null>(null);
   const [isCachedEncounter, setIsCachedEncounter] = useState(false);
-  const [loadingMessage, setLoadingMessage] = useState(AI_LOADING_MESSAGES[0]);
-  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [loadingStep, setLoadingStep] = useState(0);
+
+  // Mobile tab state
+  const [mobileTab, setMobileTab] = useState<MobileTab>('scene');
 
   // Goals state
   const [activeGoals, setActiveGoals] = useState<GoalRecord[]>([]);
@@ -132,9 +131,7 @@ export default function GamePage() {
         return;
       }
       const data = await response.json();
-      // Update active goals with the new goal
       setActiveGoals(data.activeGoals || []);
-      // Check if more choices are needed
       if (data.needsChoice && data.choices?.length > 0) {
         setGoalChoices(data.choices);
       } else {
@@ -171,10 +168,13 @@ export default function GamePage() {
       const data = await response.json();
       setCharacter(data.character);
       if (data.energyRestored) {
-        setError('Energy fully restored!');
-        setTimeout(() => setError(null), 3000);
+        addToast({
+          type: 'success',
+          title: 'Energy Restored',
+          message: 'Your energy has been fully restored!',
+          duration: 3000,
+        });
       }
-      // Fetch goals after character loads
       fetchGoals();
     } catch (err) {
       console.error('Error fetching character:', err);
@@ -182,29 +182,31 @@ export default function GamePage() {
     } finally {
       setLoading(false);
     }
-  }, [router, fetchGoals]);
+  }, [router, fetchGoals, addToast]);
 
   useEffect(() => {
     fetchCharacter();
   }, [fetchCharacter]);
+
+  // Loading step animation for encounter generation
+  useEffect(() => {
+    if (gameState !== 'executing') return;
+
+    const interval = setInterval(() => {
+      setLoadingStep((prev) => (prev + 1) % LOADING_STEPS.length);
+    }, 800);
+
+    return () => clearInterval(interval);
+  }, [gameState]);
 
   const handleSelectAction = async (action: Action) => {
     if (!character || gameState !== 'idle') return;
 
     setGameState('executing');
     setError(null);
-    setLoadingProgress(0);
-    setLoadingMessage(AI_LOADING_MESSAGES[0]);
-
-    // Start loading animation - cycle through messages
-    let messageIndex = 0;
-    let progress = 0;
-    const loadingInterval = setInterval(() => {
-      messageIndex = (messageIndex + 1) % AI_LOADING_MESSAGES.length;
-      setLoadingMessage(AI_LOADING_MESSAGES[messageIndex]);
-      progress = Math.min(progress + 8, 90); // Progress up to 90%
-      setLoadingProgress(progress);
-    }, 2000);
+    setLoadingStep(0);
+    // Switch to scene tab on mobile when action is selected
+    setMobileTab('scene');
 
     try {
       const response = await fetch('/api/action/execute', {
@@ -212,9 +214,6 @@ export default function GamePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ actionId: action.id }),
       });
-
-      clearInterval(loadingInterval);
-      setLoadingProgress(100);
 
       const data = await response.json();
 
@@ -224,28 +223,26 @@ export default function GamePage() {
         return;
       }
 
-      // Update character energy
+      // Update character energy and HP
       setCharacter((prev) => {
         if (!prev) return null;
         return {
           ...prev,
           currentEnergy: data.newEnergy,
+          currentHp: data.newHp ?? prev.currentHp,
           money: prev.money + (data.moneyGained || 0),
         };
       });
 
       if (data.encounterTriggered && data.encounter) {
-        // Set up encounter
         const encounter = data.encounter as EncounterTemplate;
         setCurrentEncounter(encounter);
         setIsCachedEncounter(data.isCachedEncounter || false);
 
-        // Build choices with availability
         const choices = encounter.choices.map((choice) => {
           let available = true;
           let reason: string | undefined;
 
-          // Check power requirements
           if (choice.requiredPowers?.length) {
             const hasPower = choice.requiredPowers.some((p) =>
               character.powers.some((cp) => cp.powerId === p)
@@ -256,7 +253,6 @@ export default function GamePage() {
             }
           }
 
-          // Check attribute requirements
           if (choice.requiredAttributes?.length && available) {
             const unmet = choice.requiredAttributes.find(
               (req) => (character.attributes[req.attributeId] || 0) < req.minValue
@@ -279,7 +275,6 @@ export default function GamePage() {
         setEncounterChoices(choices);
         setGameState('encounter');
       } else {
-        // No encounter, show simple result
         setCurrentOutcome({
           success: true,
           description: `You completed ${action.name}. ${
@@ -300,7 +295,6 @@ export default function GamePage() {
         });
         setGameState('outcome');
 
-        // Update character state from server response
         setCharacter((prev) => {
           if (!prev) return null;
           return {
@@ -312,18 +306,15 @@ export default function GamePage() {
           };
         });
 
-        // Show level up modal if applicable
         if (data.leveledUp) {
           setLevelUpModal(data.newLevel);
         }
       }
 
-      // Process goals from API response
       if (data.goals) {
         setActiveGoals(data.goals.active || []);
         if (data.goals.completed?.length > 0) {
           setCompletedGoals(data.goals.completed);
-          // Show toast for each completed goal
           data.goals.completed.forEach((goal: GoalRecord) => {
             addToast({
               type: 'success',
@@ -332,7 +323,6 @@ export default function GamePage() {
               duration: 4000,
             });
           });
-          // Clear completed goals after showing
           setTimeout(() => setCompletedGoals([]), 5000);
         }
       }
@@ -378,9 +368,7 @@ export default function GamePage() {
       });
       setGameState('outcome');
 
-      // Show toast notifications for faction changes
       if (data.outcome.factionChanges?.length > 0) {
-        // Stagger the toasts
         data.outcome.factionChanges.forEach((change: { factionId: string; change: number }, index: number) => {
           setTimeout(() => {
             const faction = getFactionById(change.factionId);
@@ -391,7 +379,6 @@ export default function GamePage() {
         });
       }
 
-      // Show success/failure toast
       addToast({
         type: data.success ? 'success' : 'warning',
         title: data.success ? 'Success!' : 'Failed',
@@ -399,17 +386,14 @@ export default function GamePage() {
         duration: 3000,
       });
 
-      // Check for level up
       if (data.leveledUp) {
         setLevelUpModal(data.newLevel);
       }
 
-      // Process goals from API response
       if (data.goals) {
         setActiveGoals(data.goals.active || []);
         if (data.goals.completed?.length > 0) {
           setCompletedGoals(data.goals.completed);
-          // Show toast for each completed goal
           data.goals.completed.forEach((goal: GoalRecord) => {
             addToast({
               type: 'success',
@@ -418,7 +402,6 @@ export default function GamePage() {
               duration: 4000,
             });
           });
-          // Clear completed goals after showing
           setTimeout(() => setCompletedGoals([]), 5000);
         }
       }
@@ -442,6 +425,9 @@ export default function GamePage() {
     setLevelUpModal(null);
   };
 
+  // Get active goal title for status strip
+  const activeGoalTitle = activeGoals.length > 0 ? activeGoals[0].title : undefined;
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
@@ -463,11 +449,93 @@ export default function GamePage() {
     );
   }
 
+  // Determine if we have an active encounter for tab indicator
+  const hasActiveEncounter = gameState === 'encounter' || gameState === 'executing' || gameState === 'outcome';
+
+  // Scene content (shared between mobile tab and desktop center column)
+  const renderSceneContent = () => {
+    if (gameState === 'idle') {
+      return (
+        <div className="bg-white rounded-lg border p-4 sm:p-6 text-center">
+          <h2 className="text-lg sm:text-xl font-semibold mb-2">What will you do?</h2>
+          <p className="text-gray-600 text-sm sm:text-base">
+            <span className="hidden sm:inline">Choose an action from the panel on the right to continue your story.</span>
+            <span className="sm:hidden">Tap the Actions tab below to choose your next move.</span>
+          </p>
+        </div>
+      );
+    }
+
+    if (gameState === 'executing') {
+      return (
+        <div className="bg-white rounded-lg border p-6">
+          <div className="text-center space-y-4">
+            {/* Title */}
+            <h3 className="text-lg font-semibold text-gray-800">Encounter forming...</h3>
+
+            {/* 3-step indicator */}
+            <div className="space-y-2">
+              {LOADING_STEPS.map((step, index) => (
+                <div
+                  key={step}
+                  className={`flex items-center gap-2 justify-center transition-opacity duration-300 ${
+                    index === loadingStep ? 'opacity-100' : 'opacity-30'
+                  }`}
+                >
+                  <div
+                    className={`w-2 h-2 rounded-full ${
+                      index === loadingStep ? 'bg-blue-500 animate-pulse' : 'bg-gray-300'
+                    }`}
+                  />
+                  <span
+                    className={`text-sm ${
+                      index === loadingStep ? 'text-blue-600 font-medium' : 'text-gray-400'
+                    }`}
+                  >
+                    {step}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Skeleton card preview */}
+            <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200 animate-pulse">
+              <div className="h-4 bg-gray-200 rounded w-3/4 mx-auto mb-3"></div>
+              <div className="h-3 bg-gray-200 rounded w-full mb-2"></div>
+              <div className="h-3 bg-gray-200 rounded w-5/6 mb-4"></div>
+              <div className="space-y-2">
+                <div className="h-10 bg-gray-200 rounded"></div>
+                <div className="h-10 bg-gray-200 rounded"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if ((gameState === 'encounter' || gameState === 'resolving') && currentEncounter) {
+      return (
+        <EncounterDisplay
+          encounter={currentEncounter}
+          choices={encounterChoices}
+          onSelectChoice={handleSelectChoice}
+          isResolving={gameState === 'resolving'}
+        />
+      );
+    }
+
+    if (gameState === 'outcome' && currentOutcome) {
+      return <OutcomeDisplay outcome={currentOutcome} onContinue={handleContinue} />;
+    }
+
+    return null;
+  };
+
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gray-100 pb-16 sm:pb-0">
       {/* Top Nav */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <h1 className="font-bold text-lg text-gray-900">Story Forge</h1>
           </div>
@@ -475,6 +543,7 @@ export default function GamePage() {
           <div className="flex items-center gap-2">
             <Button
               size="sm"
+              variant="ghost"
               onClick={() => router.push('/profile')}
               className="hidden sm:flex"
             >
@@ -483,6 +552,7 @@ export default function GamePage() {
             </Button>
             <Button
               size="sm"
+              variant="ghost"
               onClick={() => router.push('/help')}
               className="hidden sm:flex"
             >
@@ -491,15 +561,17 @@ export default function GamePage() {
             </Button>
             <Button
               size="sm"
+              variant="ghost"
               onClick={() => signOut({ callbackUrl: '/' })}
             >
-              <LogOut className="h-4 w-4 mr-1" />
-              <span className="hidden sm:inline">Logout</span>
+              <LogOut className="h-4 w-4" />
+              <span className="hidden sm:inline ml-1">Logout</span>
             </Button>
 
             {/* Mobile menu button */}
             <Button
-              size="icon"
+              size="sm"
+              variant="ghost"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="sm:hidden"
             >
@@ -509,10 +581,11 @@ export default function GamePage() {
         </div>
       </header>
 
-      {/* Mobile Menu */}
+      {/* Mobile dropdown menu */}
       {mobileMenuOpen && (
-        <div className="sm:hidden bg-white border-b p-4 space-y-2">
+        <div className="sm:hidden bg-white border-b p-3 space-y-2 shadow-md">
           <Button
+            variant="ghost"
             className="w-full justify-start"
             onClick={() => {
               router.push('/profile');
@@ -523,6 +596,7 @@ export default function GamePage() {
             Profile
           </Button>
           <Button
+            variant="ghost"
             className="w-full justify-start"
             onClick={() => {
               router.push('/help');
@@ -535,154 +609,162 @@ export default function GamePage() {
         </div>
       )}
 
+      {/* Mobile Status Strip */}
+      <StatusStrip
+        hp={character.currentHp}
+        maxHp={character.maxHp}
+        energy={character.currentEnergy}
+        maxEnergy={character.maxEnergy}
+        xp={character.currentXp}
+        xpToNextLevel={character.xpToNextLevel}
+        level={character.level}
+        activeGoalTitle={activeGoalTitle}
+      />
+
       {/* Error Banner */}
       {error && (
-        <div className="max-w-7xl mx-auto px-4 py-2">
-          <div
-            className={`p-3 rounded-md ${
-              error.includes('restored')
-                ? 'bg-green-50 text-green-700 border border-green-200'
-                : 'bg-red-50 text-red-700 border border-red-200'
-            }`}
-          >
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2">
+          <div className="p-3 rounded-md bg-red-50 text-red-700 border border-red-200 text-sm">
             {error}
           </div>
         </div>
       )}
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 py-4">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          {/* Left Sidebar - Character Sheet & Goals */}
-          <aside className="lg:col-span-3 space-y-4">
-            <CharacterSheet character={character} />
-            <ActiveGoalsPanel goals={activeGoals} completedGoals={completedGoals} />
-          </aside>
+      <main className="max-w-7xl mx-auto">
+        {/* MOBILE LAYOUT (< sm) */}
+        <div className="sm:hidden">
+          <div className="px-3 py-3">
+            {mobileTab === 'scene' && renderSceneContent()}
 
-          {/* Center - Story Display */}
-          <section className="lg:col-span-6 space-y-4">
-            {/* Current State Display */}
-            {gameState === 'idle' && (
-              <div className="bg-white rounded-lg border p-6">
-                <h2 className="text-xl font-semibold mb-2">What will you do?</h2>
-                <p className="text-gray-600">
-                  Choose an action from the panel on the right to continue your story.
-                </p>
-              </div>
-            )}
-
-            {gameState === 'executing' && (
-              <div className="bg-linear-to-br from-indigo-50 to-purple-50 rounded-lg border border-indigo-200 p-8">
-                <div className="text-center space-y-6">
-                  {/* Animated icon */}
-                  <div className="relative mx-auto w-16 h-16">
-                    <div className="absolute inset-0 rounded-full border-4 border-indigo-200"></div>
-                    <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-indigo-500 animate-spin"></div>
-                    <div className="absolute inset-2 rounded-full bg-indigo-100 flex items-center justify-center">
-                      <svg className="w-6 h-6 text-indigo-600 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                      </svg>
-                    </div>
-                  </div>
-
-                  {/* Loading message */}
-                  <div className="space-y-2">
-                    <p className="text-lg font-medium text-indigo-900 animate-pulse">
-                      {loadingMessage}
-                    </p>
-                    <p className="text-sm text-indigo-600">
-                      Generating your unique encounter...
-                    </p>
-                  </div>
-
-                  {/* Progress bar */}
-                  <div className="w-full max-w-xs mx-auto">
-                    <div className="h-2 bg-indigo-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-linear-to-r from-indigo-500 to-purple-500 transition-all duration-500 ease-out rounded-full"
-                        style={{ width: `${loadingProgress}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {(gameState === 'encounter' || gameState === 'resolving') && currentEncounter && (
-              <EncounterDisplay
-                encounter={currentEncounter}
-                choices={encounterChoices}
-                onSelectChoice={handleSelectChoice}
-                isResolving={gameState === 'resolving'}
+            {mobileTab === 'actions' && (
+              <ActionSelector
+                playerLevel={character.level}
+                playerAttributes={character.attributes}
+                playerPowers={character.powers.map((p) => p.powerId)}
+                playerEnergy={character.currentEnergy}
+                cooldowns={character.cooldowns}
+                onSelectAction={handleSelectAction}
+                disabled={gameState !== 'idle'}
+                activeGoals={activeGoals}
+                compact
+                hideHeader
               />
             )}
 
-            {gameState === 'outcome' && currentOutcome && (
-              <OutcomeDisplay outcome={currentOutcome} onContinue={handleContinue} />
+            {mobileTab === 'log' && (
+              <div className="space-y-4">
+                {/* Compact goals summary */}
+                {activeGoals.length > 0 && (
+                  <div className="bg-white rounded-lg border p-3">
+                    <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1">
+                      <span className="text-yellow-500">★</span> Goals
+                    </h3>
+                    <div className="space-y-2">
+                      {activeGoals.slice(0, 2).map((goal) => (
+                        <div key={goal.id} className="text-xs">
+                          <div className="flex justify-between text-gray-700">
+                            <span className="truncate flex-1">{goal.title}</span>
+                            <span className="text-gray-500 ml-2">
+                              {goal.currentProgress}/{goal.targetValue}
+                            </span>
+                          </div>
+                          <div className="h-1 bg-gray-100 rounded-full mt-1 overflow-hidden">
+                            <div
+                              className="h-full bg-blue-500 rounded-full"
+                              style={{
+                                width: `${Math.min(100, (goal.currentProgress / goal.targetValue) * 100)}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Story log */}
+                <div className="bg-white rounded-lg border p-3">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Recent Events</h3>
+                  <StoryLogPanel events={character.storyEvents} maxItems={10} compact />
+                </div>
+              </div>
             )}
+          </div>
+        </div>
 
-            {/* Story Log */}
-            <StoryLog events={character.storyEvents} />
-          </section>
+        {/* DESKTOP LAYOUT (>= sm) */}
+        <div className="hidden sm:block px-4 py-4">
+          <div className="grid grid-cols-12 gap-4">
+            {/* Left Sidebar - Character Sheet & Goals */}
+            <aside className="col-span-4 lg:col-span-3 space-y-4">
+              <CharacterSheet character={character} />
+              <ActiveGoalsPanel goals={activeGoals} completedGoals={completedGoals} />
+            </aside>
 
-          {/* Right - Action Selector */}
-          <aside className="lg:col-span-3">
-            <ActionSelector
-              playerLevel={character.level}
-              playerAttributes={character.attributes}
-              playerPowers={character.powers.map((p) => p.powerId)}
-              playerEnergy={character.currentEnergy}
-              cooldowns={character.cooldowns}
-              onSelectAction={handleSelectAction}
-              disabled={gameState !== 'idle'}
-              activeGoals={activeGoals}
-            />
-          </aside>
+            {/* Center - Scene */}
+            <section className="col-span-8 lg:col-span-6 space-y-4">
+              {renderSceneContent()}
+
+              {/* Story Log (desktop only) */}
+              <div className="bg-white rounded-lg border p-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Story Log</h3>
+                <StoryLogPanel events={character.storyEvents} maxItems={5} />
+              </div>
+            </section>
+
+            {/* Right - Actions */}
+            <aside className="hidden lg:block lg:col-span-3">
+              <ActionSelector
+                playerLevel={character.level}
+                playerAttributes={character.attributes}
+                playerPowers={character.powers.map((p) => p.powerId)}
+                playerEnergy={character.currentEnergy}
+                cooldowns={character.cooldowns}
+                onSelectAction={handleSelectAction}
+                disabled={gameState !== 'idle'}
+                activeGoals={activeGoals}
+              />
+            </aside>
+          </div>
         </div>
       </main>
 
+      {/* Mobile Tab Bar */}
+      <MobileTabBar
+        activeTab={mobileTab}
+        onTabChange={setMobileTab}
+        hasActiveEncounter={hasActiveEncounter}
+      />
+
       {/* Level Up Modal */}
       {levelUpModal !== null && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 animate-fade-in">
-          <div className="bg-linear-to-br from-yellow-50 to-amber-50 rounded-2xl p-8 max-w-md mx-4 text-center shadow-2xl border-2 border-yellow-300 animate-bounce-in">
-            {/* Celebration icons */}
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
+          <div className="bg-gradient-to-br from-yellow-50 to-amber-50 rounded-2xl p-6 sm:p-8 max-w-sm w-full text-center shadow-2xl border-2 border-yellow-300">
             <div className="flex justify-center gap-2 mb-4">
-              <Sparkles className="h-8 w-8 text-yellow-500 animate-pulse" />
-              <Trophy className="h-10 w-10 text-yellow-600" />
-              <Sparkles className="h-8 w-8 text-yellow-500 animate-pulse" />
+              <Sparkles className="h-6 w-6 sm:h-8 sm:w-8 text-yellow-500 animate-pulse" />
+              <Trophy className="h-8 w-8 sm:h-10 sm:w-10 text-yellow-600" />
+              <Sparkles className="h-6 w-6 sm:h-8 sm:w-8 text-yellow-500 animate-pulse" />
             </div>
 
-            <h2 className="text-3xl font-bold bg-linear-to-r from-yellow-600 to-amber-600 bg-clip-text text-transparent mb-2">
+            <h2 className="text-2xl sm:text-3xl font-bold text-yellow-600 mb-2">
               Level Up!
             </h2>
 
-            <div className="relative my-6">
-              <div className="text-7xl font-black text-yellow-600 animate-pulse-glow rounded-full inline-block px-6 py-2">
-                {levelUpModal}
-              </div>
+            <div className="text-5xl sm:text-7xl font-black text-yellow-600 my-4">
+              {levelUpModal}
             </div>
 
-            <div className="space-y-2 mb-6">
-              <div className="flex items-center justify-center gap-2 text-green-600">
-                <span className="text-lg">+10</span>
-                <span className="text-sm">Maximum HP</span>
-              </div>
-              <div className="flex items-center justify-center gap-2 text-yellow-600">
-                <span className="text-lg">+5</span>
-                <span className="text-sm">Maximum Energy</span>
-              </div>
+            <div className="space-y-1 mb-4 text-sm">
+              <div className="text-green-600">+10 Maximum HP</div>
+              <div className="text-yellow-600">+5 Maximum Energy</div>
             </div>
-
-            <p className="text-gray-600 mb-6 text-sm">
-              Your power grows stronger. New challenges await!
-            </p>
 
             <Button
               onClick={handleLevelUpClose}
-              size="lg"
-              className="bg-linear-to-r from-yellow-500 to-amber-500 hover:from-yellow-600 hover:to-amber-600 text-white font-semibold px-8"
+              className="bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-600 hover:to-amber-600 text-white font-semibold px-6"
             >
-              Continue Your Journey
+              Continue
             </Button>
           </div>
         </div>

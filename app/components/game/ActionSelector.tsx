@@ -18,6 +18,8 @@ interface ActionSelectorProps {
   onSelectAction: (action: Action) => void;
   disabled?: boolean;
   activeGoals?: GoalRecord[];
+  compact?: boolean;
+  hideHeader?: boolean;
 }
 
 const categoryInfo: Record<ActionCategory, { label: string; icon: ReactNode; color: string }> = {
@@ -61,6 +63,8 @@ export function ActionSelector({
   onSelectAction,
   disabled = false,
   activeGoals = [],
+  compact = false,
+  hideHeader = false,
 }: ActionSelectorProps) {
   const [selectedCategory, setSelectedCategory] = useState<ActionCategory | 'all'>('all');
   const [now, setNow] = useState<number>(() => Date.now());
@@ -124,6 +128,145 @@ export function ActionSelector({
 
   const categories: (ActionCategory | 'all')[] = ['all', 'heroic', 'criminal', 'neutral', 'training', 'social'];
 
+  const content = (
+    <div className={`grid grid-cols-1 ${compact ? 'gap-1.5' : 'gap-2'}`}>
+      {filteredActions.map((action) => {
+        const available = isActionAvailable(action);
+        const disabledReason = getActionDisabledReason(action);
+        const info = categoryInfo[action.category];
+        const advancesGoal = doesActionAdvanceGoal(action, activeGoals);
+
+        if (compact) {
+          // Compact mobile view - min height 44px for touch targets
+          return (
+            <button
+              key={action.id}
+              onClick={() => onSelectAction(action)}
+              disabled={disabled || !available || !!disabledReason}
+              className={`group text-left px-3 py-2.5 rounded-lg border transition-colors min-h-[44px] ${
+                !available || disabledReason
+                  ? 'bg-gray-50 border-gray-200 opacity-50 cursor-not-allowed'
+                  : advancesGoal
+                  ? 'bg-yellow-50 border-yellow-200 active:bg-yellow-100'
+                  : 'bg-white border-gray-200 active:bg-gray-50'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span className={`p-1 rounded ${info.color} text-white flex-shrink-0`}>
+                  {info.icon}
+                </span>
+                <span className="font-medium text-sm text-gray-800 flex-1 truncate">
+                  {action.name}
+                </span>
+                {advancesGoal && (
+                  <Star className="h-3.5 w-3.5 text-yellow-500 fill-yellow-500 flex-shrink-0" />
+                )}
+                <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${
+                  action.energyCost <= 0 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                }`}>
+                  {action.energyCost <= 0 ? `+${Math.abs(action.energyCost)}` : action.energyCost}
+                </span>
+              </div>
+              {disabledReason && (
+                <p className="text-xs text-red-500 mt-1 pl-7">{disabledReason}</p>
+              )}
+            </button>
+          );
+        }
+
+        // Full desktop view
+        return (
+          <button
+            key={action.id}
+            onClick={() => onSelectAction(action)}
+            disabled={disabled || !available || !!disabledReason}
+            className={`group text-left p-4 rounded-xl border-2 transition-all duration-200 ${
+              !available || disabledReason
+                ? 'bg-gray-50 border-gray-200 opacity-60 cursor-not-allowed'
+                : advancesGoal
+                ? 'bg-yellow-50 border-yellow-300 hover:border-yellow-400 hover:shadow-md hover:shadow-yellow-100 hover:-translate-y-0.5 cursor-pointer active:translate-y-0 active:shadow-sm'
+                : 'bg-white border-gray-200 hover:border-blue-400 hover:shadow-md hover:shadow-blue-100 hover:-translate-y-0.5 cursor-pointer active:translate-y-0 active:shadow-sm'
+            }`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className={`p-1.5 rounded-lg ${info.color} text-white shadow-sm group-hover:scale-110 transition-transform`}>
+                    {info.icon}
+                  </span>
+                  <span className="font-semibold text-sm text-gray-800 group-hover:text-blue-600 transition-colors">
+                    {action.name}
+                  </span>
+                  {advancesGoal && (
+                    <span className="flex items-center gap-1 text-xs text-yellow-600 bg-yellow-100 px-1.5 py-0.5 rounded-full">
+                      <Star className="h-3 w-3 fill-yellow-500" />
+                      Goal
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 mt-1.5 line-clamp-2 leading-relaxed">
+                  {action.description}
+                </p>
+              </div>
+
+              <div className="flex flex-col items-end gap-1.5">
+                {/* Energy Cost */}
+                <Badge
+                  variant={action.energyCost <= 0 ? 'success' : 'warning'}
+                  className="text-xs font-medium shadow-sm"
+                >
+                  <Zap className="h-3 w-3 mr-1" />
+                  {action.energyCost <= 0 ? `+${Math.abs(action.energyCost)}` : action.energyCost}
+                </Badge>
+
+                {/* Cooldown indicator (static per action definition) */}
+                {action.cooldownHours && (
+                  <span className="text-xs text-gray-400 flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    {action.cooldownHours}h
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Disabled reason */}
+            {disabledReason && (
+              <div className="mt-2.5 flex items-center gap-1.5 text-xs text-red-500 bg-red-50 rounded-lg px-2 py-1.5">
+                <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                <span>{disabledReason}</span>
+              </div>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  // If hideHeader, return content only (for mobile tab)
+  if (hideHeader) {
+    return (
+      <div className="space-y-3">
+        {/* Category filter pills */}
+        <div className="flex flex-wrap gap-1.5">
+          {categories.map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setSelectedCategory(cat)}
+              className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                selectedCategory === cat
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {cat === 'all' ? 'All' : categoryInfo[cat].label}
+            </button>
+          ))}
+        </div>
+        {content}
+      </div>
+    );
+  }
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -152,78 +295,7 @@ export function ActionSelector({
       </CardHeader>
 
       <CardContent>
-        <div className="grid grid-cols-1 gap-2">
-          {filteredActions.map((action) => {
-            const available = isActionAvailable(action);
-            const disabledReason = getActionDisabledReason(action);
-            const info = categoryInfo[action.category];
-            const advancesGoal = doesActionAdvanceGoal(action, activeGoals);
-
-            return (
-              <button
-                key={action.id}
-                onClick={() => onSelectAction(action)}
-                disabled={disabled || !available || !!disabledReason}
-                className={`group text-left p-4 rounded-xl border-2 transition-all duration-200 ${
-                  !available || disabledReason
-                    ? 'bg-gray-50 border-gray-200 opacity-60 cursor-not-allowed'
-                    : advancesGoal
-                    ? 'bg-yellow-50 border-yellow-300 hover:border-yellow-400 hover:shadow-md hover:shadow-yellow-100 hover:-translate-y-0.5 cursor-pointer active:translate-y-0 active:shadow-sm'
-                    : 'bg-white border-gray-200 hover:border-blue-400 hover:shadow-md hover:shadow-blue-100 hover:-translate-y-0.5 cursor-pointer active:translate-y-0 active:shadow-sm'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className={`p-1.5 rounded-lg ${info.color} text-white shadow-sm group-hover:scale-110 transition-transform`}>
-                        {info.icon}
-                      </span>
-                      <span className="font-semibold text-sm text-gray-800 group-hover:text-blue-600 transition-colors">
-                        {action.name}
-                      </span>
-                      {advancesGoal && (
-                        <span className="flex items-center gap-1 text-xs text-yellow-600 bg-yellow-100 px-1.5 py-0.5 rounded-full">
-                          <Star className="h-3 w-3 fill-yellow-500" />
-                          Goal
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1.5 line-clamp-2 leading-relaxed">
-                      {action.description}
-                    </p>
-                  </div>
-
-                  <div className="flex flex-col items-end gap-1.5">
-                    {/* Energy Cost */}
-                    <Badge
-                      variant={action.energyCost <= 0 ? 'success' : 'warning'}
-                      className="text-xs font-medium shadow-sm"
-                    >
-                      <Zap className="h-3 w-3 mr-1" />
-                      {action.energyCost <= 0 ? `+${Math.abs(action.energyCost)}` : action.energyCost}
-                    </Badge>
-
-                    {/* Cooldown indicator (static per action definition) */}
-                    {action.cooldownHours && (
-                      <span className="text-xs text-gray-400 flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        {action.cooldownHours}h
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Disabled reason */}
-                {disabledReason && (
-                  <div className="mt-2.5 flex items-center gap-1.5 text-xs text-red-500 bg-red-50 rounded-lg px-2 py-1.5">
-                    <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
-                    <span>{disabledReason}</span>
-                  </div>
-                )}
-              </button>
-            );
-          })}
-        </div>
+        {content}
       </CardContent>
     </Card>
   );
