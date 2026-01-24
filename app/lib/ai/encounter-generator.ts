@@ -2,9 +2,8 @@
 import { generateJSONCompletion } from '@/app/lib/openai'
 import { buildEncounterGenerationRequest } from './context-builder'
 import { ENCOUNTER_SYSTEM_PROMPT, buildUserPrompt, FEW_SHOT_EXAMPLE } from './prompts'
-import { validateEncounter, type ValidatedEncounter } from './validation'
+import { validateEncounter } from './validation'
 import type { AIGeneratedEncounter, EncounterGenerationRequest } from './types'
-import type { EncounterTemplate } from '@/app/data/encounter-templates'
 
 // Generate an encounter from the AI
 export async function generateEncounter(
@@ -88,29 +87,5 @@ export async function generateEncounterForAction(
   } catch (error) {
     console.error('[AI] Error in generateEncounterForAction:', error)
     return null
-  }
-}
-
-// Convert validated encounter to EncounterTemplate format (for compatibility)
-export function toEncounterTemplate(
-  encounter: ValidatedEncounter | AIGeneratedEncounter
-): EncounterTemplate {
-  return {
-    id: encounter.id,
-    name: encounter.name,
-    category: encounter.category,
-    difficulty: encounter.difficulty,
-    requiredFactions: encounter.requiredFactions,
-    requiredLocation: encounter.requiredLocation,
-    minPlayerLevel: encounter.minPlayerLevel,
-    minNotoriety: encounter.minNotoriety,
-    minReputation: encounter.minReputation,
-    description: encounter.description,
-    flavorText: encounter.flavorText,
-    choices: encounter.choices,
-    outcomes: encounter.outcomes,
-    narrativeTags: encounter.narrativeTags,
-    canBeReused: true,
-    timesUsed: 0,
   }
 }

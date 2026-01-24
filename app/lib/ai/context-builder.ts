@@ -106,10 +106,17 @@ export async function buildCharacterContext(
     const factionTags = event.tags.filter(t => t.startsWith('faction_'))
       .map(t => t.replace('faction_', ''))
 
+    // Try to extract choice from fullDescription
+    // Format: "Choice: [choice text]" or infer from first sentence of description
+    const choiceMatch = fullDesc.match(/Choice:\s*([^.]+)/)
+    const choiceMade = choiceMatch
+      ? choiceMatch[1].trim()
+      : (fullDesc.split('.')[0] || 'Unknown approach')
+
     return {
       name: encounterName,
       description: event.summary,
-      choiceMade: '', // Will be populated from fullDescription if available
+      choiceMade,
       outcome: fullDesc,
       wasSuccess: event.eventType === 'encounter_success',
       factionsInvolved: factionTags,

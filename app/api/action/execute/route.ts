@@ -4,12 +4,13 @@ import { prisma } from '@/app/lib/db';
 import { getActionById, applyActionEffects, getCooldownExpiry, rollForEncounter, selectEncounterType, getEncounterDifficulty } from '@/app/data/actions';
 import { calculateReputationImpact, getFactionById } from '@/app/data/factions';
 import { getAvailableEncounters, selectRandomEncounter, type EncounterTemplate } from '@/app/data/encounter-templates';
-import { findCachedSeed, cacheSeed, getCachedEncounterById } from '@/app/lib/ai/encounter-cache';
+import { findCachedSeed, cacheSeed } from '@/app/lib/ai/encounter-cache';
 import { generateSeed, buildSeedInput } from '@/app/lib/ai/encounter-seed-generator';
 import { personalizeSeed, toEncounterTemplate as personalizedToTemplate } from '@/app/lib/ai/encounter-personalizer';
 import { buildCharacterContext } from '@/app/lib/ai/context-builder';
 import type { EncounterSeed } from '@/app/lib/ai/types';
 import { applyGoalProgressOnAction, checkAndCompleteGoals, getActiveGoals } from '@/app/lib/game-logic/goal-manager';
+import { buildAttributeMap, buildFactionMap, shouldRestoreEnergy, applyEnergyReset } from '@/app/lib/utils/character-utils';
 
 export async function POST(request: Request) {
   try {
@@ -62,18 +63,22 @@ export async function POST(request: Request) {
       );
     }
 
-    // Build attribute map
-    const attributesMap: Record<string, number> = {};
-    character.attributes.forEach((attr) => {
-      attributesMap[attr.attributeId] = attr.currentValue;
-    });
+    // Build attribute map using utility
+    const attributesMap = buildAttributeMap(character.attributes);
 
     // Build powers list
     const powersList = character.powers.map((p) => p.powerId);
 
+    // Check and apply daily energy reset if needed (moved from GET to POST)
+    let currentEnergy = character.currentEnergy;
+    if (shouldRestoreEnergy(character.lastEnergyReset)) {
+      const resetResult = await applyEnergyReset(character.id, character.maxEnergy);
+      currentEnergy = resetResult.currentEnergy;
+    }
+
     // Check energy (handle rest action which restores energy)
     const energyCost = action.energyCost;
-    if (energyCost > 0 && character.currentEnergy < energyCost) {
+    if (energyCost > 0 && currentEnergy < energyCost) {
       return NextResponse.json(
         { error: 'Not enough energy' },
         { status: 400 }
@@ -115,11 +120,8 @@ export async function POST(request: Request) {
     // Apply action effects
     const effects = applyActionEffects(action, {}, attributesMap);
 
-    // Build faction reputation map
-    const factionReputations: Record<string, number> = {};
-    character.factionReputations.forEach((rep) => {
-      factionReputations[rep.factionId] = rep.reputation;
-    });
+    // Build faction reputation map using utility
+    const factionReputations = buildFactionMap(character.factionReputations);
 
     // Calculate cascading reputation changes
     const allReputationChanges: Record<string, number> = {};
@@ -251,7 +253,7 @@ export async function POST(request: Request) {
     }
 
     // Calculate new energy (handle rest which restores energy)
-    const newEnergy = Math.max(0, Math.min(character.maxEnergy, character.currentEnergy - energyCost));
+    const newEnergy = Math.max(0, Math.min(character.maxEnergy, currentEnergy - energyCost));
 
     // Calculate HP restoration if action has hpRestore
     const hpRestored = action.hpRestore ?? 0;
@@ -401,8 +403,9 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('Action execution error:', error);
+    const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
-      { error: 'An error occurred' },
+      { error: 'Action execution failed', details: message },
       { status: 500 }
     );
   }

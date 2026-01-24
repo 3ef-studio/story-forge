@@ -69,11 +69,15 @@ export function ActionSelector({
   const [selectedCategory, setSelectedCategory] = useState<ActionCategory | 'all'>('all');
   const [now, setNow] = useState<number>(() => Date.now());
 
-  // Stable "now" value updated on an interval (avoid calling Date.now() in render)
+  // Check if any cooldowns are active
+  const hasActiveCooldowns = Object.keys(cooldowns).length > 0;
+
+  // Only run interval when there are active cooldowns to save resources
   useEffect(() => {
+    if (!hasActiveCooldowns) return;
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
-}, []);
+  }, [hasActiveCooldowns]);
 
   const availableActions = getAvailableActions(playerLevel, playerAttributes, playerPowers, playerEnergy);
 

@@ -8,6 +8,16 @@ import {
 } from '@/app/data/encounter-templates';
 import { calculateReputationImpact, getFactionById } from '@/app/data/factions';
 import { applyGoalProgressOnEncounterResolution, checkAndCompleteGoals, getActiveGoals } from '@/app/lib/game-logic/goal-manager';
+import { buildAttributeMap, buildFactionReputationMap } from '@/app/lib/utils/character-utils';
+
+// Type for outcome result with optional fields
+type OutcomeResult = {
+  description: string;
+  xpGain: number;
+  factionChanges: { factionId: string; change: number }[];
+  attributeGrowth?: { attributeId: string; amount: number }[];
+  hpLoss?: number;
+};
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -111,10 +121,7 @@ export async function POST(request: Request) {
     }
 
     // Build attribute map
-    const attributesMap: Record<string, number> = {};
-    for (const attr of character.attributes) {
-      attributesMap[attr.attributeId] = attr.currentValue;
-    }
+    const attributesMap = buildAttributeMap(character.attributes);
 
     // Build powers list
     const powersList = character.powers.map((p) => p.powerId);
@@ -144,13 +151,10 @@ export async function POST(request: Request) {
 
     // Calculate success
     const success = calculateOutcomeSuccess(outcome, powersList, attributesMap, choice);
-    const result = success ? outcome.successResult : outcome.failureResult;
+    const result: OutcomeResult = success ? outcome.successResult : outcome.failureResult;
 
     // Build faction reputation map
-    const factionReputations: Record<string, number> = {};
-    for (const rep of character.factionReputations) {
-      factionReputations[rep.factionId] = rep.reputation;
-    }
+    const factionReputations = buildFactionReputationMap(character.factionReputations);
 
     // Calculate cascading reputation changes
     const allReputationChanges: Record<string, number> = {};
@@ -170,13 +174,8 @@ export async function POST(request: Request) {
       }
     }
 
-    // Calculate HP change
-    const hpLoss =
-      !success &&
-      'hpLoss' in result &&
-      typeof (result as { hpLoss?: unknown }).hpLoss === 'number'
-        ? (result as { hpLoss?: number }).hpLoss ?? 0
-        : 0;
+    // Calculate HP change (only on failure)
+    const hpLoss = !success && result.hpLoss ? result.hpLoss : 0;
 
     const newHp = Math.max(0, character.currentHp - hpLoss);
 
@@ -205,13 +204,7 @@ export async function POST(request: Request) {
         },
       });
 
-      const attributeGrowth =
-        'attributeGrowth' in result &&
-        Array.isArray((result as { attributeGrowth?: unknown }).attributeGrowth)
-          ? (result as {
-              attributeGrowth?: Array<{ attributeId: string; amount: number }>;
-            }).attributeGrowth ?? []
-          : [];
+      const attributeGrowth = result.attributeGrowth ?? [];
 
       for (const growth of attributeGrowth) {
         await tx.characterAttribute.updateMany({
@@ -284,13 +277,7 @@ export async function POST(request: Request) {
           factionId,
           change,
         })),
-        attributeGrowth:
-          'attributeGrowth' in result &&
-          Array.isArray((result as { attributeGrowth?: unknown }).attributeGrowth)
-            ? (result as {
-                attributeGrowth?: Array<{ attributeId: string; amount: number }>;
-              }).attributeGrowth ?? []
-            : [],
+        attributeGrowth: result.attributeGrowth ?? [],
       },
       leveledUp,
       newLevel: leveledUp ? newLevel : undefined,

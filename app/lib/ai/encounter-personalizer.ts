@@ -22,15 +22,6 @@ function uniq<T>(arr: T[]): T[] {
   return Array.from(new Set(arr))
 }
 
-function pick<T>(arr: T[]): T | undefined {
-  if (arr.length === 0) return undefined
-  return arr[Math.floor(Math.random() * arr.length)]
-}
-
-function normalizeForCompare(s: string): string {
-  return s.toLowerCase().replace(/[\s\-]+/g, '_')
-}
-
 function intersects(a: readonly string[], b: readonly string[]): boolean {
   const setB = new Set(b)
   for (const v of a) if (setB.has(v)) return true
@@ -291,9 +282,12 @@ function personalizeTitle(baseTitle: string, seed: EncounterSeed, recentTags: st
   const repeatedFaction = seed.involvedFactions.find(f => recentTags.includes(f))
   if (!repeatedFaction) return baseTitle
 
-  // Prevent “(Again)” spam if seed titles are reused frequently
-  if (baseTitle.toLowerCase().includes('again')) return baseTitle
-  return `${baseTitle}`
+  // Prevent "(Again)" spam if seed titles are reused frequently
+  if (baseTitle.toLowerCase().includes('again') || baseTitle.toLowerCase().includes('familiar')) {
+    return baseTitle
+  }
+
+  return `${baseTitle} (Familiar Territory)`
 }
 
 // Build optional flavor text based on reputation + callbacks

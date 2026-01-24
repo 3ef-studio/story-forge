@@ -26,8 +26,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check if email is valid
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    // Check if email is valid (RFC 5322 simplified pattern)
+    // Requires: local part (1+ chars), @, domain (2+ chars), TLD (2+ chars)
+    const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z]{2,})+$/;
     if (!emailRegex.test(email)) {
       return NextResponse.json(
         { error: 'Please enter a valid email address' },

@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/app/lib/auth';
 import { prisma } from '@/app/lib/db';
+import {
+  buildAttributeMap,
+  buildFactionMap,
+  buildCooldownMap,
+  shouldRestoreEnergy,
+} from '@/app/lib/utils/character-utils';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -43,30 +49,12 @@ export async function GET() {
       );
     }
 
-    // Check and apply daily energy reset
-    const now = new Date();
-    const lastReset = new Date(character.lastEnergyReset);
-    const hoursSinceReset = (now.getTime() - lastReset.getTime()) / (1000 * 60 * 60);
+    // Check if energy needs restoration (read-only check)
+    // Actual reset happens during action execution (POST) to keep GET idempotent
+    const energyNeedsReset = shouldRestoreEnergy(character.lastEnergyReset);
 
-    let energyRestored = false;
-    if (hoursSinceReset >= 24) {
-      await prisma.character.update({
-        where: { id: character.id },
-        data: {
-          currentEnergy: character.maxEnergy,
-          lastEnergyReset: now,
-        },
-      });
-      character.currentEnergy = character.maxEnergy;
-      character.lastEnergyReset = now;
-      energyRestored = true;
-    }
-
-    // Transform data for client
-    const attributesMap: Record<string, number> = {};
-    character.attributes.forEach((attr) => {
-      attributesMap[attr.attributeId] = attr.currentValue;
-    });
+    // Transform data for client using utility functions
+    const attributesMap = buildAttributeMap(character.attributes);
 
     const powersMap = character.powers.map((power) => ({
       powerId: power.powerId,
@@ -75,15 +63,8 @@ export async function GET() {
       timesUsed: power.timesUsed,
     }));
 
-    const factionsMap: Record<string, number> = {};
-    character.factionReputations.forEach((rep) => {
-      factionsMap[rep.factionId] = rep.reputation;
-    });
-
-    const cooldownsMap: Record<string, string> = {};
-    character.actionCooldowns.forEach((cd) => {
-      cooldownsMap[cd.actionId] = cd.expiresAt.toISOString();
-    });
+    const factionsMap = buildFactionMap(character.factionReputations);
+    const cooldownsMap = buildCooldownMap(character.actionCooldowns);
 
     return NextResponse.json({
       character: {
@@ -114,12 +95,12 @@ export async function GET() {
           createdAt: event.createdAt.toISOString(),
         })),
       },
-      energyRestored,
+      energyNeedsReset,
     });
   } catch (error) {
     console.error('Get character error:', error);
     return NextResponse.json(
-      { error: 'An error occurred' },
+      { error: 'Failed to load character' },
       { status: 500 }
     );
   }

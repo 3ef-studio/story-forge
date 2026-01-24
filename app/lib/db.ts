@@ -26,10 +26,15 @@ function getPrisma(): PrismaClient {
 }
 
 // Proxy preserves the normal `prisma.model.method()` API
+// The property accessor requires type coercion due to dynamic property access
 export const prisma = new Proxy({} as PrismaClient, {
-  get(_target, prop) {
+  get(_target, prop: string | symbol) {
     const client = getPrisma();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (client as any)[prop];
+    // Use type-safe property access with keyof constraint
+    if (typeof prop === 'string' && prop in client) {
+      return client[prop as keyof PrismaClient];
+    }
+    // Fallback for symbols and other properties (e.g., then, toJSON)
+    return (client as unknown as Record<string | symbol, unknown>)[prop];
   },
 });

@@ -5,6 +5,7 @@ import { prisma } from '@/app/lib/db'
 import { goalDefinitions, getGoalDefinitionById, type GoalDefinition, type GoalMetadata } from '@/app/data/goals'
 import type { Action } from '@/app/data/actions'
 import type { CharacterGoal } from '@prisma/client'
+import { shuffleArray } from '@/app/lib/utils/character-utils'
 
 // Type for goal records returned from DB
 export type GoalRecord = {
@@ -292,8 +293,8 @@ export async function getGoalChoices(characterId: string): Promise<GoalDefinitio
     return !usedGoalKeys.has(key)
   })
 
-  // Return 2-3 random choices
-  const shuffled = availableGoals.sort(() => Math.random() - 0.5)
+  // Return 2-3 random choices using unbiased Fisher-Yates shuffle
+  const shuffled = shuffleArray(availableGoals)
   return shuffled.slice(0, 3)
 }
 
