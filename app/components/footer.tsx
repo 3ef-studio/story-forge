@@ -6,7 +6,14 @@ export default function Footer() {
     <footer className="mt-16 border-t border-neutral-800 bg-neutral-950">
       <div className="mx-auto max-w-5xl px-4 py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-neutral-400">
         <div>
-          © {new Date().getFullYear()} Three Eagles Forge Studio- Story Forge
+          © {new Date().getFullYear()} <a
+                  href="https://3ef.studio"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:underline"
+                >
+                  Three Eagles Forge Studio
+                </a> - Story Forge
         </div>
                 {/* Social */}
         <div className="flex items-center gap-4 sm:justify-end">
