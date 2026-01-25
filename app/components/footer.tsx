@@ -3,9 +3,9 @@ import { Github, Twitter } from "lucide-react";
 
 export default function Footer() {
   return (
-    <footer className="mt-16 border-t border-neutral-800 bg-neutral-950">
-      <div className="mx-auto max-w-5xl px-4 py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-neutral-400">
-        <div>
+     <footer className="border-t border-white/5">
+      <div className="mx-auto max-w-6xl px-4 py-10 grid gap-6 sm:grid-cols-3">       
+         <div>
           © {new Date().getFullYear()} <a
                   href="https://3ef.studio"
                   target="_blank"
@@ -36,7 +36,7 @@ export default function Footer() {
           </Link>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center sm:text-left justify-end">
           <a
             href="https://donate.stripe.com/aFa28s9PvepKelJ4Ok8ww01"
             target="_blank"
