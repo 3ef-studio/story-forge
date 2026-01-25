@@ -3,6 +3,7 @@
 
 import type { EncounterSeed, PersonalizerInput, PersonalizedEncounter, CharacterContext } from './types'
 import type { EncounterTemplate } from '@/app/data/encounter-templates'
+import { buildFactionStateSummary, generateFactionTextureLine, type FactionStateLine } from '@/app/lib/world/faction-state'
 
 // Deterministic personalization - no AI call needed
 // This approach ensures cost efficiency and consistent behavior
@@ -290,6 +291,18 @@ function personalizeTitle(baseTitle: string, seed: EncounterSeed, recentTags: st
   return `${baseTitle} (Familiar Territory)`
 }
 
+// Convert reputation tier to approximate numeric value for faction state
+function tierToApproxRep(tier: RepTier): number {
+  const tierValues: Record<RepTier, number> = {
+    hostile: -70,
+    unfriendly: -35,
+    neutral: 0,
+    friendly: 35,
+    allied: 70,
+  }
+  return tierValues[tier]
+}
+
 // Build optional flavor text based on reputation + callbacks
 function buildFlavorText(
   seed: EncounterSeed,
@@ -310,7 +323,30 @@ function buildFlavorText(
 
   // If recent factions overlap, add a continuity hint
   if (intersects(seed.involvedFactions, recentEncounterTags)) {
-    return 'You’ve seen this shape of trouble before. The city keeps repeating itself.'
+    return "You've seen this shape of trouble before. The city keeps repeating itself."
+  }
+
+  // Generate faction texture line if we have involved factions with non-neutral tiers
+  const relevantTiers = reputationTiers.filter(r =>
+    seed.involvedFactions.includes(r.factionId) && r.tier !== 'neutral'
+  )
+
+  if (relevantTiers.length > 0) {
+    // Convert tiers to approximate rep values for the state summary
+    const repByFaction: Record<string, number> = {}
+    for (const rt of relevantTiers) {
+      repByFaction[rt.factionId] = tierToApproxRep(rt.tier)
+    }
+
+    const factionStateLines = buildFactionStateSummary(repByFaction, {
+      topN: 2,
+      includeFactions: seed.involvedFactions,
+    })
+
+    const textureLine = generateFactionTextureLine(factionStateLines)
+    if (textureLine) {
+      return textureLine
+    }
   }
 
   return undefined

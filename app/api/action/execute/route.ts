@@ -11,6 +11,8 @@ import { buildCharacterContext } from '@/app/lib/ai/context-builder';
 import type { EncounterSeed } from '@/app/lib/ai/types';
 import { applyGoalProgressOnAction, checkAndCompleteGoals, getActiveGoals } from '@/app/lib/game-logic/goal-manager';
 import { buildAttributeMap, buildFactionMap, shouldRestoreEnergy, applyEnergyReset } from '@/app/lib/utils/character-utils';
+import { buildFactionStateSummary } from '@/app/lib/world/faction-state';
+import { shouldEmitCityUpdate, generateCityUpdate, type CityUpdate } from '@/app/lib/world/city-updates';
 
 export async function POST(request: Request) {
   try {
@@ -392,6 +394,53 @@ export async function POST(request: Request) {
     // Get updated active goals
     const activeGoals = await getActiveGoals(character.id);
 
+    // City Update Logic: Check if we should emit a city update
+    let cityUpdate: CityUpdate | null = null;
+
+    // Count total action events to determine action count
+    const actionEventCount = await prisma.storyEvent.count({
+      where: {
+        characterId: character.id,
+        eventType: { in: ['action', 'encounter'] },
+      },
+    });
+
+    if (shouldEmitCityUpdate(actionEventCount)) {
+      // Get updated faction reputations for city update
+      const updatedFactionReps = await prisma.factionReputation.findMany({
+        where: { characterId: character.id },
+      });
+      const updatedRepByFaction: Record<string, number> = {};
+      for (const fr of updatedFactionReps) {
+        updatedRepByFaction[fr.factionId] = fr.reputation;
+      }
+
+      // Build faction state summary
+      const factionStateLines = buildFactionStateSummary(updatedRepByFaction, {
+        topN: 3,
+        includeFactions: action.likelyFactions,
+      });
+
+      // Generate city update
+      cityUpdate = generateCityUpdate({
+        actionId,
+        location: action.locationTypes?.[0],
+        factionStateLines,
+      });
+
+      // Save as story event
+      await prisma.storyEvent.create({
+        data: {
+          characterId: character.id,
+          eventType: 'city_update',
+          summary: cityUpdate.title,
+          fullDescription: cityUpdate.body,
+          narrativeWeight: 2,
+          tags: ['city_update', 'world_texture'],
+        },
+      });
+    }
+
     return NextResponse.json({
       success: true,
       ...result,
@@ -400,6 +449,7 @@ export async function POST(request: Request) {
         completed: completedGoals,
         xpAwarded: goalXp,
       },
+      cityUpdate,
     });
   } catch (error) {
     console.error('Action execution error:', error);

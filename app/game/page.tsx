@@ -13,6 +13,7 @@ import { GoalChoiceModal, type GoalChoice } from '@/app/components/game/GoalChoi
 import { StatusStrip } from '@/app/components/game/StatusStrip';
 import { MobileTabBar, type MobileTab } from '@/app/components/game/MobileTabBar';
 import { StoryLogPanel } from '@/app/components/game/StoryLogPanel';
+import { CityUpdateCard } from '@/app/components/game/CityUpdateCard';
 import { useToast } from '@/app/components/ui/toast';
 import { getFactionById } from '@/app/data/factions';
 import type { Action } from '@/app/data/actions';
@@ -469,6 +470,11 @@ export default function GamePage() {
   // Get active goal title for status strip
   const activeGoalTitle = activeGoals.length > 0 ? activeGoals[0].title : undefined;
 
+  // Find the most recent city update from story events
+  const latestCityUpdate = character?.storyEvents?.find(
+    (event) => event.type === 'city_update'
+  );
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
@@ -701,6 +707,15 @@ export default function GamePage() {
 
             {mobileTab === 'log' && (
               <div className="space-y-4">
+                {/* City Update */}
+                {latestCityUpdate && (
+                  <CityUpdateCard
+                    title={latestCityUpdate.summary}
+                    body={latestCityUpdate.fullDescription || ''}
+                    timestamp={latestCityUpdate.createdAt}
+                  />
+                )}
+
                 {/* Compact goals summary */}
                 {activeGoals.length > 0 && (
                   <div className="bg-white rounded-lg border p-3">
@@ -752,6 +767,15 @@ export default function GamePage() {
             {/* Center - Scene */}
             <section className="col-span-8 lg:col-span-6 space-y-4">
               {renderSceneContent()}
+
+              {/* City Update (desktop only) */}
+              {latestCityUpdate && (
+                <CityUpdateCard
+                  title={latestCityUpdate.summary}
+                  body={latestCityUpdate.fullDescription || ''}
+                  timestamp={latestCityUpdate.createdAt}
+                />
+              )}
 
               {/* Story Log (desktop only) */}
               <div className="bg-white rounded-lg border p-4">

@@ -5,7 +5,8 @@ import { Progress } from '@/app/components/ui/progress';
 import { Badge } from '@/app/components/ui/badge';
 import { getOriginById } from '@/app/data/origins';
 import { getPowerById } from '@/app/data/powers';
-import { getFactionById, getAttitudeLevel } from '@/app/data/factions';
+import { getFactionById } from '@/app/data/factions';
+import { getFactionState, getFactionStateLabel, getFactionStateColor, type FactionState } from '@/app/lib/world/faction-state';
 import { getAttributeById } from '@/app/data/attributes';
 import { Heart, Zap, Star, Shield, Brain, Eye, Footprints, Sparkles } from 'lucide-react';
 
@@ -39,11 +40,12 @@ const attributeIcons: Record<string, React.ReactNode> = {
 export function CharacterSheet({ character }: CharacterSheetProps) {
   const origin = getOriginById(character.originId);
 
-  const attitudeColors: Record<string, 'hostile' | 'suspicious' | 'neutral' | 'friendly' | 'allied'> = {
+  // Map faction states to Badge variants
+  const stateToVariant: Record<FactionState, 'hostile' | 'suspicious' | 'neutral' | 'friendly' | 'allied'> = {
     hostile: 'hostile',
-    suspicious: 'suspicious',
-    neutral: 'neutral',
-    friendly: 'friendly',
+    aggressive: 'suspicious',
+    wary: 'neutral',
+    cooperative: 'friendly',
     allied: 'allied',
   };
 
@@ -198,7 +200,8 @@ export function CharacterSheet({ character }: CharacterSheetProps) {
               .map(([factionId, reputation]) => {
                 const faction = getFactionById(factionId);
                 if (!faction) return null;
-                const attitude = getAttitudeLevel(faction, reputation);
+                const state = getFactionState(reputation);
+                const stateLabel = getFactionStateLabel(state);
                 return (
                   <div
                     key={factionId}
@@ -213,10 +216,10 @@ export function CharacterSheet({ character }: CharacterSheetProps) {
                         {reputation}
                       </span>
                       <Badge
-                        variant={attitudeColors[attitude] || 'neutral'}
+                        variant={stateToVariant[state]}
                         className="text-xs"
                       >
-                        {attitude}
+                        {stateLabel}
                       </Badge>
                     </div>
                   </div>

@@ -22,6 +22,7 @@ interface StoryLogPanelProps {
 function getEventIcon(type: string): string {
   switch (type) {
     case 'encounter_success':
+    case 'encounter':
       return '✓';
     case 'encounter_failure':
       return '✗';
@@ -31,6 +32,8 @@ function getEventIcon(type: string): string {
       return '→';
     case 'goal_complete':
       return '★';
+    case 'city_update':
+      return '📰';
     default:
       return '•';
   }
@@ -39,6 +42,7 @@ function getEventIcon(type: string): string {
 function getEventColor(type: string): string {
   switch (type) {
     case 'encounter_success':
+    case 'encounter':
       return 'text-green-600 bg-green-50';
     case 'encounter_failure':
       return 'text-red-600 bg-red-50';
@@ -46,6 +50,8 @@ function getEventColor(type: string): string {
       return 'text-yellow-600 bg-yellow-50';
     case 'goal_complete':
       return 'text-purple-600 bg-purple-50';
+    case 'city_update':
+      return 'text-amber-600 bg-amber-50';
     default:
       return 'text-gray-600 bg-gray-50';
   }
