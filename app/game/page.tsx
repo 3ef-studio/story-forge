@@ -18,6 +18,8 @@ import { getFactionById } from '@/app/data/factions';
 import type { Action } from '@/app/data/actions';
 import type { EncounterTemplate } from '@/app/data/encounter-templates';
 import { LogOut, User, HelpCircle, Menu, X, Sparkles, Trophy } from 'lucide-react';
+import { previewEncounterResolution, inferApproachFromText } from '@/app/lib/game-logic/combat/resolve-encounter';
+import type { ResolutionPreview } from '@/app/lib/game-logic/combat/types';
 
 type GameState = 'idle' | 'executing' | 'encounter' | 'resolving' | 'outcome';
 
@@ -57,6 +59,7 @@ interface CharacterData {
 
 interface OutcomeResult {
   success: boolean;
+  partial?: boolean;
   description: string;
   xpGained: number;
   hpChange?: number;
@@ -66,12 +69,21 @@ interface OutcomeResult {
   attributeGrowth: { attributeId: string; amount: number }[];
 }
 
+interface ResolutionData {
+  outcome: 'success' | 'partial' | 'failure';
+  roll: number;
+  target: number;
+  modifiers: { label: string; value: number }[];
+  summary: string;
+}
+
 interface EncounterChoice {
   id: string;
   text: string;
   available: boolean;
   reason?: string;
   requiredPowers?: string[];
+  preview?: ResolutionPreview;
 }
 
 export default function GamePage() {
@@ -82,6 +94,7 @@ export default function GamePage() {
   const [currentEncounter, setCurrentEncounter] = useState<EncounterTemplate | null>(null);
   const [encounterChoices, setEncounterChoices] = useState<EncounterChoice[]>([]);
   const [currentOutcome, setCurrentOutcome] = useState<OutcomeResult | null>(null);
+  const [currentResolution, setCurrentResolution] = useState<ResolutionData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -263,12 +276,28 @@ export default function GamePage() {
             }
           }
 
+          // Calculate preview for available choices
+          let preview: ResolutionPreview | undefined;
+          if (available) {
+            const approach = inferApproachFromText(choice.text);
+            preview = previewEncounterResolution({
+              difficulty: encounter.difficulty,
+              approach,
+              attributes: character.attributes,
+              powerIds: character.powers.map((p) => p.powerId),
+              repByFaction: character.factions,
+              encounterTags: encounter.narrativeTags,
+              involvedFactions: encounter.requiredFactions,
+            });
+          }
+
           return {
             id: choice.id,
             text: choice.text,
             available,
             reason,
             requiredPowers: choice.requiredPowers,
+            preview,
           };
         });
 
@@ -360,12 +389,19 @@ export default function GamePage() {
 
       setCurrentOutcome({
         success: data.success,
+        partial: data.partial,
         description: data.outcome.description,
         xpGained: data.outcome.xpGained,
         hpChange: data.outcome.hpChange,
         factionChanges: data.outcome.factionChanges,
         attributeGrowth: data.outcome.attributeGrowth,
       });
+
+      // Set resolution breakdown if available
+      if (data.resolution) {
+        setCurrentResolution(data.resolution);
+      }
+
       setGameState('outcome');
 
       if (data.outcome.factionChanges?.length > 0) {
@@ -379,9 +415,13 @@ export default function GamePage() {
         });
       }
 
+      // Determine toast type and title based on outcome
+      const toastType = data.success ? 'success' : data.partial ? 'warning' : 'error';
+      const toastTitle = data.success ? 'Success!' : data.partial ? 'Partial Success' : 'Failed';
+
       addToast({
-        type: data.success ? 'success' : 'warning',
-        title: data.success ? 'Success!' : 'Failed',
+        type: toastType as 'success' | 'warning' | 'error',
+        title: toastTitle,
         message: `${data.outcome.xpGained} XP gained`,
         duration: 3000,
       });
@@ -416,6 +456,7 @@ export default function GamePage() {
     setCurrentEncounter(null);
     setEncounterChoices([]);
     setCurrentOutcome(null);
+    setCurrentResolution(null);
     setIsCachedEncounter(false);
     setGameState('idle');
     await fetchCharacter();
@@ -525,7 +566,13 @@ export default function GamePage() {
     }
 
     if (gameState === 'outcome' && currentOutcome) {
-      return <OutcomeDisplay outcome={currentOutcome} onContinue={handleContinue} />;
+      return (
+        <OutcomeDisplay
+          outcome={currentOutcome}
+          resolution={currentResolution ?? undefined}
+          onContinue={handleContinue}
+        />
+      );
     }
 
     return null;

@@ -6,6 +6,8 @@ import { Badge } from '@/app/components/ui/badge';
 import type { EncounterTemplate } from '@/app/data/encounter-templates';
 import { getPowerById } from '@/app/data/powers';
 import { AlertTriangle, CheckCircle, XCircle, Star, Zap } from 'lucide-react';
+import { ChoicePreviewChips } from './ChoicePreviewChips';
+import type { ResolutionPreview } from '@/app/lib/game-logic/combat/types';
 
 interface EncounterChoice {
   id: string;
@@ -13,6 +15,7 @@ interface EncounterChoice {
   available: boolean;
   reason?: string;
   requiredPowers?: string[];
+  preview?: ResolutionPreview;
 }
 
 interface EncounterDisplayProps {
@@ -76,7 +79,7 @@ export function EncounterDisplay({
                       <XCircle className="h-5 w-5 text-gray-400" />
                     )}
                   </div>
-                  <div className="flex-1">
+                  <div className="flex-1 space-y-1.5">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-medium">{choice.text}</span>
                       {choice.requiredPowers && choice.requiredPowers.length > 0 && (
@@ -88,6 +91,14 @@ export function EncounterDisplay({
                         </span>
                       )}
                     </div>
+                    {/* Preview chips for available choices */}
+                    {choice.available && choice.preview && (
+                      <ChoicePreviewChips
+                        riskTier={choice.preview.riskTier}
+                        estimatedChance={choice.preview.estimatedChance}
+                        displayChips={choice.preview.displayChips}
+                      />
+                    )}
                     {!choice.available && choice.reason && (
                       <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
                         <AlertTriangle className="h-3 w-3" />

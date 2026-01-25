@@ -5,10 +5,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/ca
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import { getFactionById } from '@/app/data/factions';
-import { CheckCircle, XCircle, TrendingUp, TrendingDown, Star, Heart, Zap, Sparkles } from 'lucide-react';
+import { ResolutionBreakdownCard } from './ResolutionBreakdownCard';
+import { CheckCircle, XCircle, TrendingUp, TrendingDown, Star, Heart, Zap, Sparkles, AlertTriangle } from 'lucide-react';
 
 interface OutcomeResult {
   success: boolean;
+  partial?: boolean;
   description: string;
   xpGained: number;
   hpChange?: number;
@@ -18,12 +20,21 @@ interface OutcomeResult {
   attributeGrowth: { attributeId: string; amount: number }[];
 }
 
+interface ResolutionData {
+  outcome: 'success' | 'partial' | 'failure';
+  roll: number;
+  target: number;
+  modifiers: { label: string; value: number }[];
+  summary: string;
+}
+
 interface OutcomeDisplayProps {
   outcome: OutcomeResult;
+  resolution?: ResolutionData;
   onContinue: () => void;
 }
 
-export function OutcomeDisplay({ outcome, onContinue }: OutcomeDisplayProps) {
+export function OutcomeDisplay({ outcome, resolution, onContinue }: OutcomeDisplayProps) {
   const [showContent, setShowContent] = useState(false);
   const [showResults, setShowResults] = useState(false);
 
@@ -37,23 +48,36 @@ export function OutcomeDisplay({ outcome, onContinue }: OutcomeDisplayProps) {
     };
   }, []);
 
+  // Determine visual state: success, partial, or failure
+  const isPartial = outcome.partial;
+  const isSuccess = outcome.success && !isPartial;
+  const isFailure = !outcome.success && !isPartial;
+
+  // Card styles based on outcome
+  const cardStyles = isSuccess
+    ? 'border-green-300 bg-gradient-to-br from-green-50 to-emerald-50/50 shadow-lg shadow-green-100'
+    : isPartial
+    ? 'border-yellow-300 bg-gradient-to-br from-yellow-50 to-amber-50/50 shadow-lg shadow-yellow-100'
+    : 'border-red-300 bg-gradient-to-br from-red-50 to-orange-50/50 shadow-lg shadow-red-100';
+
   return (
-    <Card
-      className={`border-2 overflow-hidden transition-all duration-500 ${
-        outcome.success
-          ? 'border-green-300 bg-gradient-to-br from-green-50 to-emerald-50/50 shadow-lg shadow-green-100'
-          : 'border-red-300 bg-gradient-to-br from-red-50 to-orange-50/50 shadow-lg shadow-red-100'
-      }`}
-    >
+    <Card className={`border-2 overflow-hidden transition-all duration-500 ${cardStyles}`}>
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-3">
-          {outcome.success ? (
+          {isSuccess ? (
             <div className="flex items-center gap-3 animate-bounce-in">
               <div className="relative">
                 <CheckCircle className="h-8 w-8 text-green-500" />
                 <Sparkles className="h-4 w-4 text-yellow-400 absolute -top-1 -right-1 animate-pulse" />
               </div>
               <span className="text-2xl font-bold text-green-700">Success!</span>
+            </div>
+          ) : isPartial ? (
+            <div className="flex items-center gap-3 animate-scale-in">
+              <div className="relative">
+                <AlertTriangle className="h-8 w-8 text-yellow-500" />
+              </div>
+              <span className="text-2xl font-bold text-yellow-700">Partial Success</span>
             </div>
           ) : (
             <div className="flex items-center gap-3 animate-scale-in">
@@ -74,6 +98,23 @@ export function OutcomeDisplay({ outcome, onContinue }: OutcomeDisplayProps) {
             {outcome.description}
           </p>
         </div>
+
+        {/* Resolution Breakdown */}
+        {resolution && (
+          <div
+            className={`transition-all duration-500 delay-100 ${
+              showContent ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+            }`}
+          >
+            <ResolutionBreakdownCard
+              outcome={resolution.outcome}
+              roll={resolution.roll}
+              target={resolution.target}
+              modifiers={resolution.modifiers}
+              summary={resolution.summary}
+            />
+          </div>
+        )}
 
         {/* Rewards/Penalties */}
         <div
