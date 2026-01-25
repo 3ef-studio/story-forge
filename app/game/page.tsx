@@ -76,6 +76,7 @@ interface ResolutionData {
   target: number;
   modifiers: { label: string; value: number }[];
   summary: string;
+  isRetreat?: boolean;
 }
 
 interface EncounterChoice {

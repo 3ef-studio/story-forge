@@ -26,6 +26,7 @@ interface ResolutionData {
   target: number;
   modifiers: { label: string; value: number }[];
   summary: string;
+  isRetreat?: boolean;
 }
 
 interface OutcomeDisplayProps {
@@ -112,6 +113,7 @@ export function OutcomeDisplay({ outcome, resolution, onContinue }: OutcomeDispl
               target={resolution.target}
               modifiers={resolution.modifiers}
               summary={resolution.summary}
+              isRetreat={resolution.isRetreat}
             />
           </div>
         )}

@@ -5,7 +5,7 @@ import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import type { EncounterTemplate } from '@/app/data/encounter-templates';
 import { getPowerById } from '@/app/data/powers';
-import { AlertTriangle, CheckCircle, XCircle, Star, Zap } from 'lucide-react';
+import { AlertTriangle, CheckCircle, XCircle, Star, Zap, LogOut } from 'lucide-react';
 import { ChoicePreviewChips } from './ChoicePreviewChips';
 import type { ResolutionPreview } from '@/app/lib/game-logic/combat/types';
 
@@ -109,6 +109,26 @@ export function EncounterDisplay({
                 </div>
               </Button>
             ))}
+          </div>
+
+          {/* Retreat Option */}
+          <div className="pt-2 border-t border-gray-200 mt-3">
+            <Button
+              variant="ghost"
+              className="w-full justify-start h-auto py-2 px-4 text-left text-gray-600 hover:bg-gray-100 hover:text-gray-800"
+              onClick={() => onSelectChoice('retreat')}
+              disabled={isResolving}
+            >
+              <div className="flex items-center gap-3 w-full">
+                <LogOut className="h-5 w-5 text-gray-400" />
+                <div>
+                  <span className="font-medium">Retreat</span>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Attempt to escape. Success depends on agility and mobility powers.
+                  </p>
+                </div>
+              </div>
+            </Button>
           </div>
         </div>
 

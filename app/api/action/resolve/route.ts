@@ -33,6 +33,191 @@ type ChoiceWithApproach = {
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+// Mobility powers that provide escape bonuses
+const MOBILITY_POWERS = ['flight', 'super_speed', 'invisibility', 'wall_crawling', 'shapeshifting'];
+const PRECOGNITION_POWER = 'precognition';
+
+// Retreat resolution type
+type RetreatResolution = {
+  isRetreat: true;
+  escapeChance: number;
+  roll: number;
+  mobilityBonus: number;
+  difficultyPenalty: number;
+  agilityBonus: number;
+  success: boolean;
+};
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+async function handleRetreat(
+  userId: string,
+  encounter: EncounterTemplate
+): Promise<NextResponse> {
+  // Get character
+  const character = await prisma.character.findUnique({
+    where: { userId },
+    include: {
+      attributes: true,
+      powers: true,
+      factionReputations: true,
+    },
+  });
+
+  if (!character) {
+    return NextResponse.json({ error: 'Character not found' }, { status: 404 });
+  }
+
+  // Build attribute map
+  const attributesMap = buildAttributeMap(character.attributes);
+  const powersList = character.powers.map((p) => p.powerId);
+
+  // Calculate escape chance
+  const agility = attributesMap['agility'] ?? 10;
+  const difficulty = encounter.difficulty;
+
+  // Mobility bonus: +0.10 for mobility powers, +0.05 for precognition
+  let mobilityBonus = 0;
+  if (powersList.some((p) => MOBILITY_POWERS.includes(p))) {
+    mobilityBonus = 0.10;
+  } else if (powersList.includes(PRECOGNITION_POWER)) {
+    mobilityBonus = 0.05;
+  }
+
+  // Calculate escape chance: base 35% + agility bonus + mobility bonus - difficulty penalty
+  const agilityBonus = agility * 0.02;
+  const difficultyPenalty = difficulty * 0.10;
+  const escapeChance = clamp(0.35 + agilityBonus + mobilityBonus - difficultyPenalty, 0.10, 0.85);
+
+  // Roll for escape
+  const roll = Math.random();
+  const escaped = roll < escapeChance;
+
+  // Calculate results based on escape success
+  const xpGained = escaped ? Math.max(10, Math.floor(encounter.difficulty * 2)) : 5;
+  const energyCost = escaped ? 2 : 5;
+  const hpLoss = escaped ? 0 : Math.min(10, 5 + Math.floor(difficulty / 2));
+
+  const description = escaped
+    ? 'You managed to escape the encounter.'
+    : 'You tried to escape but were caught. You took some damage in the process.';
+
+  const newHp = Math.max(0, character.currentHp - hpLoss);
+
+  // Calculate XP and check level up
+  let newXp = character.currentXp + xpGained;
+  let newLevel = character.level;
+  const xpToLevel = character.level * 100;
+  let leveledUp = false;
+
+  if (newXp >= xpToLevel) {
+    newXp -= xpToLevel;
+    newLevel++;
+    leveledUp = true;
+  }
+
+  // Update character in transaction
+  await prisma.$transaction(async (tx) => {
+    await tx.character.update({
+      where: { id: character.id },
+      data: {
+        currentHp: newHp,
+        currentEnergy: Math.max(0, character.currentEnergy - energyCost),
+        currentXp: newXp,
+        level: newLevel,
+        maxHp: leveledUp ? character.maxHp + 10 : character.maxHp,
+      },
+    });
+
+    // Build summary based on outcome
+    const outcomeSummary = escaped
+      ? `Escaped from: ${encounter.name}`
+      : `Failed to escape: ${encounter.name}`;
+
+    await tx.storyEvent.create({
+      data: {
+        characterId: character.id,
+        eventType: 'encounter',
+        summary: outcomeSummary,
+        fullDescription: description,
+        narrativeWeight: Math.max(1, encounter.difficulty - 2),
+        tags: [...encounter.narrativeTags, 'retreat', escaped ? 'escaped' : 'caught'],
+      },
+    });
+
+    if (leveledUp) {
+      await tx.storyEvent.create({
+        data: {
+          characterId: character.id,
+          eventType: 'level_up',
+          summary: `Reached Level ${newLevel}!`,
+          narrativeWeight: 8,
+          tags: ['level_up', 'milestone'],
+        },
+      });
+    }
+  });
+
+  // Apply goal progress (retreat counts as loss for goals)
+  await applyGoalProgressOnEncounterResolution(character.id, {
+    won: false,
+    usedPowerIds: [],
+    reputationChanges: {},
+  });
+
+  // Check if any goals completed
+  const { completedGoals, xpAwarded: goalXp } = await checkAndCompleteGoals(character.id);
+
+  // Get updated active goals
+  const activeGoals = await getActiveGoals(character.id);
+
+  // Build retreat resolution data
+  const retreatResolution: RetreatResolution = {
+    isRetreat: true,
+    escapeChance: Math.round(escapeChance * 100),
+    roll: Math.round(roll * 100),
+    mobilityBonus: Math.round(mobilityBonus * 100),
+    difficultyPenalty: Math.round(difficultyPenalty * 100),
+    agilityBonus: Math.round(agilityBonus * 100),
+    success: escaped,
+  };
+
+  return NextResponse.json({
+    success: escaped,
+    partial: false,
+    outcome: {
+      description,
+      xpGained,
+      hpChange: -hpLoss,
+      energyChange: -energyCost,
+      factionChanges: [],
+      attributeGrowth: [],
+    },
+    resolution: {
+      outcome: escaped ? 'success' : 'failure',
+      roll: retreatResolution.roll,
+      target: retreatResolution.escapeChance,
+      modifiers: [
+        { label: 'Base chance', value: 35 },
+        { label: `Agility (${agility})`, value: retreatResolution.agilityBonus },
+        { label: 'Mobility powers', value: retreatResolution.mobilityBonus },
+        { label: `Difficulty ${difficulty}`, value: -retreatResolution.difficultyPenalty },
+      ],
+      summary: escaped ? 'You escaped successfully.' : 'Your escape attempt failed.',
+      isRetreat: true,
+    },
+    leveledUp,
+    newLevel: leveledUp ? newLevel : undefined,
+    goals: {
+      active: activeGoals,
+      completed: completedGoals,
+      xpAwarded: goalXp,
+    },
+  });
+}
+
 type ResolveActionBody = {
   encounterId: string;
   choiceId: string;
@@ -105,6 +290,11 @@ export async function POST(request: Request) {
         },
         { status: 400 }
       );
+    }
+
+    // Handle retreat as a special universal choice
+    if (choiceId === 'retreat') {
+      return handleRetreat(session.user.id, encounter);
     }
 
     const choice = encounter.choices.find((c) => c.id === choiceId);
