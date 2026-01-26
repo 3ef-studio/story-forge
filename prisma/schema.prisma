@@ -25,20 +25,22 @@ model User {
 
 // Characters
 model Character {
-  id              String               @id @default(uuid()) @db.Uuid
-  userId          String               @unique @map("user_id") @db.Uuid
-  name            String
-  originId        String               @map("origin_id")
-  level           Int                  @default(1)
-  currentXp       Int                  @default(0) @map("current_xp")
-  currentHp       Int                  @default(100) @map("current_hp")
-  maxHp           Int                  @default(100) @map("max_hp")
-  currentEnergy   Int                  @default(100) @map("current_energy")
-  maxEnergy       Int                  @default(100) @map("max_energy")
-  money           Int                  @default(0)
-  lastEnergyReset DateTime             @default(now()) @map("last_energy_reset")
-  createdAt       DateTime             @default(now()) @map("created_at")
-  updatedAt       DateTime             @updatedAt @map("updated_at")
+  id                          String               @id @default(uuid()) @db.Uuid
+  userId                      String               @unique @map("user_id") @db.Uuid
+  name                        String
+  originId                    String               @map("origin_id")
+  characterType               String?              @map("character_type")
+  level                       Int                  @default(1)
+  currentXp                   Int                  @default(0) @map("current_xp")
+  currentHp                   Int                  @default(100) @map("current_hp")
+  maxHp                       Int                  @default(100) @map("max_hp")
+  currentEnergy               Int                  @default(100) @map("current_energy")
+  maxEnergy                   Int                  @default(100) @map("max_energy")
+  money                       Int                  @default(0)
+  pendingLevelUpAttributePick Boolean              @default(false) @map("pending_levelup_attribute_pick")
+  lastEnergyReset             DateTime             @default(now()) @map("last_energy_reset")
+  createdAt                   DateTime             @default(now()) @map("created_at")
+  updatedAt                   DateTime             @updatedAt @map("updated_at")
 
   user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   attributes       CharacterAttribute[]

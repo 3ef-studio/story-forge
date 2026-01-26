@@ -5,6 +5,8 @@ import { getOriginById, initializeCharacterFromOrigin } from '@/app/data/origins
 import { factions } from '@/app/data/factions';
 import { attributes } from '@/app/data/attributes';
 import { initializeGoalsForNewCharacter } from '@/app/lib/game-logic/goal-manager';
+import { getStarterPowers, getPowerById } from '@/app/data/powers';
+import { getArchetypeById } from '@/app/data/archetypes';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -21,7 +23,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { name, originId } = body;
+    const { name, originId, extraPowerId, archetypeId } = body;
 
     // Validation
     if (!name || name.length < 3 || name.length > 30) {
@@ -46,6 +48,54 @@ export async function POST(request: Request) {
       );
     }
 
+    // Validate extra power
+    if (!extraPowerId) {
+      return NextResponse.json(
+        { error: 'Extra power must be selected' },
+        { status: 400 }
+      );
+    }
+
+    const extraPower = getPowerById(extraPowerId);
+    if (!extraPower) {
+      return NextResponse.json(
+        { error: 'Invalid extra power selected' },
+        { status: 400 }
+      );
+    }
+
+    // Ensure extra power is a starter power and not already granted by origin
+    const starterPowerIds = getStarterPowers().map((p) => p.id);
+    if (!starterPowerIds.includes(extraPowerId)) {
+      return NextResponse.json(
+        { error: 'Selected power is not available as a starter power' },
+        { status: 400 }
+      );
+    }
+
+    if (origin.startingPowers.includes(extraPowerId)) {
+      return NextResponse.json(
+        { error: 'Selected power is already granted by your origin' },
+        { status: 400 }
+      );
+    }
+
+    // Validate archetype
+    if (!archetypeId) {
+      return NextResponse.json(
+        { error: 'Character archetype must be selected' },
+        { status: 400 }
+      );
+    }
+
+    const archetype = getArchetypeById(archetypeId);
+    if (!archetype) {
+      return NextResponse.json(
+        { error: 'Invalid archetype selected' },
+        { status: 400 }
+      );
+    }
+
     // Check if user already has a character
     const existingCharacter = await prisma.character.findUnique({
       where: { userId: session.user.id },
@@ -61,6 +111,9 @@ export async function POST(request: Request) {
     // Initialize character data from origin
     const characterData = initializeCharacterFromOrigin(origin, name);
 
+    // Combine origin powers with extra power (dedupe)
+    const allPowerIds = [...new Set([...characterData.powers, extraPowerId])];
+
     // Create character and all related data in a transaction
     const character = await prisma.$transaction(async (tx) => {
       // Create the character
@@ -69,6 +122,7 @@ export async function POST(request: Request) {
           userId: session.user.id,
           name: characterData.name,
           originId: characterData.originId,
+          characterType: archetypeId,
           level: 1,
           currentXp: 0,
           currentHp: 100,
@@ -79,20 +133,24 @@ export async function POST(request: Request) {
         },
       });
 
-      // Create character attributes
-      const attributeRecords = attributes.map((attr) => ({
-        characterId: newCharacter.id,
-        attributeId: attr.id,
-        currentValue: characterData.attributes[attr.id] || attr.baseValue,
-      }));
+      // Create character attributes with archetype bonuses applied
+      const attributeRecords = attributes.map((attr) => {
+        const baseValue = characterData.attributes[attr.id] || attr.baseValue;
+        const archetypeBonus = archetype.attributeBonuses[attr.id] || 0;
+        return {
+          characterId: newCharacter.id,
+          attributeId: attr.id,
+          currentValue: baseValue + archetypeBonus,
+        };
+      });
 
       await tx.characterAttribute.createMany({
         data: attributeRecords,
       });
 
-      // Create character powers
-      if (characterData.powers.length > 0) {
-        const powerRecords = characterData.powers.map((powerId) => ({
+      // Create character powers (origin powers + extra power)
+      if (allPowerIds.length > 0) {
+        const powerRecords = allPowerIds.map((powerId) => ({
           characterId: newCharacter.id,
           powerId,
           currentLevel: 1,

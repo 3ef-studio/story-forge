@@ -135,6 +135,7 @@ async function handleRetreat(
         currentXp: newXp,
         level: newLevel,
         maxHp: leveledUp ? character.maxHp + 10 : character.maxHp,
+        pendingLevelUpAttributePick: leveledUp ? true : undefined,
       },
     });
 
@@ -480,6 +481,7 @@ export async function POST(request: Request) {
           currentXp: newXp,
           level: newLevel,
           maxHp: leveledUp ? character.maxHp + 10 : character.maxHp,
+          pendingLevelUpAttributePick: leveledUp ? true : undefined,
         },
       });
 

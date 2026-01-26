@@ -287,6 +287,7 @@ export async function POST(request: Request) {
           maxHp: leveledUp ? character.maxHp + 10 : character.maxHp,
           maxEnergy: leveledUp ? character.maxEnergy + 5 : character.maxEnergy,
           money: character.money + action.baseMoneyReward,
+          pendingLevelUpAttributePick: leveledUp ? true : undefined,
         },
       });
 
