@@ -79,6 +79,20 @@ interface ResolutionData {
   isRetreat?: boolean;
 }
 
+interface PowerProgressionData {
+  powerId: string;
+  powerName: string;
+  powerCategory: string;
+  levelBefore: number;
+  xpBefore: number;
+  levelAfter: number;
+  xpAfter: number;
+  xpGained: number;
+  leveledUp: boolean;
+  powerBonusApplied: number;
+  xpToNextLevel: number;
+}
+
 interface EncounterChoice {
   id: string;
   text: string;
@@ -97,6 +111,7 @@ export default function GamePage() {
   const [encounterChoices, setEncounterChoices] = useState<EncounterChoice[]>([]);
   const [currentOutcome, setCurrentOutcome] = useState<OutcomeResult | null>(null);
   const [currentResolution, setCurrentResolution] = useState<ResolutionData | null>(null);
+  const [currentPowerProgression, setCurrentPowerProgression] = useState<PowerProgressionData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -404,6 +419,11 @@ export default function GamePage() {
         setCurrentResolution(data.resolution);
       }
 
+      // Set power progression if available
+      if (data.powerProgression) {
+        setCurrentPowerProgression(data.powerProgression);
+      }
+
       setGameState('outcome');
 
       if (data.outcome.factionChanges?.length > 0) {
@@ -459,6 +479,7 @@ export default function GamePage() {
     setEncounterChoices([]);
     setCurrentOutcome(null);
     setCurrentResolution(null);
+    setCurrentPowerProgression(null);
     setIsCachedEncounter(false);
     setGameState('idle');
     await fetchCharacter();
@@ -577,6 +598,7 @@ export default function GamePage() {
         <OutcomeDisplay
           outcome={currentOutcome}
           resolution={currentResolution ?? undefined}
+          powerProgression={currentPowerProgression ?? undefined}
           onContinue={handleContinue}
         />
       );

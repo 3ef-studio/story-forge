@@ -389,19 +389,33 @@ function generateSummary(approach: Approach, outcome: Outcome): string {
  * Uses same math as preview to ensure consistency.
  */
 export function resolveEncounter(input: ResolveEncounterInput): ResolutionBreakdown {
-  const { rng = Math.random, ...resolutionInput } = input;
+  const { rng = Math.random, powerLevelBonus, powerLevelLabel, ...resolutionInput } = input;
 
   // Use shared math computation
   const math = computeResolutionMath(resolutionInput);
+
+  // Copy modifiers and target to allow power level modification
+  const modifiers = [...math.modifiers];
+  let target = math.target;
+
+  // Apply power level bonus if provided (negative = easier, lowers target)
+  if (powerLevelBonus && powerLevelBonus !== 0) {
+    const bonusValue = -powerLevelBonus; // Convert to target modifier (negative bonus = lower target)
+    modifiers.push({
+      label: powerLevelLabel ?? 'Power Level',
+      value: bonusValue,
+    });
+    target = clamp(target + bonusValue, 5, 99);
+  }
 
   // Roll the dice (1-100)
   const roll = Math.floor(rng() * 100) + 1;
 
   // Determine outcome
   let outcome: Outcome;
-  if (roll >= math.target) {
+  if (roll >= target) {
     outcome = 'success';
-  } else if (roll >= math.target - 12) {
+  } else if (roll >= target - 12) {
     outcome = 'partial';
   } else {
     outcome = 'failure';
@@ -412,9 +426,9 @@ export function resolveEncounter(input: ResolveEncounterInput): ResolutionBreakd
 
   return {
     roll,
-    target: math.target,
+    target,
     baseTarget: math.baseTarget,
-    modifiers: math.modifiers,
+    modifiers,
     outcome,
     summary,
   };

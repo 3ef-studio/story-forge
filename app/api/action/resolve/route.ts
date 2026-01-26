@@ -10,6 +10,13 @@ import { applyGoalProgressOnEncounterResolution, checkAndCompleteGoals, getActiv
 import { buildAttributeMap, buildFactionReputationMap } from '@/app/lib/utils/character-utils';
 import { resolveEncounter, inferApproachFromText } from '@/app/lib/game-logic/combat/resolve-encounter';
 import type { Approach, ResolutionBreakdown } from '@/app/lib/game-logic/combat/types';
+import {
+  selectPowerForApproach,
+  calculatePowerXpGain,
+  calculatePowerBonus,
+  processPowerProgression,
+  type PowerProgressionResult,
+} from '@/app/lib/game-logic/power-progression';
 
 // Type for outcome result with optional fields
 type OutcomeResult = {
@@ -357,6 +364,23 @@ export async function POST(request: Request) {
     const choiceWithApproach = choice as ChoiceWithApproach;
     const approach: Approach = choiceWithApproach.approach ?? inferApproachFromText(choice.text);
 
+    // Select power for this approach
+    const characterPowers = character.powers.map((p) => ({
+      powerId: p.powerId,
+      currentLevel: p.currentLevel,
+      currentXp: p.currentXp,
+      timesUsed: p.timesUsed,
+    }));
+    const selectedPower = selectPowerForApproach(approach, characterPowers);
+
+    // Calculate power level bonus if we have a selected power
+    let powerLevelBonus = 0;
+    let powerLevelLabel: string | undefined;
+    if (selectedPower) {
+      powerLevelBonus = calculatePowerBonus(selectedPower.power, selectedPower.characterPower.currentLevel);
+      powerLevelLabel = `${selectedPower.power.name} Lv${selectedPower.characterPower.currentLevel}`;
+    }
+
     // Use the new combat resolver for deterministic, explainable resolution
     const resolution: ResolutionBreakdown = resolveEncounter({
       difficulty: encounter.difficulty,
@@ -366,6 +390,8 @@ export async function POST(request: Request) {
       repByFaction: factionReputations,
       encounterTags: encounter.narrativeTags,
       involvedFactions: encounter.requiredFactions,
+      powerLevelBonus,
+      powerLevelLabel,
     });
 
     // Determine outcome based on resolution
@@ -434,6 +460,17 @@ export async function POST(request: Request) {
       leveledUp = true;
     }
 
+    // Process power progression if we have a selected power
+    let powerProgression: PowerProgressionResult | null = null;
+    if (selectedPower) {
+      const powerXpGained = calculatePowerXpGain(encounter.difficulty, isSuccess || isPartial);
+      powerProgression = processPowerProgression(
+        selectedPower.power,
+        selectedPower.characterPower,
+        powerXpGained
+      );
+    }
+
     // Update character in transaction
     await prisma.$transaction(async (tx) => {
       await tx.character.update({
@@ -464,6 +501,21 @@ export async function POST(request: Request) {
         await tx.factionReputation.updateMany({
           where: { characterId: character.id, factionId },
           data: { reputation: { increment: change } },
+        });
+      }
+
+      // Update power progression if applicable
+      if (powerProgression) {
+        await tx.characterPower.updateMany({
+          where: {
+            characterId: character.id,
+            powerId: powerProgression.powerId,
+          },
+          data: {
+            currentXp: powerProgression.xpAfter,
+            currentLevel: powerProgression.levelAfter,
+            timesUsed: { increment: 1 },
+          },
         });
       }
 
@@ -544,6 +596,19 @@ export async function POST(request: Request) {
         completed: completedGoals,
         xpAwarded: goalXp,
       },
+      powerProgression: powerProgression ? {
+        powerId: powerProgression.powerId,
+        powerName: powerProgression.powerName,
+        powerCategory: powerProgression.powerCategory,
+        levelBefore: powerProgression.levelBefore,
+        xpBefore: powerProgression.xpBefore,
+        levelAfter: powerProgression.levelAfter,
+        xpAfter: powerProgression.xpAfter,
+        xpGained: powerProgression.xpGained,
+        leveledUp: powerProgression.leveledUp,
+        powerBonusApplied: powerProgression.powerBonus,
+        xpToNextLevel: powerProgression.xpToNextLevel,
+      } : undefined,
     });
   } catch (error) {
     console.error('Encounter resolution error:', error);

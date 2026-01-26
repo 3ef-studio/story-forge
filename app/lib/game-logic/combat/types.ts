@@ -39,6 +39,8 @@ export type ResolutionInput = {
 // Input for the resolver function (with optional RNG)
 export type ResolveEncounterInput = ResolutionInput & {
   rng?: () => number;                    // Optional RNG for testing (0-1)
+  powerLevelBonus?: number;              // Optional bonus from power level (negative = easier)
+  powerLevelLabel?: string;              // Optional label for power level modifier
 };
 
 // Risk tier for previews

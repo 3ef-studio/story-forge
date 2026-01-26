@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/ca
 import { Progress } from '@/app/components/ui/progress';
 import { Badge } from '@/app/components/ui/badge';
 import { getOriginById } from '@/app/data/origins';
-import { getPowerById } from '@/app/data/powers';
+import { getPowerById, calculateXPForLevel } from '@/app/data/powers';
 import { getFactionById } from '@/app/data/factions';
 import { getFactionState, getFactionStateLabel, getFactionStateColor, type FactionState } from '@/app/lib/world/faction-state';
 import { getAttributeById } from '@/app/data/attributes';
@@ -165,20 +165,43 @@ export function CharacterSheet({ character }: CharacterSheetProps) {
             <div className="space-y-2">
               {character.powers.map((power) => {
                 const powerData = getPowerById(power.powerId);
+                const xpToNext = powerData ? calculateXPForLevel(powerData, power.level + 1) : 100;
+                const xpPercent = Math.min(100, Math.round((power.xp / xpToNext) * 100));
+                const isMaxLevel = powerData && power.level >= powerData.maxLevel;
                 return (
                   <div
                     key={power.powerId}
-                    className="flex items-center justify-between p-2 bg-gray-50 rounded"
+                    className="p-2 bg-gray-50 rounded"
                   >
-                    <div>
-                      <span className="font-medium text-sm">
-                        {powerData?.name || power.powerId}
-                      </span>
-                      <p className="text-xs text-gray-500">
-                        {powerData?.category}
-                      </p>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-medium text-sm">
+                          {powerData?.name || power.powerId}
+                        </span>
+                        <p className="text-xs text-gray-500">
+                          {powerData?.category}
+                        </p>
+                      </div>
+                      <Badge variant="outline">Lv. {power.level}</Badge>
                     </div>
-                    <Badge variant="outline">Lv. {power.level}</Badge>
+                    {/* XP Progress Bar */}
+                    {!isMaxLevel && (
+                      <div className="mt-1.5">
+                        <div className="flex justify-between text-xs text-gray-400 mb-0.5">
+                          <span>XP</span>
+                          <span>{power.xp}/{xpToNext}</span>
+                        </div>
+                        <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-purple-500 transition-all duration-300"
+                            style={{ width: `${xpPercent}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                    {isMaxLevel && (
+                      <div className="mt-1 text-xs text-purple-600 font-medium">MAX LEVEL</div>
+                    )}
                   </div>
                 );
               })}

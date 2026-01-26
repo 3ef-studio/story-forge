@@ -29,13 +29,28 @@ interface ResolutionData {
   isRetreat?: boolean;
 }
 
+interface PowerProgressionData {
+  powerId: string;
+  powerName: string;
+  powerCategory: string;
+  levelBefore: number;
+  xpBefore: number;
+  levelAfter: number;
+  xpAfter: number;
+  xpGained: number;
+  leveledUp: boolean;
+  powerBonusApplied: number;
+  xpToNextLevel: number;
+}
+
 interface OutcomeDisplayProps {
   outcome: OutcomeResult;
   resolution?: ResolutionData;
+  powerProgression?: PowerProgressionData;
   onContinue: () => void;
 }
 
-export function OutcomeDisplay({ outcome, resolution, onContinue }: OutcomeDisplayProps) {
+export function OutcomeDisplay({ outcome, resolution, powerProgression, onContinue }: OutcomeDisplayProps) {
   const [showContent, setShowContent] = useState(false);
   const [showResults, setShowResults] = useState(false);
 
@@ -224,6 +239,52 @@ export function OutcomeDisplay({ outcome, resolution, onContinue }: OutcomeDispl
                   {attributeId} +{amount}
                 </Badge>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Power Progression */}
+        {powerProgression && (
+          <div className="space-y-2">
+            <h4 className="font-semibold text-gray-700 flex items-center gap-2">
+              <Zap className="h-4 w-4 text-purple-500" />
+              Power Used
+            </h4>
+            <div className="p-3 bg-white rounded-lg border">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <span className="font-medium text-gray-800">{powerProgression.powerName}</span>
+                  <span className="text-xs text-gray-500 ml-2 capitalize">({powerProgression.powerCategory})</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {powerProgression.leveledUp ? (
+                    <Badge variant="success" className="animate-pulse">
+                      Level Up! Lv.{powerProgression.levelAfter}
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline">Lv.{powerProgression.levelAfter}</Badge>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-purple-600 font-medium">+{powerProgression.xpGained} Power XP</span>
+                {powerProgression.powerBonusApplied > 0 && (
+                  <span className="text-gray-500">• Applied +{powerProgression.powerBonusApplied} bonus</span>
+                )}
+              </div>
+              {/* XP Progress */}
+              <div className="mt-2">
+                <div className="flex justify-between text-xs text-gray-400 mb-0.5">
+                  <span>Progress to Lv.{powerProgression.levelAfter + 1}</span>
+                  <span>{powerProgression.xpAfter}/{powerProgression.xpToNextLevel}</span>
+                </div>
+                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-purple-500 transition-all duration-500"
+                    style={{ width: `${Math.min(100, (powerProgression.xpAfter / powerProgression.xpToNextLevel) * 100)}%` }}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         )}
