@@ -8,7 +8,7 @@ import { getPowerById, calculateXPForLevel } from '@/app/data/powers';
 import { getFactionById } from '@/app/data/factions';
 import { getFactionState, getFactionStateLabel, getFactionStateColor, type FactionState } from '@/app/lib/world/faction-state';
 import { getAttributeById } from '@/app/data/attributes';
-import { Heart, Zap, Star, Shield, Brain, Eye, Footprints, Sparkles } from 'lucide-react';
+import { Heart, Zap, Star, Shield, Brain, Eye, Footprints, Sparkles, AlertTriangle } from 'lucide-react';
 
 interface CharacterSheetProps {
   character: {
@@ -25,6 +25,13 @@ interface CharacterSheetProps {
     attributes: Record<string, number>;
     powers: Array<{ powerId: string; level: number; xp: number }>;
     factions: Record<string, number>;
+    activeThread?: {
+      id: string;
+      type: string;
+      title: string;
+      summary: string;
+      expiresIn: number;
+    } | null;
   };
 }
 
@@ -251,6 +258,33 @@ export function CharacterSheet({ character }: CharacterSheetProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Active Consequence Thread */}
+      {character.activeThread && (
+        <Card className="border-amber-200 bg-amber-50/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg flex items-center gap-2 text-amber-700">
+              <AlertTriangle className="h-5 w-5" />
+              Consequence Thread
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-amber-800">
+                  {character.activeThread.title}
+                </span>
+                <Badge variant="outline" className="text-amber-600 border-amber-300">
+                  {character.activeThread.expiresIn} actions
+                </Badge>
+              </div>
+              <p className="text-sm text-amber-700">
+                {character.activeThread.summary}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

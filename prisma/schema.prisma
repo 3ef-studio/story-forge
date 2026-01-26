@@ -42,14 +42,15 @@ model Character {
   createdAt                   DateTime             @default(now()) @map("created_at")
   updatedAt                   DateTime             @updatedAt @map("updated_at")
 
-  user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  attributes       CharacterAttribute[]
-  powers           CharacterPower[]
+  user               User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attributes         CharacterAttribute[]
+  powers             CharacterPower[]
   factionReputations FactionReputation[]
-  inventoryItems   InventoryItem[]
-  storyEvents      StoryEvent[]
-  actionCooldowns  ActionCooldown[]
-  goals            CharacterGoal[]
+  inventoryItems     InventoryItem[]
+  storyEvents        StoryEvent[]
+  actionCooldowns    ActionCooldown[]
+  goals              CharacterGoal[]
+  consequenceThreads ConsequenceThread[]
 
   @@map("characters")
 }
@@ -185,4 +186,29 @@ model CharacterGoal {
   @@index([characterId])
   @@index([isActive])
   @@map("character_goals")
+}
+
+// Consequence Threads (short-term continuity between encounters)
+model ConsequenceThread {
+  id                    String    @id @default(uuid()) @db.Uuid
+  characterId           String    @map("character_id") @db.Uuid
+  isActive              Boolean   @default(true) @map("is_active")
+  type                  String    // 'retaliation' | 'recognition' | 'escalation' | 'callback'
+  triggerActionId       String?   @map("trigger_action_id")
+  triggerLocationType   String?   @map("trigger_location_type")
+  triggerFactionId      String?   @map("trigger_faction_id")
+  title                 String
+  summary               String
+  injectionText         String    @map("injection_text")
+  expiresInActions      Int       @default(4) @map("expires_in_actions")
+  actionsElapsed        Int       @default(0) @map("actions_elapsed")
+  createdFromEncounterId String?  @map("created_from_encounter_id")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@index([characterId])
+  @@index([characterId, isActive])
+  @@map("consequence_threads")
 }

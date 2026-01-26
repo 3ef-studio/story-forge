@@ -13,6 +13,12 @@ import { applyGoalProgressOnAction, checkAndCompleteGoals, getActiveGoals } from
 import { buildAttributeMap, buildFactionMap, shouldRestoreEnergy, applyEnergyReset } from '@/app/lib/utils/character-utils';
 import { buildFactionStateSummary } from '@/app/lib/world/faction-state';
 import { shouldEmitCityUpdate, generateCityUpdate, type CityUpdate } from '@/app/lib/world/city-updates';
+import {
+  incrementThreadAging,
+  getActiveThread,
+  threadTriggered,
+  buildThreadInjection,
+} from '@/app/lib/game-logic/thread-manager';
 
 export async function POST(request: Request) {
   try {
@@ -53,6 +59,9 @@ export async function POST(request: Request) {
         { status: 404 }
       );
     }
+
+    // Age any active consequence thread (once per action)
+    await incrementThreadAging(character.id);
 
     // Check cooldown
     const existingCooldown = character.actionCooldowns.find(
@@ -251,6 +260,35 @@ export async function POST(request: Request) {
         );
         encounter = selectRandomEncounter(availableEncounters);
         isCachedEncounter = false;
+      }
+
+      // 5. Check for consequence thread injection
+      if (encounter) {
+        const activeThread = await getActiveThread(character.id);
+        if (activeThread) {
+          const actionContext = {
+            actionId,
+            locationTypes: action.locationTypes,
+            involvedFactions: involvedFactions,
+          };
+
+          if (threadTriggered(activeThread, actionContext)) {
+            const injection = buildThreadInjection(activeThread);
+
+            // Inject complication into encounter
+            encounter = {
+              ...encounter,
+              description: `${encounter.description}\n\n${injection.injectionText}`,
+              difficulty: Math.min(10, encounter.difficulty + injection.difficultyMod),
+              narrativeTags: [...(encounter.narrativeTags || []), ...injection.tagsToAdd],
+              // Add thread metadata for resolve route
+              threadId: activeThread.id,
+              threadTitle: activeThread.title,
+            } as EncounterTemplate & { threadId: string; threadTitle: string };
+
+            console.log('[Encounter] Thread injected:', activeThread.title);
+          }
+        }
       }
     }
 

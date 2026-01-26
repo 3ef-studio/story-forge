@@ -5,7 +5,7 @@ import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import type { EncounterTemplate } from '@/app/data/encounter-templates';
 import { getPowerById } from '@/app/data/powers';
-import { AlertTriangle, CheckCircle, XCircle, Star, Zap, LogOut } from 'lucide-react';
+import { AlertTriangle, CheckCircle, XCircle, Star, Zap, LogOut, Link } from 'lucide-react';
 import { ChoicePreviewChips } from './ChoicePreviewChips';
 import type { ResolutionPreview } from '@/app/lib/game-logic/combat/types';
 
@@ -18,8 +18,13 @@ interface EncounterChoice {
   preview?: ResolutionPreview;
 }
 
+type EncounterWithThread = EncounterTemplate & {
+  threadId?: string;
+  threadTitle?: string;
+};
+
 interface EncounterDisplayProps {
-  encounter: EncounterTemplate;
+  encounter: EncounterWithThread;
   choices: EncounterChoice[];
   onSelectChoice: (choiceId: string) => void;
   isResolving?: boolean;
@@ -36,10 +41,18 @@ export function EncounterDisplay({
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg">{encounter.name}</CardTitle>
-          <Badge variant="outline" className="flex items-center gap-1">
-            <Star className="h-3 w-3" />
-            Difficulty {encounter.difficulty}
-          </Badge>
+          <div className="flex items-center gap-2">
+            {encounter.threadTitle && (
+              <Badge variant="suspicious" className="flex items-center gap-1">
+                <Link className="h-3 w-3" />
+                {encounter.threadTitle}
+              </Badge>
+            )}
+            <Badge variant="outline" className="flex items-center gap-1">
+              <Star className="h-3 w-3" />
+              Difficulty {encounter.difficulty}
+            </Badge>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">

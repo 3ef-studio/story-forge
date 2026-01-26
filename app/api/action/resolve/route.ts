@@ -17,6 +17,10 @@ import {
   processPowerProgression,
   type PowerProgressionResult,
 } from '@/app/lib/game-logic/power-progression';
+import {
+  consumeThread,
+  maybeCreateThreadFromOutcome,
+} from '@/app/lib/game-logic/thread-manager';
 
 // Type for outcome result with optional fields
 type OutcomeResult = {
@@ -230,6 +234,9 @@ type ResolveActionBody = {
   encounterId: string;
   choiceId: string;
   isCached?: boolean;
+  threadId?: string;
+  actionId?: string;
+  locationType?: string;
 };
 
 function isUuidLike(value: string): boolean {
@@ -245,7 +252,10 @@ function isResolveActionBody(value: unknown): value is ResolveActionBody {
   return (
     typeof v.encounterId === 'string' &&
     typeof v.choiceId === 'string' &&
-    (v.isCached === undefined || typeof v.isCached === 'boolean')
+    (v.isCached === undefined || typeof v.isCached === 'boolean') &&
+    (v.threadId === undefined || typeof v.threadId === 'string') &&
+    (v.actionId === undefined || typeof v.actionId === 'string') &&
+    (v.locationType === undefined || typeof v.locationType === 'string')
   );
 }
 
@@ -271,7 +281,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { encounterId, choiceId } = rawBody;
+    const { encounterId, choiceId, threadId, actionId, locationType } = rawBody;
     const isCached = Boolean(rawBody.isCached);
 
     // Look up encounter from cache or templates
@@ -570,6 +580,26 @@ export async function POST(request: Request) {
 
     // Get updated active goals
     const activeGoals = await getActiveGoals(character.id);
+
+    // Consume thread if one was used in this encounter
+    if (threadId) {
+      await consumeThread(threadId);
+    }
+
+    // Maybe create a new thread from this outcome
+    await maybeCreateThreadFromOutcome(character.id, {
+      encounterId,
+      encounterType: encounter.category,
+      difficulty: encounter.difficulty,
+      involvedFactions: encounter.requiredFactions,
+      locationType: locationType,
+      success: isSuccess || isPartial,
+      factionChanges: Object.entries(allReputationChanges).map(([factionId, change]) => ({
+        factionId,
+        change,
+      })),
+      actionId: actionId || 'unknown',
+    });
 
     return NextResponse.json({
       success: isSuccess,

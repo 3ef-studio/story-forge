@@ -59,6 +59,13 @@ interface CharacterData {
     tags: string[];
     createdAt: string;
   }>;
+  activeThread?: {
+    id: string;
+    type: string;
+    title: string;
+    summary: string;
+    expiresIn: number;
+  } | null;
 }
 
 interface OutcomeResult {
@@ -110,7 +117,8 @@ export default function GamePage() {
   const { showFactionChange, addToast } = useToast();
   const [character, setCharacter] = useState<CharacterData | null>(null);
   const [gameState, setGameState] = useState<GameState>('idle');
-  const [currentEncounter, setCurrentEncounter] = useState<EncounterTemplate | null>(null);
+  const [currentEncounter, setCurrentEncounter] = useState<(EncounterTemplate & { threadId?: string; threadTitle?: string }) | null>(null);
+  const [currentActionContext, setCurrentActionContext] = useState<{ actionId: string; locationType?: string } | null>(null);
   const [encounterChoices, setEncounterChoices] = useState<EncounterChoice[]>([]);
   const [currentOutcome, setCurrentOutcome] = useState<OutcomeResult | null>(null);
   const [currentResolution, setCurrentResolution] = useState<ResolutionData | null>(null);
@@ -275,9 +283,13 @@ export default function GamePage() {
       });
 
       if (data.encounterTriggered && data.encounter) {
-        const encounter = data.encounter as EncounterTemplate;
+        const encounter = data.encounter as EncounterTemplate & { threadId?: string; threadTitle?: string };
         setCurrentEncounter(encounter);
         setIsCachedEncounter(data.isCachedEncounter || false);
+        setCurrentActionContext({
+          actionId: action.id,
+          locationType: action.locationTypes?.[0],
+        });
 
         const choices = encounter.choices.map((choice) => {
           let available = true;
@@ -403,6 +415,9 @@ export default function GamePage() {
           encounterId: currentEncounter.id,
           choiceId,
           isCached: isCachedEncounter,
+          threadId: currentEncounter.threadId,
+          actionId: currentActionContext?.actionId,
+          locationType: currentActionContext?.locationType,
         }),
       });
 
@@ -490,6 +505,7 @@ export default function GamePage() {
     setCurrentOutcome(null);
     setCurrentResolution(null);
     setCurrentPowerProgression(null);
+    setCurrentActionContext(null);
     setIsCachedEncounter(false);
     setGameState('idle');
     await fetchCharacter();

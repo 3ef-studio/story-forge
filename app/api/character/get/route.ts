@@ -7,6 +7,7 @@ import {
   buildCooldownMap,
   shouldRestoreEnergy,
 } from '@/app/lib/utils/character-utils';
+import { getActiveThreadForDisplay } from '@/app/lib/game-logic/thread-manager';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -66,6 +67,9 @@ export async function GET() {
     const factionsMap = buildFactionMap(character.factionReputations);
     const cooldownsMap = buildCooldownMap(character.actionCooldowns);
 
+    // Get active consequence thread
+    const activeThread = await getActiveThreadForDisplay(character.id);
+
     return NextResponse.json({
       character: {
         id: character.id,
@@ -96,6 +100,7 @@ export async function GET() {
           tags: event.tags,
           createdAt: event.createdAt.toISOString(),
         })),
+        activeThread,
       },
       energyNeedsReset,
     });
