@@ -343,13 +343,21 @@ export default function GamePage() {
         setEncounterChoices(choices);
         setGameState('encounter');
       } else {
+        let outcomeDescription = `You completed ${action.name}. ${
+          Object.keys(data.attributeGrowth).length > 0
+            ? 'You feel yourself growing stronger.'
+            : ''
+        }`;
+
+        // Append NPC interaction info for social actions
+        if (data.npcInteraction) {
+          const npc = data.npcInteraction;
+          outcomeDescription += ` You spent time with ${npc.npcName} (${npc.npcRole}). They seem ${npc.dispositionLabel} toward you.`;
+        }
+
         setCurrentOutcome({
           success: true,
-          description: `You completed ${action.name}. ${
-            Object.keys(data.attributeGrowth).length > 0
-              ? 'You feel yourself growing stronger.'
-              : ''
-          }`,
+          description: outcomeDescription,
           xpGained: data.xpGained || action.baseXPReward,
           moneyGained: data.moneyGained,
           factionChanges: Object.entries(data.reputationChanges).map(([factionId, change]) => ({

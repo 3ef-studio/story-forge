@@ -24,8 +24,10 @@ import {
 import {
   recordNPCEncounter,
   calculateDispositionChange,
+  calculateSocialDispositionChange,
 } from '@/app/lib/game-logic/npc-manager';
 import { getNPCById } from '@/app/data/npcs';
+import { getActionById } from '@/app/data/actions';
 
 // Type for outcome result with optional fields
 type OutcomeResult = {
@@ -612,14 +614,17 @@ export async function POST(request: Request) {
     // Record NPC encounter if one was involved
     if (npcId) {
       const npc = getNPCById(npcId);
-      const dispositionChange = calculateDispositionChange(
-        isSuccess || isPartial,
-        npc?.factionId,
-        Object.entries(allReputationChanges).map(([factionId, change]) => ({
-          factionId,
-          change,
-        }))
-      );
+      const factionChanges = Object.entries(allReputationChanges).map(([factionId, change]) => ({
+        factionId,
+        change,
+      }));
+
+      // Social actions get higher disposition bonuses
+      const resolvedAction = actionId ? getActionById(actionId) : undefined;
+      const dispositionChange = resolvedAction?.category === 'social'
+        ? calculateSocialDispositionChange(npc?.factionId, factionChanges)
+        : calculateDispositionChange(isSuccess || isPartial, npc?.factionId, factionChanges);
+
       await recordNPCEncounter(character.id, npcId, dispositionChange);
     }
 

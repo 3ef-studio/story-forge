@@ -22,6 +22,7 @@ import {
 import {
   selectNPCForEncounter,
   buildNPCInjection,
+  recordSocialInteraction,
 } from '@/app/lib/game-logic/npc-manager';
 
 export async function POST(request: Request) {
@@ -405,12 +406,44 @@ export async function POST(request: Request) {
       }
 
       // Create story event if no encounter (encounters create their own events)
+      // For social actions without encounters, also select an NPC to interact with
+      let socialNpcInteraction: {
+        npcId: string;
+        npcName: string;
+        npcRole: string;
+        dispositionChange: number;
+        dispositionLabel: string;
+      } | null = null;
+
       if (!encounter) {
+        let storySummary = `Performed ${action.name}`;
+
+        // Social actions should still interact with an NPC even without an encounter
+        if (action.category === 'social') {
+          const socialNpc = await selectNPCForEncounter(character.id, {
+            factionIds: action.likelyFactions,
+            locationTags: action.locationTypes,
+          });
+
+          if (socialNpc) {
+            const factionChanges = Object.entries(allReputationChanges).map(
+              ([factionId, change]) => ({ factionId, change })
+            );
+            socialNpcInteraction = await recordSocialInteraction(
+              character.id,
+              socialNpc.id,
+              factionChanges,
+              tx
+            );
+            storySummary = `Networked with ${socialNpc.name}`;
+          }
+        }
+
         await tx.storyEvent.create({
           data: {
             characterId: character.id,
             eventType: 'action',
-            summary: `Performed ${action.name}`,
+            summary: storySummary,
             narrativeWeight: 3,
             tags: [action.category, actionId],
           },
@@ -445,6 +478,7 @@ export async function POST(request: Request) {
         encounterTriggered: !!encounter,
         encounter,
         isCachedEncounter,
+        npcInteraction: socialNpcInteraction,
       };
     });
 

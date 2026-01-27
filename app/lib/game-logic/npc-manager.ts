@@ -321,3 +321,61 @@ export function calculateDispositionChange(
 
   return change;
 }
+
+/**
+ * Calculate disposition change for social actions (higher base than combat)
+ */
+export function calculateSocialDispositionChange(
+  npcFactionId?: string,
+  factionChanges?: { factionId: string; change: number }[]
+): number {
+  // Social actions are inherently relationship-building
+  let change = 5;
+
+  if (npcFactionId && factionChanges) {
+    const factionChange = factionChanges.find((f) => f.factionId === npcFactionId);
+    if (factionChange) {
+      if (factionChange.change > 0) {
+        change += 3;
+      } else if (factionChange.change < 0) {
+        change -= 2;
+      }
+    }
+  }
+
+  return change;
+}
+
+/**
+ * Record a social interaction with an NPC (non-encounter social actions)
+ * Returns metadata for the API response
+ */
+export async function recordSocialInteraction(
+  characterId: string,
+  npcId: string,
+  factionChanges?: { factionId: string; change: number }[],
+  tx?: Prisma.TransactionClient
+): Promise<{
+  npcId: string;
+  npcName: string;
+  npcRole: string;
+  dispositionChange: number;
+  dispositionLabel: string;
+}> {
+  const npc = getNPCById(npcId);
+  const npcName = npc?.name ?? 'Unknown';
+  const npcRole = npc?.role ?? 'Unknown';
+  const npcFactionId = npc?.factionId;
+
+  const dispositionChange = calculateSocialDispositionChange(npcFactionId, factionChanges);
+
+  const record = await recordNPCEncounter(characterId, npcId, dispositionChange, undefined, tx);
+
+  return {
+    npcId,
+    npcName,
+    npcRole,
+    dispositionChange,
+    dispositionLabel: getDispositionLabel(record.disposition),
+  };
+}
