@@ -21,6 +21,11 @@ import {
   consumeThread,
   maybeCreateThreadFromOutcome,
 } from '@/app/lib/game-logic/thread-manager';
+import {
+  recordNPCEncounter,
+  calculateDispositionChange,
+} from '@/app/lib/game-logic/npc-manager';
+import { getNPCById } from '@/app/data/npcs';
 
 // Type for outcome result with optional fields
 type OutcomeResult = {
@@ -237,6 +242,7 @@ type ResolveActionBody = {
   threadId?: string;
   actionId?: string;
   locationType?: string;
+  npcId?: string;
 };
 
 function isUuidLike(value: string): boolean {
@@ -255,7 +261,8 @@ function isResolveActionBody(value: unknown): value is ResolveActionBody {
     (v.isCached === undefined || typeof v.isCached === 'boolean') &&
     (v.threadId === undefined || typeof v.threadId === 'string') &&
     (v.actionId === undefined || typeof v.actionId === 'string') &&
-    (v.locationType === undefined || typeof v.locationType === 'string')
+    (v.locationType === undefined || typeof v.locationType === 'string') &&
+    (v.npcId === undefined || typeof v.npcId === 'string')
   );
 }
 
@@ -281,7 +288,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { encounterId, choiceId, threadId, actionId, locationType } = rawBody;
+    const { encounterId, choiceId, threadId, actionId, locationType, npcId } = rawBody;
     const isCached = Boolean(rawBody.isCached);
 
     // Look up encounter from cache or templates
@@ -599,7 +606,22 @@ export async function POST(request: Request) {
         change,
       })),
       actionId: actionId || 'unknown',
+      npcId,
     });
+
+    // Record NPC encounter if one was involved
+    if (npcId) {
+      const npc = getNPCById(npcId);
+      const dispositionChange = calculateDispositionChange(
+        isSuccess || isPartial,
+        npc?.factionId,
+        Object.entries(allReputationChanges).map(([factionId, change]) => ({
+          factionId,
+          change,
+        }))
+      );
+      await recordNPCEncounter(character.id, npcId, dispositionChange);
+    }
 
     return NextResponse.json({
       success: isSuccess,

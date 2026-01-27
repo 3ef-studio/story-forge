@@ -51,6 +51,7 @@ model Character {
   actionCooldowns    ActionCooldown[]
   goals              CharacterGoal[]
   consequenceThreads ConsequenceThread[]
+  knownNPCs          CharacterNPC[]
 
   @@map("characters")
 }
@@ -203,6 +204,7 @@ model ConsequenceThread {
   expiresInActions      Int       @default(4) @map("expires_in_actions")
   actionsElapsed        Int       @default(0) @map("actions_elapsed")
   createdFromEncounterId String?  @map("created_from_encounter_id")
+  npcId                 String?   @map("npc_id")
   createdAt             DateTime  @default(now()) @map("created_at")
   updatedAt             DateTime  @updatedAt @map("updated_at")
 
@@ -211,4 +213,23 @@ model ConsequenceThread {
   @@index([characterId])
   @@index([characterId, isActive])
   @@map("consequence_threads")
+}
+
+// Character-NPC relationship tracking
+model CharacterNPC {
+  id          String    @id @default(uuid()) @db.Uuid
+  characterId String    @map("character_id") @db.Uuid
+  npcId       String    @map("npc_id")
+  familiarity Int       @default(0)
+  disposition Int       @default(0)
+  lastSeenAt  DateTime? @map("last_seen_at")
+  notes       String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, npcId])
+  @@index([characterId])
+  @@map("character_npcs")
 }

@@ -19,6 +19,10 @@ import {
   threadTriggered,
   buildThreadInjection,
 } from '@/app/lib/game-logic/thread-manager';
+import {
+  selectNPCForEncounter,
+  buildNPCInjection,
+} from '@/app/lib/game-logic/npc-manager';
 
 export async function POST(request: Request) {
   try {
@@ -288,6 +292,26 @@ export async function POST(request: Request) {
 
             console.log('[Encounter] Thread injected:', activeThread.title);
           }
+        }
+      }
+
+      // 6. Select and inject NPC if appropriate
+      if (encounter) {
+        const npc = await selectNPCForEncounter(character.id, {
+          factionIds: involvedFactions,
+          locationTags: action.locationTypes,
+        });
+
+        if (npc) {
+          const npcInjection = await buildNPCInjection(character.id, npc);
+
+          encounter = {
+            ...encounter,
+            description: `${encounter.description}\n\n${npcInjection.injectionText}`,
+            npcId: npcInjection.npcId,
+          } as EncounterTemplate & { npcId: string; threadId?: string; threadTitle?: string };
+
+          console.log('[Encounter] NPC injected:', npc.name);
         }
       }
     }

@@ -26,6 +26,7 @@ export type OutcomeContext = {
   success: boolean;
   factionChanges?: { factionId: string; change: number }[];
   actionId: string;
+  npcId?: string;
 };
 
 // Thread injection result
@@ -238,6 +239,7 @@ export async function maybeCreateThreadFromOutcome(
       triggerFactionId: triggerConditions.triggerFactionId,
       expiresInActions: 4,
       createdFromEncounterId: context.encounterId,
+      npcId: context.npcId,
     },
   });
 

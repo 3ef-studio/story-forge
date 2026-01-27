@@ -19,7 +19,7 @@ import { getFactionById } from '@/app/data/factions';
 import { attributes as attributesList } from '@/app/data/attributes';
 import type { Action } from '@/app/data/actions';
 import type { EncounterTemplate } from '@/app/data/encounter-templates';
-import { LogOut, User, HelpCircle, Menu, X, Sparkles, Trophy, ArrowUp } from 'lucide-react';
+import { LogOut, User, HelpCircle, Menu, X, Sparkles, Trophy, ArrowUp, Users } from 'lucide-react';
 import { previewEncounterResolution, inferApproachFromText } from '@/app/lib/game-logic/combat/resolve-encounter';
 import type { ResolutionPreview } from '@/app/lib/game-logic/combat/types';
 
@@ -117,7 +117,7 @@ export default function GamePage() {
   const { showFactionChange, addToast } = useToast();
   const [character, setCharacter] = useState<CharacterData | null>(null);
   const [gameState, setGameState] = useState<GameState>('idle');
-  const [currentEncounter, setCurrentEncounter] = useState<(EncounterTemplate & { threadId?: string; threadTitle?: string }) | null>(null);
+  const [currentEncounter, setCurrentEncounter] = useState<(EncounterTemplate & { threadId?: string; threadTitle?: string; npcId?: string }) | null>(null);
   const [currentActionContext, setCurrentActionContext] = useState<{ actionId: string; locationType?: string } | null>(null);
   const [encounterChoices, setEncounterChoices] = useState<EncounterChoice[]>([]);
   const [currentOutcome, setCurrentOutcome] = useState<OutcomeResult | null>(null);
@@ -418,6 +418,7 @@ export default function GamePage() {
           threadId: currentEncounter.threadId,
           actionId: currentActionContext?.actionId,
           locationType: currentActionContext?.locationType,
+          npcId: currentEncounter.npcId,
         }),
       });
 
@@ -706,6 +707,15 @@ export default function GamePage() {
             <Button
               size="sm"
               variant="ghost"
+              onClick={() => router.push('/game/npcs')}
+              className="hidden sm:flex"
+            >
+              <Users className="h-4 w-4 mr-1" />
+              Contacts
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
               onClick={() => router.push('/help')}
               className="hidden sm:flex"
             >
@@ -747,6 +757,17 @@ export default function GamePage() {
           >
             <User className="h-4 w-4 mr-2" />
             Profile
+          </Button>
+          <Button
+            variant="ghost"
+            className="w-full justify-start"
+            onClick={() => {
+              router.push('/game/npcs');
+              setMobileMenuOpen(false);
+            }}
+          >
+            <Users className="h-4 w-4 mr-2" />
+            Contacts
           </Button>
           <Button
             variant="ghost"
