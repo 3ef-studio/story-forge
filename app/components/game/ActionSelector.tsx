@@ -5,7 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/ca
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
 import { actions, type Action, type ActionCategory, getAvailableActions } from '@/app/data/actions';
-import { AlertCircle, Circle, Clock, Dumbbell, Shield, Skull, Star, Users, Zap } from 'lucide-react';
+import { isActionAvailableInDistrict, isActionGlobal, type DistrictId } from '@/app/data/districts';
+import { DistrictSelector } from '@/app/components/game/DistrictSelector';
+import { AlertCircle, Circle, Clock, Dumbbell, MapPinOff, Shield, Skull, Star, Users, Zap } from 'lucide-react';
 import type { GoalRecord } from '@/app/components/game/ActiveGoalsPanel';
 
 interface ActionSelectorProps {
@@ -18,6 +20,8 @@ interface ActionSelectorProps {
   onSelectAction: (action: Action) => void;
   disabled?: boolean;
   activeGoals?: GoalRecord[];
+  currentDistrict?: DistrictId;
+  onDistrictChange?: (districtId: DistrictId) => void;
   compact?: boolean;
   hideHeader?: boolean;
 }
@@ -63,6 +67,8 @@ export function ActionSelector({
   onSelectAction,
   disabled = false,
   activeGoals = [],
+  currentDistrict,
+  onDistrictChange,
   compact = false,
   hideHeader = false,
 }: ActionSelectorProps) {
@@ -107,7 +113,15 @@ export function ActionSelector({
 
   const isOnCooldown = (actionId: string) => getCooldownRemaining(actionId) !== null;
 
+  const isNotInDistrict = (action: Action): boolean => {
+    if (!currentDistrict) return false;
+    if (isActionGlobal(action.id, action.category)) return false;
+    return !isActionAvailableInDistrict(action.locationTypes, currentDistrict);
+  };
+
   const getActionDisabledReason = (action: Action): string | null => {
+    if (isNotInDistrict(action)) return 'Not available here';
+
     const cd = getCooldownRemaining(action.id);
     if (cd) return `Cooldown: ${cd}`;
 
@@ -186,8 +200,15 @@ export function ActionSelector({
                 </div>
               </div>
               {disabledReason && (
-                <div className="mt-2 flex items-center gap-1.5 text-xs text-red-500 bg-red-50 rounded-lg px-2.5 py-1.5">
-                  <AlertCircle className="h-3 w-3 flex-shrink-0" />
+                <div className={`mt-2 flex items-center gap-1.5 text-xs rounded-lg px-2.5 py-1.5 ${
+                  disabledReason === 'Not available here'
+                    ? 'text-amber-600 bg-amber-50'
+                    : 'text-red-500 bg-red-50'
+                }`}>
+                  {disabledReason === 'Not available here'
+                    ? <MapPinOff className="h-3 w-3 flex-shrink-0" />
+                    : <AlertCircle className="h-3 w-3 flex-shrink-0" />
+                  }
                   {disabledReason}
                 </div>
               )}
@@ -252,8 +273,15 @@ export function ActionSelector({
 
             {/* Disabled reason */}
             {disabledReason && (
-              <div className="mt-2.5 flex items-center gap-1.5 text-xs text-red-500 bg-red-50 rounded-lg px-2 py-1.5">
-                <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+              <div className={`mt-2.5 flex items-center gap-1.5 text-xs rounded-lg px-2 py-1.5 ${
+                disabledReason === 'Not available here'
+                  ? 'text-amber-600 bg-amber-50'
+                  : 'text-red-500 bg-red-50'
+              }`}>
+                {disabledReason === 'Not available here'
+                  ? <MapPinOff className="h-3.5 w-3.5 flex-shrink-0" />
+                  : <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                }
                 <span>{disabledReason}</span>
               </div>
             )}
@@ -263,10 +291,19 @@ export function ActionSelector({
     </div>
   );
 
+  const districtSelector = currentDistrict && onDistrictChange ? (
+    <DistrictSelector
+      currentDistrict={currentDistrict}
+      onDistrictChange={onDistrictChange}
+      disabled={disabled}
+    />
+  ) : null;
+
   // If hideHeader, return content only (for mobile tab)
   if (hideHeader) {
     return (
       <div className="space-y-4">
+        {districtSelector}
         {/* Category filter pills */}
         <div className="flex flex-wrap gap-2">
           {categories.map((cat) => (
@@ -298,6 +335,7 @@ export function ActionSelector({
             {playerEnergy}
           </div>
         </CardTitle>
+        {districtSelector && <div className="mt-2">{districtSelector}</div>}
 
         {/* Category Tabs */}
         <div className="mt-2 flex flex-wrap gap-1">

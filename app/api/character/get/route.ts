@@ -85,6 +85,7 @@ export async function GET() {
         maxEnergy: character.maxEnergy,
         money: character.money,
         pendingLevelUpAttributePick: character.pendingLevelUpAttributePick,
+        currentDistrict: character.currentDistrict,
         lastEnergyReset: character.lastEnergyReset.toISOString(),
         attributes: attributesMap,
         powers: powersMap,

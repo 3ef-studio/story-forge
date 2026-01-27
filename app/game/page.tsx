@@ -18,6 +18,7 @@ import { useToast } from '@/app/components/ui/toast';
 import { getFactionById } from '@/app/data/factions';
 import { attributes as attributesList } from '@/app/data/attributes';
 import type { Action } from '@/app/data/actions';
+import type { DistrictId } from '@/app/data/districts';
 import type { EncounterTemplate } from '@/app/data/encounter-templates';
 import { LogOut, User, HelpCircle, Menu, X, Sparkles, Trophy, ArrowUp, Users } from 'lucide-react';
 import { previewEncounterResolution, inferApproachFromText } from '@/app/lib/game-logic/combat/resolve-encounter';
@@ -46,6 +47,7 @@ interface CharacterData {
   maxEnergy: number;
   money: number;
   pendingLevelUpAttributePick?: boolean;
+  currentDistrict: DistrictId;
   attributes: Record<string, number>;
   powers: Array<{ powerId: string; level: number; xp: number }>;
   factions: Record<string, number>;
@@ -196,6 +198,35 @@ export default function GamePage() {
       });
     }
   };
+
+  const handleDistrictChange = useCallback(async (districtId: DistrictId) => {
+    try {
+      const response = await fetch('/api/character/district', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ districtId }),
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        addToast({
+          type: 'error',
+          title: 'Failed to change district',
+          message: data.error || 'Please try again',
+          duration: 3000,
+        });
+        return;
+      }
+      setCharacter((prev) => prev ? { ...prev, currentDistrict: districtId } : null);
+      addToast({
+        type: 'success',
+        title: 'District Changed',
+        message: `You moved to a new district.`,
+        duration: 2000,
+      });
+    } catch (err) {
+      console.error('District change error:', err);
+    }
+  }, [addToast]);
 
   const fetchCharacter = useCallback(async () => {
     try {
@@ -829,6 +860,8 @@ export default function GamePage() {
                 onSelectAction={handleSelectAction}
                 disabled={gameState !== 'idle'}
                 activeGoals={activeGoals}
+                currentDistrict={character.currentDistrict}
+                onDistrictChange={handleDistrictChange}
                 compact
                 hideHeader
               />
@@ -924,6 +957,8 @@ export default function GamePage() {
                 onSelectAction={handleSelectAction}
                 disabled={gameState !== 'idle'}
                 activeGoals={activeGoals}
+                currentDistrict={character.currentDistrict}
+                onDistrictChange={handleDistrictChange}
               />
             </aside>
           </div>

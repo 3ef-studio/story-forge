@@ -24,6 +24,12 @@ import {
   buildNPCInjection,
   recordSocialInteraction,
 } from '@/app/lib/game-logic/npc-manager';
+import {
+  districtToLocationType,
+  isActionAvailableInDistrict,
+  isActionGlobal,
+  getDistrictById,
+} from '@/app/data/districts';
 
 export async function POST(request: Request) {
   try {
@@ -133,6 +139,19 @@ export async function POST(request: Request) {
       }
     }
 
+    // Check district compatibility
+    const currentDistrict = character.currentDistrict ?? 'downtown';
+    if (
+      !isActionGlobal(action.id, action.category) &&
+      !isActionAvailableInDistrict(action.locationTypes, currentDistrict)
+    ) {
+      const district = getDistrictById(currentDistrict);
+      return NextResponse.json(
+        { error: `This action is not available in ${district?.name ?? 'this district'}. Try changing your district.` },
+        { status: 400 }
+      );
+    }
+
     // Apply action effects
     const effects = applyActionEffects(action, {}, attributesMap);
 
@@ -161,7 +180,7 @@ export async function POST(request: Request) {
       const encounterType = selectEncounterType(action);
       const difficulty = getEncounterDifficulty(action);
       const involvedFactions = action.likelyFactions;
-      const location = action.locationTypes[0];
+      const location = districtToLocationType(currentDistrict);
 
       // Build seed input for cache lookup
       const seedInput = buildSeedInput(
@@ -518,10 +537,11 @@ export async function POST(request: Request) {
         includeFactions: action.likelyFactions,
       });
 
-      // Generate city update
+      // Generate city update — use district name for location context
+      const districtInfo = getDistrictById(currentDistrict);
       cityUpdate = generateCityUpdate({
         actionId,
-        location: action.locationTypes?.[0],
+        location: districtInfo?.name ?? action.locationTypes?.[0],
         factionStateLines,
       });
 
