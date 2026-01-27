@@ -37,10 +37,10 @@ export function EncounterDisplay({
   isResolving = false,
 }: EncounterDisplayProps) {
   return (
-    <Card className="border-2 border-blue-200 bg-blue-50/50">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg">{encounter.name}</CardTitle>
+    <Card className="border-2 border-blue-200 bg-blue-50/50 rounded-2xl shadow-sm">
+      <CardHeader className="pb-2 px-4 sm:px-6">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <CardTitle className="text-xl sm:text-lg font-bold">{encounter.name}</CardTitle>
           <div className="flex items-center gap-2">
             {encounter.threadTitle && (
               <Badge variant="suspicious" className="flex items-center gap-1">
@@ -55,10 +55,10 @@ export function EncounterDisplay({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-5 px-4 sm:px-6">
         {/* Main Description */}
-        <div className="bg-white rounded-lg p-4 border">
-          <p className="text-lg text-gray-800 leading-relaxed">
+        <div className="bg-white rounded-xl p-4 sm:p-5 border shadow-sm">
+          <p className="text-base sm:text-lg text-gray-800 leading-relaxed max-w-prose">
             {encounter.description}
           </p>
           {encounter.flavorText && (
@@ -69,16 +69,16 @@ export function EncounterDisplay({
         </div>
 
         {/* Choices */}
-        <div className="space-y-2">
-          <h4 className="font-semibold text-gray-700">What do you do?</h4>
-          <div className="grid gap-2">
+        <div className="space-y-3">
+          <h4 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">What do you do?</h4>
+          <div className="grid gap-3">
             {choices.map((choice) => (
               <Button
                 key={choice.id}
                 variant={choice.available ? 'outline' : 'ghost'}
-                className={`w-full justify-start h-auto py-3 px-4 text-left ${
+                className={`w-full justify-start h-auto py-4 px-4 text-left rounded-xl min-h-[56px] ${
                   choice.available
-                    ? 'hover:bg-blue-50 hover:border-blue-300'
+                    ? 'hover:bg-blue-50 hover:border-blue-300 active:bg-blue-100 border-gray-300 shadow-sm'
                     : 'opacity-50 cursor-not-allowed'
                 }`}
                 onClick={() => choice.available && onSelectChoice(choice.id)}
@@ -94,7 +94,7 @@ export function EncounterDisplay({
                   </div>
                   <div className="flex-1 space-y-1.5">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-medium">{choice.text}</span>
+                      <span className="font-semibold text-gray-900">{choice.text}</span>
                       {choice.requiredPowers && choice.requiredPowers.length > 0 && (
                         <span className="inline-flex items-center gap-1 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
                           <Zap className="h-3 w-3" />
@@ -113,7 +113,7 @@ export function EncounterDisplay({
                       />
                     )}
                     {!choice.available && choice.reason && (
-                      <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                      <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
                         <AlertTriangle className="h-3 w-3" />
                         {choice.reason}
                       </p>
@@ -125,17 +125,17 @@ export function EncounterDisplay({
           </div>
 
           {/* Retreat Option */}
-          <div className="pt-2 border-t border-gray-200 mt-3">
+          <div className="pt-3 border-t border-gray-200 mt-4">
             <Button
               variant="ghost"
-              className="w-full justify-start h-auto py-2 px-4 text-left text-gray-600 hover:bg-gray-100 hover:text-gray-800"
+              className="w-full justify-start h-auto py-3.5 px-4 text-left text-gray-600 hover:bg-gray-100 hover:text-gray-800 rounded-xl min-h-[48px]"
               onClick={() => onSelectChoice('retreat')}
               disabled={isResolving}
             >
               <div className="flex items-center gap-3 w-full">
                 <LogOut className="h-5 w-5 text-gray-400" />
                 <div>
-                  <span className="font-medium">Retreat</span>
+                  <span className="font-semibold">Retreat</span>
                   <p className="text-xs text-gray-500 mt-0.5">
                     Attempt to escape. Success depends on agility and mobility powers.
                   </p>
@@ -146,7 +146,7 @@ export function EncounterDisplay({
         </div>
 
         {isResolving && (
-          <div className="flex items-center justify-center py-4">
+          <div className="flex items-center justify-center py-6">
             <div className="flex items-center gap-2 text-gray-500">
               <svg
                 className="h-5 w-5 animate-spin"

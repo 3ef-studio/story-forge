@@ -603,11 +603,11 @@ export default function GamePage() {
   const renderSceneContent = () => {
     if (gameState === 'idle') {
       return (
-        <div className="bg-white rounded-lg border p-4 sm:p-6 text-center">
-          <h2 className="text-lg sm:text-xl font-semibold mb-2">What will you do?</h2>
-          <p className="text-gray-600 text-sm sm:text-base">
+        <div className="bg-white rounded-2xl border p-5 sm:p-6 text-center shadow-sm">
+          <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-2">What will you do?</h2>
+          <p className="text-gray-500 text-sm sm:text-base">
             <span className="hidden sm:inline">Choose an action from the panel on the right to continue your story.</span>
-            <span className="sm:hidden">Tap the Actions tab below to choose your next move.</span>
+            <span className="sm:hidden">Tap the <span className="font-semibold text-gray-700">Actions</span> tab below to choose your next move.</span>
           </p>
         </div>
       );
@@ -686,7 +686,7 @@ export default function GamePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 pb-16 sm:pb-0">
+    <div className="min-h-screen bg-gray-100 pb-24 sm:pb-0">
       {/* Top Nav */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 h-14 flex items-center justify-between">
@@ -808,7 +808,7 @@ export default function GamePage() {
       <main className="max-w-7xl mx-auto">
         {/* MOBILE LAYOUT (< sm) */}
         <div className="sm:hidden">
-          <div className="px-3 py-3">
+          <div className="px-4 py-4 max-w-lg mx-auto">
             {mobileTab === 'scene' && renderSceneContent()}
 
             {mobileTab === 'actions' && (

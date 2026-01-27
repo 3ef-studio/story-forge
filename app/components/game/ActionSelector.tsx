@@ -133,7 +133,7 @@ export function ActionSelector({
   const categories: (ActionCategory | 'all')[] = ['all', 'heroic', 'criminal', 'neutral', 'training', 'social'];
 
   const content = (
-    <div className={`grid grid-cols-1 ${compact ? 'gap-1.5' : 'gap-2'}`}>
+    <div className={`grid grid-cols-1 ${compact ? 'gap-2.5' : 'gap-2'}`}>
       {filteredActions.map((action) => {
         const available = isActionAvailable(action);
         const disabledReason = getActionDisabledReason(action);
@@ -141,38 +141,55 @@ export function ActionSelector({
         const advancesGoal = doesActionAdvanceGoal(action, activeGoals);
 
         if (compact) {
-          // Compact mobile view - min height 44px for touch targets
+          // Compact mobile view — card-style with comfortable tap targets
           return (
             <button
               key={action.id}
               onClick={() => onSelectAction(action)}
               disabled={disabled || !available || !!disabledReason}
-              className={`group text-left px-3 py-2.5 rounded-lg border transition-colors min-h-[44px] ${
+              className={`group text-left px-4 py-3.5 rounded-xl border shadow-sm transition-colors min-h-[56px] ${
                 !available || disabledReason
                   ? 'bg-gray-50 border-gray-200 opacity-50 cursor-not-allowed'
                   : advancesGoal
                   ? 'bg-yellow-50 border-yellow-200 active:bg-yellow-100'
-                  : 'bg-white border-gray-200 active:bg-gray-50'
+                  : 'bg-white border-gray-200 active:bg-gray-100'
               }`}
             >
-              <div className="flex items-center gap-2">
-                <span className={`p-1 rounded ${info.color} text-white flex-shrink-0`}>
+              <div className="flex items-center gap-3">
+                <span className={`p-1.5 rounded-lg ${info.color} text-white flex-shrink-0`}>
                   {info.icon}
                 </span>
-                <span className="font-medium text-sm text-gray-800 flex-1 truncate">
-                  {action.name}
-                </span>
-                {advancesGoal && (
-                  <Star className="h-3.5 w-3.5 text-yellow-500 fill-yellow-500 flex-shrink-0" />
-                )}
-                <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${
-                  action.energyCost <= 0 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                }`}>
-                  {action.energyCost <= 0 ? `+${Math.abs(action.energyCost)}` : action.energyCost}
-                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-semibold text-sm text-gray-900 truncate">
+                      {action.name}
+                    </span>
+                    {advancesGoal && (
+                      <Star className="h-3.5 w-3.5 text-yellow-500 fill-yellow-500 flex-shrink-0" />
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{action.description}</p>
+                </div>
+                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                    action.energyCost <= 0 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                  }`}>
+                    <Zap className="h-3 w-3 inline -mt-0.5 mr-0.5" />
+                    {action.energyCost <= 0 ? `+${Math.abs(action.energyCost)}` : action.energyCost}
+                  </span>
+                  {isOnCooldown(action.id) && (
+                    <span className="text-[10px] text-gray-400 flex items-center gap-0.5">
+                      <Clock className="h-2.5 w-2.5" />
+                      {getCooldownRemaining(action.id)}
+                    </span>
+                  )}
+                </div>
               </div>
               {disabledReason && (
-                <p className="text-xs text-red-500 mt-1 pl-7">{disabledReason}</p>
+                <div className="mt-2 flex items-center gap-1.5 text-xs text-red-500 bg-red-50 rounded-lg px-2.5 py-1.5">
+                  <AlertCircle className="h-3 w-3 flex-shrink-0" />
+                  {disabledReason}
+                </div>
               )}
             </button>
           );
@@ -249,17 +266,17 @@ export function ActionSelector({
   // If hideHeader, return content only (for mobile tab)
   if (hideHeader) {
     return (
-      <div className="space-y-3">
+      <div className="space-y-4">
         {/* Category filter pills */}
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-2">
           {categories.map((cat) => (
             <button
               key={cat}
               onClick={() => setSelectedCategory(cat)}
-              className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors min-h-[32px] ${
                 selectedCategory === cat
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-gray-100 text-gray-600 active:bg-gray-200'
               }`}
             >
               {cat === 'all' ? 'All' : categoryInfo[cat].label}

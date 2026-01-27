@@ -77,8 +77,8 @@ export function OutcomeDisplay({ outcome, resolution, powerProgression, onContin
     : 'border-red-300 bg-gradient-to-br from-red-50 to-orange-50/50 shadow-lg shadow-red-100';
 
   return (
-    <Card className={`border-2 overflow-hidden transition-all duration-500 ${cardStyles}`}>
-      <CardHeader className="pb-2">
+    <Card className={`border-2 overflow-hidden transition-all duration-500 rounded-2xl ${cardStyles}`}>
+      <CardHeader className="pb-2 px-4 sm:px-6">
         <CardTitle className="flex items-center gap-3">
           {isSuccess ? (
             <div className="flex items-center gap-3 animate-bounce-in">
@@ -103,19 +103,19 @@ export function OutcomeDisplay({ outcome, resolution, powerProgression, onContin
           )}
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Outcome Description */}
+      <CardContent className="space-y-5 px-4 sm:px-6">
+        {/* Section 1: Outcome Description */}
         <div
-          className={`bg-white/80 backdrop-blur-sm rounded-xl p-5 border shadow-sm transition-all duration-500 ${
+          className={`bg-white/80 backdrop-blur-sm rounded-xl p-4 sm:p-5 border shadow-sm transition-all duration-500 ${
             showContent ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
           }`}
         >
-          <p className="text-lg text-gray-800 leading-relaxed">
+          <p className="text-base sm:text-lg text-gray-800 leading-relaxed max-w-prose">
             {outcome.description}
           </p>
         </div>
 
-        {/* Resolution Breakdown */}
+        {/* Section 2: Combat Breakdown */}
         {resolution && (
           <div
             className={`transition-all duration-500 delay-100 ${
@@ -133,21 +133,21 @@ export function OutcomeDisplay({ outcome, resolution, powerProgression, onContin
           </div>
         )}
 
-        {/* Rewards/Penalties */}
+        {/* Section 3: Rewards */}
         <div
           className={`space-y-3 transition-all duration-500 delay-200 ${
             showResults ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
           }`}
         >
-          <h4 className="font-semibold text-gray-700 flex items-center gap-2">
+          <h4 className="font-semibold text-gray-700 flex items-center gap-2 text-sm uppercase tracking-wide">
             <Star className="h-4 w-4 text-yellow-500" />
-            Results
+            Rewards
           </h4>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2.5">
             {/* XP */}
-            <div className="flex items-center gap-2 p-2 bg-white rounded border">
-              <Star className="h-4 w-4 text-yellow-500" />
-              <span className="text-sm">XP</span>
+            <div className="flex items-center gap-2 p-3 bg-white rounded-xl border shadow-sm">
+              <Star className="h-4 w-4 text-yellow-500 flex-shrink-0" />
+              <span className="text-sm text-gray-700">XP</span>
               <Badge variant="success" className="ml-auto">
                 +{outcome.xpGained}
               </Badge>
@@ -155,9 +155,9 @@ export function OutcomeDisplay({ outcome, resolution, powerProgression, onContin
 
             {/* HP Change */}
             {outcome.hpChange && outcome.hpChange !== 0 && (
-              <div className="flex items-center gap-2 p-2 bg-white rounded border">
-                <Heart className="h-4 w-4 text-red-500" />
-                <span className="text-sm">HP</span>
+              <div className="flex items-center gap-2 p-3 bg-white rounded-xl border shadow-sm">
+                <Heart className="h-4 w-4 text-red-500 flex-shrink-0" />
+                <span className="text-sm text-gray-700">HP</span>
                 <Badge
                   variant={outcome.hpChange > 0 ? 'success' : 'destructive'}
                   className="ml-auto"
@@ -170,9 +170,9 @@ export function OutcomeDisplay({ outcome, resolution, powerProgression, onContin
 
             {/* Energy Change */}
             {outcome.energyChange && outcome.energyChange !== 0 && (
-              <div className="flex items-center gap-2 p-2 bg-white rounded border">
-                <Zap className="h-4 w-4 text-yellow-500" />
-                <span className="text-sm">Energy</span>
+              <div className="flex items-center gap-2 p-3 bg-white rounded-xl border shadow-sm">
+                <Zap className="h-4 w-4 text-yellow-500 flex-shrink-0" />
+                <span className="text-sm text-gray-700">Energy</span>
                 <Badge
                   variant={outcome.energyChange > 0 ? 'success' : 'warning'}
                   className="ml-auto"
@@ -185,9 +185,9 @@ export function OutcomeDisplay({ outcome, resolution, powerProgression, onContin
 
             {/* Money */}
             {outcome.moneyGained && outcome.moneyGained > 0 && (
-              <div className="flex items-center gap-2 p-2 bg-white rounded border">
-                <span className="text-sm">$</span>
-                <span className="text-sm">Money</span>
+              <div className="flex items-center gap-2 p-3 bg-white rounded-xl border shadow-sm">
+                <span className="text-sm font-medium text-green-600">$</span>
+                <span className="text-sm text-gray-700">Money</span>
                 <Badge variant="success" className="ml-auto">
                   +${outcome.moneyGained}
                 </Badge>
@@ -196,22 +196,22 @@ export function OutcomeDisplay({ outcome, resolution, powerProgression, onContin
           </div>
         </div>
 
-        {/* Faction Changes */}
+        {/* Section 4: Faction Changes */}
         {outcome.factionChanges.length > 0 && (
-          <div className="space-y-2">
-            <h4 className="font-semibold text-gray-700">Faction Reputation</h4>
-            <div className="grid gap-1">
+          <div className="space-y-2.5">
+            <h4 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">Faction Reputation</h4>
+            <div className="grid gap-2">
               {outcome.factionChanges.map(({ factionId, change }) => {
                 const faction = getFactionById(factionId);
                 return (
                   <div
                     key={factionId}
-                    className="flex items-center justify-between p-2 bg-white rounded border"
+                    className="flex items-center justify-between p-3 bg-white rounded-xl border shadow-sm"
                   >
-                    <span className="text-sm text-gray-600">
+                    <span className="text-sm text-gray-700 font-medium">
                       {faction?.shortName || factionId}
                     </span>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
                       {change > 0 ? (
                         <TrendingUp className="h-4 w-4 text-green-500" />
                       ) : (
@@ -232,10 +232,10 @@ export function OutcomeDisplay({ outcome, resolution, powerProgression, onContin
         {/* Attribute Growth */}
         {outcome.attributeGrowth.length > 0 && (
           <div className="space-y-2">
-            <h4 className="font-semibold text-gray-700">Attribute Growth</h4>
+            <h4 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">Attribute Growth</h4>
             <div className="flex flex-wrap gap-2">
               {outcome.attributeGrowth.map(({ attributeId, amount }) => (
-                <Badge key={attributeId} variant="success" className="capitalize">
+                <Badge key={attributeId} variant="success" className="capitalize text-sm py-1 px-2.5">
                   {attributeId} +{amount}
                 </Badge>
               ))}
@@ -245,15 +245,15 @@ export function OutcomeDisplay({ outcome, resolution, powerProgression, onContin
 
         {/* Power Progression */}
         {powerProgression && (
-          <div className="space-y-2">
-            <h4 className="font-semibold text-gray-700 flex items-center gap-2">
+          <div className="space-y-2.5">
+            <h4 className="font-semibold text-gray-700 flex items-center gap-2 text-sm uppercase tracking-wide">
               <Zap className="h-4 w-4 text-purple-500" />
               Power Used
             </h4>
-            <div className="p-3 bg-white rounded-lg border">
+            <div className="p-4 bg-white rounded-xl border shadow-sm">
               <div className="flex items-center justify-between mb-2">
                 <div>
-                  <span className="font-medium text-gray-800">{powerProgression.powerName}</span>
+                  <span className="font-semibold text-gray-900">{powerProgression.powerName}</span>
                   <span className="text-xs text-gray-500 ml-2 capitalize">({powerProgression.powerCategory})</span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -273,8 +273,8 @@ export function OutcomeDisplay({ outcome, resolution, powerProgression, onContin
                 )}
               </div>
               {/* XP Progress */}
-              <div className="mt-2">
-                <div className="flex justify-between text-xs text-gray-400 mb-0.5">
+              <div className="mt-2.5">
+                <div className="flex justify-between text-xs text-gray-500 mb-1">
                   <span>Progress to Lv.{powerProgression.levelAfter + 1}</span>
                   <span>{powerProgression.xpAfter}/{powerProgression.xpToNextLevel}</span>
                 </div>
@@ -290,9 +290,11 @@ export function OutcomeDisplay({ outcome, resolution, powerProgression, onContin
         )}
 
         {/* Continue Button */}
-        <Button onClick={onContinue} className="w-full" size="lg">
-          Continue
-        </Button>
+        <div className="pt-2 pb-1">
+          <Button onClick={onContinue} className="w-full min-h-[48px] text-base font-semibold rounded-xl" size="lg">
+            Continue
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
