@@ -27,7 +27,7 @@ import {
   calculateSocialDispositionChange,
 } from '@/app/lib/game-logic/npc-manager';
 import { getNPCById } from '@/app/data/npcs';
-import { getActionById } from '@/app/data/actions';
+import { getActionById, normalizeActionId } from '@/app/data/actions';
 
 // Type for outcome result with optional fields
 type OutcomeResult = {
@@ -290,7 +290,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const { encounterId, choiceId, threadId, actionId, locationType, npcId } = rawBody;
+    const { encounterId, choiceId, threadId, actionId: rawActionId, locationType, npcId } = rawBody;
+    const actionId = rawActionId ? normalizeActionId(rawActionId) : undefined;
     const isCached = Boolean(rawBody.isCached);
 
     // Look up encounter from cache or templates

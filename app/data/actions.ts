@@ -41,21 +41,37 @@ export type Action = {
   hpRestore?: number
 }
 
+// Legacy patrol action IDs that map to the consolidated "patrol" action
+export const ACTION_ID_ALIASES: Record<string, string> = {
+  patrol_downtown: 'patrol',
+  patrol_slums: 'patrol',
+}
+
+/**
+ * Normalize an actionId by resolving legacy aliases.
+ * Use this before any getActionById / cooldown / goal lookup on the server.
+ */
+export function normalizeActionId(actionId: string): string {
+  return ACTION_ID_ALIASES[actionId] ?? actionId
+}
+
 export const actions: Action[] = [
   // === HEROIC ACTIONS ===
   {
-    id: 'patrol_downtown',
-    name: 'Patrol Downtown',
-    description: 'Walk the streets of downtown looking for trouble to stop',
+    id: 'patrol',
+    name: 'Patrol Area',
+    description: 'Maintain a visible presence and respond to everyday crime.',
     category: 'heroic',
     energyCost: 10,
     factionImpacts: [
       { factionId: 'metro_police', reputationChange: 1 },
       { factionId: 'civilian_population', reputationChange: 2 },
-      { factionId: 'guardian_initiative', reputationChange: 1 }
+      { factionId: 'guardian_initiative', reputationChange: 1 },
+      { factionId: 'vigilante_network', reputationChange: 1 }
     ],
     attributeGrowthChance: [
-      { attributeId: 'perception', chance: 0.4 },
+      { attributeId: 'perception', chance: 0.45 },
+      { attributeId: 'endurance', chance: 0.25 },
       { attributeId: 'reputation', chance: 0.3 }
     ],
     encounterChance: 0.75,
@@ -64,33 +80,7 @@ export const actions: Action[] = [
       'civilian_in_danger',
       'villain_sighting',
       'police_cooperation',
-      'media_encounter'
-    ],
-    difficultyRange: [2, 6],
-    likelyFactions: ['metro_police', 'civilian_population', 'street_gangs', 'syndicate'],
-    narrativeContext: 'Player is actively looking for trouble to stop, wants to be seen as a protector and hero',
-    locationTypes: ['city_streets', 'downtown', 'commercial_district', 'public_spaces'],
-    baseXPReward: 25,
-    baseMoneyReward: 0
-  },
-
-  {
-    id: 'patrol_slums',
-    name: 'Patrol the Slums',
-    description: 'Watch over the poor neighborhoods where crime runs rampant',
-    category: 'heroic',
-    energyCost: 12,
-    factionImpacts: [
-      { factionId: 'civilian_population', reputationChange: 3 },
-      { factionId: 'vigilante_network', reputationChange: 2 },
-      { factionId: 'street_gangs', reputationChange: -1 }
-    ],
-    attributeGrowthChance: [
-      { attributeId: 'perception', chance: 0.5 },
-      { attributeId: 'endurance', chance: 0.3 }
-    ],
-    encounterChance: 0.75,
-    encounterTypes: [
+      'media_encounter',
       'gang_violence',
       'protection_racket',
       'villain_hideout',
@@ -98,12 +88,56 @@ export const actions: Action[] = [
       'vigilante_encounter',
       'turf_war'
     ],
-    difficultyRange: [3, 7],
-    likelyFactions: ['street_gangs', 'vigilante_network', 'civilian_population', 'syndicate'],
-    narrativeContext: 'Player protects the most vulnerable, fighting crime where law enforcement is scarce',
-    locationTypes: ['slums', 'poor_neighborhoods', 'back_alleys', 'tenements'],
-    baseXPReward: 30,
+    difficultyRange: [2, 7],
+    likelyFactions: ['metro_police', 'civilian_population', 'street_gangs', 'syndicate', 'vigilante_network'],
+    narrativeContext: 'Player patrols the streets looking for trouble to stop, maintaining a visible heroic presence',
+    locationTypes: [
+      'city_streets', 'downtown', 'commercial_district', 'public_spaces','warehouses', 'syndicate_territory',
+      'slums', 'poor_neighborhoods', 'back_alleys', 'tenements', 'industrial_areas', 'docks'
+    ],
+    baseXPReward: 25,
     baseMoneyReward: 0
+  },
+
+  {
+    id: 'hunt_major_threats',
+    name: 'Hunt Major Threats',
+    description: 'Seek out dangerous superhuman criminals and high-level threats.',
+    category: 'heroic',
+    energyCost: 18,
+    factionImpacts: [
+      { factionId: 'metro_police', reputationChange: 2 },
+      { factionId: 'guardian_initiative', reputationChange: 3 },
+      { factionId: 'civilian_population', reputationChange: 2 },
+      { factionId: 'syndicate', reputationChange: -2 }
+    ],
+    attributeGrowthChance: [
+      { attributeId: 'strength', chance: 0.4 },
+      { attributeId: 'perception', chance: 0.4 },
+      { attributeId: 'endurance', chance: 0.3 },
+      { attributeId: 'reputation', chance: 0.4 }
+    ],
+    encounterChance: 0.9,
+    encounterTypes: [
+      'villain_sighting',
+      'villain_hideout',
+      'powered_criminal_pursuit',
+      'hero_battle',
+      'ambush_scenario',
+      'public_confrontation',
+      'gang_violence',
+      'turf_war'
+    ],
+    difficultyRange: [5, 9],
+    likelyFactions: ['syndicate', 'street_gangs', 'guardian_initiative', 'metro_police', 'nihilist_collective'],
+    narrativeContext: 'Player actively hunts the most dangerous criminals, seeking out high-level superhuman threats',
+    locationTypes: [
+      'city_streets', 'downtown', 'slums', 'back_alleys',
+      'warehouses', 'docks', 'syndicate_territory', 'abandoned_areas'
+    ],
+    baseXPReward: 40,
+    baseMoneyReward: 10,
+    cooldownHours: 4
   },
 
   {
@@ -675,16 +709,40 @@ export function getAvailableActions(
 }
 
 export function rollForEncounter(action: Action): boolean {
-  return Math.random() < action.encounterChance
+  // hunt_major_threats gets a small extra nudge toward triggering
+  const bonus = action.id === 'hunt_major_threats' ? 0.05 : 0
+  return Math.random() < (action.encounterChance + bonus)
 }
 
 export function getEncounterDifficulty(action: Action): number {
   const [min, max] = action.difficultyRange
-  return Math.floor(Math.random() * (max - min + 1)) + min
+  let difficulty = Math.floor(Math.random() * (max - min + 1)) + min
+
+  // Bias hunt_major_threats toward the harder end (+1, clamped to 10)
+  if (action.id === 'hunt_major_threats') {
+    difficulty = Math.min(10, difficulty + 1)
+  }
+
+  return difficulty
 }
+
+// Encounter types biased toward villain / powered encounters for hunt_major_threats
+const THREAT_HUNT_PREFERRED_TYPES = [
+  'villain_sighting', 'villain_hideout', 'powered_criminal_pursuit',
+  'hero_battle', 'ambush_scenario', 'public_confrontation',
+]
 
 export function selectEncounterType(action: Action): string {
   const types = action.encounterTypes
+
+  // For hunt_major_threats, 60% chance to pick from preferred (villain/powered) types
+  if (action.id === 'hunt_major_threats' && Math.random() < 0.6) {
+    const preferred = types.filter((t) => THREAT_HUNT_PREFERRED_TYPES.includes(t))
+    if (preferred.length > 0) {
+      return preferred[Math.floor(Math.random() * preferred.length)]
+    }
+  }
+
   return types[Math.floor(Math.random() * types.length)]
 }
 

@@ -33,20 +33,11 @@ export const goalDefinitions: GoalDefinition[] = [
   {
     id: 'patrol_downtown_3',
     goalType: 'action_count',
-    titleTemplate: 'Downtown Watchdog',
-    descriptionTemplate: 'Patrol downtown 3 times to establish your presence',
+    titleTemplate: 'Street Sentinel',
+    descriptionTemplate: 'Patrol the city 3 times to establish your presence',
     targetValue: 3,
     xpReward: 50,
-    metadata: { actionId: 'patrol_downtown' },
-  },
-  {
-    id: 'patrol_slums_3',
-    goalType: 'action_count',
-    titleTemplate: 'Guardian of the Slums',
-    descriptionTemplate: 'Patrol the slums 3 times to protect the vulnerable',
-    targetValue: 3,
-    xpReward: 60,
-    metadata: { actionId: 'patrol_slums' },
+    metadata: { actionId: 'patrol' },
   },
   {
     id: 'respond_emergency_2',

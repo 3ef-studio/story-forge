@@ -3,7 +3,7 @@
 
 import { prisma } from '@/app/lib/db'
 import { goalDefinitions, getGoalDefinitionById, type GoalDefinition, type GoalMetadata } from '@/app/data/goals'
-import type { Action } from '@/app/data/actions'
+import { normalizeActionId, type Action } from '@/app/data/actions'
 import type { CharacterGoal } from '@prisma/client'
 import { shuffleArray } from '@/app/lib/utils/character-utils'
 
@@ -152,7 +152,7 @@ export async function applyGoalProgressOnAction(
 
     switch (goal.goalType) {
       case 'action_count':
-        if (metadata?.actionId === action.id) {
+        if (metadata?.actionId && normalizeActionId(metadata.actionId) === action.id) {
           shouldIncrement = true
         }
         break

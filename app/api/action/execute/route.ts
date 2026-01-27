@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/app/lib/auth';
 import { prisma } from '@/app/lib/db';
-import { getActionById, applyActionEffects, getCooldownExpiry, rollForEncounter, selectEncounterType, getEncounterDifficulty } from '@/app/data/actions';
+import { getActionById, applyActionEffects, getCooldownExpiry, rollForEncounter, selectEncounterType, getEncounterDifficulty, normalizeActionId } from '@/app/data/actions';
 import { calculateReputationImpact, getFactionById } from '@/app/data/factions';
 import { getAvailableEncounters, selectRandomEncounter, type EncounterTemplate } from '@/app/data/encounter-templates';
 import { findCachedSeed, cacheSeed } from '@/app/lib/ai/encounter-cache';
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { actionId } = body;
+    const actionId = normalizeActionId(body.actionId);
 
     const action = getActionById(actionId);
     if (!action) {
@@ -74,9 +74,9 @@ export async function POST(request: Request) {
     // Age any active consequence thread (once per action)
     await incrementThreadAging(character.id);
 
-    // Check cooldown
+    // Check cooldown (normalize stored IDs for legacy compatibility)
     const existingCooldown = character.actionCooldowns.find(
-      (cd) => cd.actionId === actionId && cd.expiresAt > new Date()
+      (cd) => normalizeActionId(cd.actionId) === actionId && cd.expiresAt > new Date()
     );
     if (existingCooldown) {
       return NextResponse.json(

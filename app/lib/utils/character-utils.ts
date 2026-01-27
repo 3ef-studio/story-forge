@@ -4,6 +4,7 @@
  */
 
 import { prisma } from '@/app/lib/db';
+import { normalizeActionId } from '@/app/data/actions';
 
 // Types for character data from Prisma
 interface CharacterAttribute {
@@ -52,7 +53,7 @@ export const buildFactionMap = buildFactionReputationMap;
 export function buildCooldownMap(cooldowns: ActionCooldown[]): Record<string, string> {
   const map: Record<string, string> = {};
   for (const cd of cooldowns) {
-    map[cd.actionId] = cd.expiresAt.toISOString();
+    map[normalizeActionId(cd.actionId)] = cd.expiresAt.toISOString();
   }
   return map;
 }

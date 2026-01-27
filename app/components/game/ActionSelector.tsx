@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
-import { actions, type Action, type ActionCategory, getAvailableActions } from '@/app/data/actions';
+import { actions, type Action, type ActionCategory, getAvailableActions, normalizeActionId } from '@/app/data/actions';
 import { isActionAvailableInDistrict, isActionGlobal, type DistrictId } from '@/app/data/districts';
 import { DistrictSelector } from '@/app/components/game/DistrictSelector';
 import { AlertCircle, Circle, Clock, Dumbbell, MapPinOff, Shield, Skull, Star, Users, Zap } from 'lucide-react';
@@ -45,7 +45,7 @@ function doesActionAdvanceGoal(
 
     switch (goal.goalType) {
       case 'action_count':
-        if (meta?.actionId === action.id) return true;
+        if (meta?.actionId && normalizeActionId(meta.actionId) === action.id) return true;
         break;
       case 'category_count':
         if (meta?.category === action.category) return true;
