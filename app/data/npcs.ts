@@ -84,7 +84,7 @@ export const npcs: NPC[] = [
     role: 'Senior Guardian',
     factionId: 'guardian_initiative',
     factionIds: ['guardian_initiative'],
-    locationTags: ['guardian_hq_vicinity', 'public_spaces', 'disaster_sites'],
+    locationTags: ['guardian_hq_vicinity', 'public_spaces', 'disaster_sites','training_grounds'],
     tags: ['hero', 'mentor', 'official_super'],
     baseDisposition: 10,
     visualDescription: 'A tall man in white and gold armor, cape billowing even without wind.',
@@ -131,6 +131,19 @@ export const npcs: NPC[] = [
     baseDisposition: 0,
     visualDescription: 'A scarred young man in a leather jacket, with knives strapped to his forearms.',
     personality: 'Hot-headed, protective, distrustful of authority',
+  },
+  {
+    id: 'shadowgate',
+    name: 'ShadowGate',
+    description: 'A vigilante who uses advanced technology to fight crime from the shadows. Summoning ice and darkness, to confront his foes.',
+    role: 'Underground Vigilante',
+    factionId: 'vigilante_network',
+    factionIds: ['vigilante_network'],
+    locationTags: ['rooftops', 'slums', 'back_alleys', 'abandoned_areas','industrial_zones', 'city_outskirts','docks'],
+    tags: ['vigilante', 'stealth', 'independent'],
+    baseDisposition: 2,
+    visualDescription: 'A tall figure shrouded in a dark cloak, with glowing blue eyes and a mask that obscures their face.',
+    personality: 'Mysterious, strategic, driven by a personal code of justice',
   },
   // Civilian Population
   {
@@ -216,6 +229,19 @@ export const npcs: NPC[] = [
     visualDescription: 'A middle-aged man in a rumpled suit, looking perpetually stressed.',
     personality: 'Well-meaning, frustrated, trying to make a difference',
   },
+  {
+    id: 'mayor_wilson',
+    name: 'Mayor Linda Wilson',
+    description: 'The mayor of the city, focused on maintaining order and economic growth, often at the expense of civil liberties.',
+    role: 'City Mayor',
+    factionId: 'city_government',
+    factionIds: ['city_government'],
+    locationTags: ['city_hall', 'downtown', 'financial_district'],
+    tags: ['politician', 'government', 'authority'],
+    baseDisposition: -10,
+    visualDescription: 'A stern woman in a tailored suit, always surrounded by aides and security.',
+    personality: 'Authoritative, pragmatic, politically savvy', 
+  }
 ];
 
 export function getNPCById(id: string): NPC | undefined {
