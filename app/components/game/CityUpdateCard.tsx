@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { ChevronDown, ChevronUp, Newspaper } from 'lucide-react';
 
@@ -20,15 +19,15 @@ export function CityUpdateCard({ title, body, timestamp, onViewLog }: CityUpdate
   const needsTruncation = body.length > 80;
 
   return (
-    <Card className="border-amber-200 bg-amber-50/50">
-      <CardHeader className="pb-2 pt-3 px-3">
-        <CardTitle className="text-sm flex items-center gap-2 text-amber-800">
+    <div className="panel-solid p-3">
+      <div className="pb-2">
+        <h3 className="text-sm font-semibold flex items-center gap-2 text-amber-400">
           <Newspaper className="h-4 w-4" />
           {title}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="px-3 pb-3 pt-0">
-        <p className="text-xs text-gray-700 leading-relaxed">
+        </h3>
+      </div>
+      <div>
+        <p className="text-xs text-white/80 leading-relaxed">
           {expanded || !needsTruncation ? body : truncatedBody}
         </p>
 
@@ -37,7 +36,7 @@ export function CityUpdateCard({ title, body, timestamp, onViewLog }: CityUpdate
             <Button
               variant="ghost"
               size="sm"
-              className="h-6 px-2 text-xs text-amber-700 hover:text-amber-900"
+              className="h-6 px-2 text-xs text-amber-400 hover:text-amber-300 hover:bg-white/10"
               onClick={() => setExpanded(!expanded)}
             >
               {expanded ? (
@@ -58,7 +57,7 @@ export function CityUpdateCard({ title, body, timestamp, onViewLog }: CityUpdate
             <Button
               variant="ghost"
               size="sm"
-              className="h-6 px-2 text-xs text-gray-500 hover:text-gray-700 ml-auto"
+              className="h-6 px-2 text-xs text-white/50 hover:text-white/80 hover:bg-white/10 ml-auto"
               onClick={onViewLog}
             >
               View Log
@@ -67,11 +66,11 @@ export function CityUpdateCard({ title, body, timestamp, onViewLog }: CityUpdate
         </div>
 
         {timestamp && (
-          <p className="text-xs text-gray-400 mt-1">
+          <p className="text-xs text-white/40 mt-1">
             {new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </p>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

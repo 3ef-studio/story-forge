@@ -96,6 +96,56 @@ body {
   border: 1px solid var(--border-muted);
 }
 
+/* ===== Game UI: backdrop, panels, muted text ===== */
+
+/* Full-screen background container with strong dark gradient overlay */
+.game-backdrop {
+  position: relative;
+}
+.game-backdrop::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.70) 0%,
+    rgba(0, 0, 0, 0.55) 40%,
+    rgba(0, 0, 0, 0.65) 100%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+/* All direct children sit above the overlay */
+.game-backdrop > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* High-readability panel — opaque dark surface, for critical info */
+.panel-solid {
+  background: rgba(15, 23, 42, 0.94); /* slate-900 / 94% */
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-secondary);
+  border-radius: 1rem;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Translucent glass panel — lets background bleed through */
+.panel-glass {
+  background: rgba(15, 23, 42, 0.60);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: var(--text-secondary);
+  border-radius: 1rem;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* Readable muted text on dark surfaces */
+.muted {
+  color: var(--text-muted) !important;
+}
+
 /* Animations (keep yours) */
 @keyframes slide-in-right {
   from {

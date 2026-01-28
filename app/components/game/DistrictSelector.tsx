@@ -26,10 +26,10 @@ export function DistrictSelector({
         disabled={disabled}
         className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition-colors w-full sm:w-auto ${
           disabled
-            ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
+            ? 'bg-white/5 border-white/10 text-white/30 cursor-not-allowed'
             : open
-            ? 'bg-blue-50 border-blue-300 text-blue-700'
-            : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+            ? 'bg-blue-500/20 border-blue-400/40 text-blue-300'
+            : 'bg-white/10 border-white/15 text-white/80 hover:border-white/25 hover:bg-white/15'
         }`}
       >
         <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
@@ -44,7 +44,7 @@ export function DistrictSelector({
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
 
           {/* Dropdown */}
-          <div className="absolute top-full left-0 mt-1 w-72 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden">
+          <div className="absolute top-full left-0 mt-1 w-72 bg-gray-900/95 border border-white/15 rounded-xl shadow-lg z-50 overflow-hidden backdrop-blur-md">
             {districts.map((district) => {
               const isActive = district.id === currentDistrict;
               return (
@@ -56,17 +56,17 @@ export function DistrictSelector({
                   }}
                   className={`w-full text-left px-4 py-3 transition-colors ${
                     isActive
-                      ? 'bg-blue-50 border-l-2 border-blue-500'
-                      : 'hover:bg-gray-50 border-l-2 border-transparent'
+                      ? 'bg-blue-500/20 border-l-2 border-blue-400'
+                      : 'hover:bg-white/10 border-l-2 border-transparent'
                   }`}
                 >
                   <div className="flex items-center gap-2">
                     <span className="text-lg">{district.icon}</span>
                     <div className="flex-1 min-w-0">
-                      <div className={`text-sm font-semibold ${isActive ? 'text-blue-700' : 'text-gray-800'}`}>
+                      <div className={`text-sm font-semibold ${isActive ? 'text-blue-300' : 'text-white/80'}`}>
                         {district.name}
                       </div>
-                      <div className="text-xs text-gray-500 mt-0.5">{district.description}</div>
+                      <div className="text-xs text-white/50 mt-0.5">{district.description}</div>
                     </div>
                   </div>
                 </button>

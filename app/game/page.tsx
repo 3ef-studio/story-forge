@@ -20,6 +20,7 @@ import { attributes as attributesList } from '@/app/data/attributes';
 import type { Action } from '@/app/data/actions';
 import type { DistrictId } from '@/app/data/districts';
 import type { EncounterTemplate } from '@/app/data/encounter-templates';
+import { getLocationBackground } from '@/app/lib/game-logic/location-backgrounds';
 import { LogOut, User, HelpCircle, Menu, X, Sparkles, Trophy, ArrowUp, Users } from 'lucide-react';
 import { previewEncounterResolution, inferApproachFromText } from '@/app/lib/game-logic/combat/resolve-encounter';
 import type { ResolutionPreview } from '@/app/lib/game-logic/combat/types';
@@ -642,11 +643,11 @@ export default function GamePage() {
   const renderSceneContent = () => {
     if (gameState === 'idle') {
       return (
-        <div className="bg-white rounded-2xl border p-5 sm:p-6 text-center shadow-sm">
-          <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-2">What will you do?</h2>
-          <p className="text-gray-500 text-sm sm:text-base">
+        <div className="panel-glass p-5 sm:p-6 text-center">
+          <h2 className="text-lg sm:text-xl font-bold text-white mb-2">What will you do?</h2>
+          <p className="text-white/60 text-sm sm:text-base">
             <span className="hidden sm:inline">Choose an action from the panel on the right to continue your story.</span>
-            <span className="sm:hidden">Tap the <span className="font-semibold text-gray-700">Actions</span> tab below to choose your next move.</span>
+            <span className="sm:hidden">Tap the <span className="font-semibold text-white/80">Actions</span> tab below to choose your next move.</span>
           </p>
         </div>
       );
@@ -654,10 +655,10 @@ export default function GamePage() {
 
     if (gameState === 'executing') {
       return (
-        <div className="bg-white rounded-lg border p-6">
+        <div className="panel-glass p-6">
           <div className="text-center space-y-4">
             {/* Title */}
-            <h3 className="text-lg font-semibold text-gray-800">Encounter forming...</h3>
+            <h3 className="text-lg font-semibold text-white">Encounter forming...</h3>
 
             {/* 3-step indicator */}
             <div className="space-y-2">
@@ -670,12 +671,12 @@ export default function GamePage() {
                 >
                   <div
                     className={`w-2 h-2 rounded-full ${
-                      index === loadingStep ? 'bg-blue-500 animate-pulse' : 'bg-gray-300'
+                      index === loadingStep ? 'bg-blue-400 animate-pulse' : 'bg-white/30'
                     }`}
                   />
                   <span
                     className={`text-sm ${
-                      index === loadingStep ? 'text-blue-600 font-medium' : 'text-gray-400'
+                      index === loadingStep ? 'text-blue-300 font-medium' : 'text-white/40'
                     }`}
                   >
                     {step}
@@ -685,13 +686,13 @@ export default function GamePage() {
             </div>
 
             {/* Skeleton card preview */}
-            <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200 animate-pulse">
-              <div className="h-4 bg-gray-200 rounded w-3/4 mx-auto mb-3"></div>
-              <div className="h-3 bg-gray-200 rounded w-full mb-2"></div>
-              <div className="h-3 bg-gray-200 rounded w-5/6 mb-4"></div>
+            <div className="mt-4 p-4 bg-white/5 rounded-lg border border-white/10 animate-pulse">
+              <div className="h-4 bg-white/10 rounded w-3/4 mx-auto mb-3"></div>
+              <div className="h-3 bg-white/10 rounded w-full mb-2"></div>
+              <div className="h-3 bg-white/10 rounded w-5/6 mb-4"></div>
               <div className="space-y-2">
-                <div className="h-10 bg-gray-200 rounded"></div>
-                <div className="h-10 bg-gray-200 rounded"></div>
+                <div className="h-10 bg-white/10 rounded"></div>
+                <div className="h-10 bg-white/10 rounded"></div>
               </div>
             </div>
           </div>
@@ -725,12 +726,12 @@ export default function GamePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 pb-24 sm:pb-0">
+    <div className="min-h-screen bg-gray-950 pb-24 sm:pb-0">
       {/* Top Nav */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
+      <header className="bg-gray-950/90 border-b border-white/10 sticky top-0 z-50 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <h1 className="font-bold text-lg text-gray-900">Story Forge</h1>
+            <h1 className="font-bold text-lg text-white">Story Forge</h1>
           </div>
 
           <div className="flex items-center gap-2">
@@ -738,7 +739,7 @@ export default function GamePage() {
               size="sm"
               variant="ghost"
               onClick={() => router.push('/profile')}
-              className="hidden sm:flex"
+              className="hidden sm:flex text-white/70 hover:text-white hover:bg-white/10"
             >
               <User className="h-4 w-4 mr-1" />
               Profile
@@ -747,7 +748,7 @@ export default function GamePage() {
               size="sm"
               variant="ghost"
               onClick={() => router.push('/game/npcs')}
-              className="hidden sm:flex"
+              className="hidden sm:flex text-white/70 hover:text-white hover:bg-white/10"
             >
               <Users className="h-4 w-4 mr-1" />
               Contacts
@@ -756,7 +757,7 @@ export default function GamePage() {
               size="sm"
               variant="ghost"
               onClick={() => router.push('/help')}
-              className="hidden sm:flex"
+              className="hidden sm:flex text-white/70 hover:text-white hover:bg-white/10"
             >
               <HelpCircle className="h-4 w-4 mr-1" />
               Help
@@ -765,6 +766,7 @@ export default function GamePage() {
               size="sm"
               variant="ghost"
               onClick={() => signOut({ callbackUrl: '/' })}
+              className="text-white/70 hover:text-white hover:bg-white/10"
             >
               <LogOut className="h-4 w-4" />
               <span className="hidden sm:inline ml-1">Logout</span>
@@ -775,7 +777,7 @@ export default function GamePage() {
               size="sm"
               variant="ghost"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="sm:hidden"
+              className="sm:hidden text-white/70 hover:text-white hover:bg-white/10"
             >
               {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </Button>
@@ -785,10 +787,10 @@ export default function GamePage() {
 
       {/* Mobile dropdown menu */}
       {mobileMenuOpen && (
-        <div className="sm:hidden bg-white border-b p-3 space-y-2 shadow-md">
+        <div className="sm:hidden bg-gray-900/95 border-b border-white/10 p-3 space-y-2 backdrop-blur-md">
           <Button
             variant="ghost"
-            className="w-full justify-start"
+            className="w-full justify-start text-white/70 hover:text-white hover:bg-white/10"
             onClick={() => {
               router.push('/profile');
               setMobileMenuOpen(false);
@@ -799,7 +801,7 @@ export default function GamePage() {
           </Button>
           <Button
             variant="ghost"
-            className="w-full justify-start"
+            className="w-full justify-start text-white/70 hover:text-white hover:bg-white/10"
             onClick={() => {
               router.push('/game/npcs');
               setMobileMenuOpen(false);
@@ -810,7 +812,7 @@ export default function GamePage() {
           </Button>
           <Button
             variant="ghost"
-            className="w-full justify-start"
+            className="w-full justify-start text-white/70 hover:text-white hover:bg-white/10"
             onClick={() => {
               router.push('/help');
               setMobileMenuOpen(false);
@@ -836,15 +838,24 @@ export default function GamePage() {
 
       {/* Error Banner */}
       {error && (
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2">
-          <div className="p-3 rounded-md bg-red-50 text-red-700 border border-red-200 text-sm">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2 relative z-10">
+          <div className="p-3 rounded-md bg-red-900/80 text-red-200 border border-red-700/50 text-sm">
             {error}
           </div>
         </div>
       )}
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto">
+      <main
+        className="game-backdrop max-w-full min-h-screen"
+        style={{
+          backgroundImage: `url(${getLocationBackground(character.currentDistrict)})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundAttachment: 'fixed',
+        }}
+      >
+        <div className="max-w-7xl mx-auto">
         {/* MOBILE LAYOUT (< sm) */}
         <div className="sm:hidden">
           <div className="px-4 py-4 max-w-lg mx-auto">
@@ -880,22 +891,22 @@ export default function GamePage() {
 
                 {/* Compact goals summary */}
                 {activeGoals.length > 0 && (
-                  <div className="bg-white rounded-lg border p-3">
-                    <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1">
-                      <span className="text-yellow-500">★</span> Goals
+                  <div className="panel-glass p-3">
+                    <h3 className="text-sm font-semibold text-white/80 mb-2 flex items-center gap-1">
+                      <span className="text-yellow-400">★</span> Goals
                     </h3>
                     <div className="space-y-2">
                       {activeGoals.slice(0, 2).map((goal) => (
                         <div key={goal.id} className="text-xs">
-                          <div className="flex justify-between text-gray-700">
+                          <div className="flex justify-between text-white/80">
                             <span className="truncate flex-1">{goal.title}</span>
-                            <span className="text-gray-500 ml-2">
+                            <span className="text-white/50 ml-2">
                               {goal.currentProgress}/{goal.targetValue}
                             </span>
                           </div>
-                          <div className="h-1 bg-gray-100 rounded-full mt-1 overflow-hidden">
+                          <div className="h-1 bg-white/10 rounded-full mt-1 overflow-hidden">
                             <div
-                              className="h-full bg-blue-500 rounded-full"
+                              className="h-full bg-blue-400 rounded-full"
                               style={{
                                 width: `${Math.min(100, (goal.currentProgress / goal.targetValue) * 100)}%`,
                               }}
@@ -908,8 +919,8 @@ export default function GamePage() {
                 )}
 
                 {/* Story log */}
-                <div className="bg-white rounded-lg border p-3">
-                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Recent Events</h3>
+                <div className="panel-glass p-3">
+                  <h3 className="text-sm font-semibold text-white/80 mb-3">Recent Events</h3>
                   <StoryLogPanel events={character.storyEvents} maxItems={10} compact />
                 </div>
               </div>
@@ -940,8 +951,8 @@ export default function GamePage() {
               )}
 
               {/* Story Log (desktop only) */}
-              <div className="bg-white rounded-lg border p-4">
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">Story Log</h3>
+              <div className="panel-glass p-4">
+                <h3 className="text-sm font-semibold text-white/80 mb-3">Story Log</h3>
                 <StoryLogPanel events={character.storyEvents} maxItems={5} />
               </div>
             </section>
@@ -962,6 +973,7 @@ export default function GamePage() {
               />
             </aside>
           </div>
+        </div>
         </div>
       </main>
 

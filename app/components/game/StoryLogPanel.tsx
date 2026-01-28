@@ -43,17 +43,17 @@ function getEventColor(type: string): string {
   switch (type) {
     case 'encounter_success':
     case 'encounter':
-      return 'text-green-600 bg-green-50';
+      return 'text-green-400 bg-green-500/20';
     case 'encounter_failure':
-      return 'text-red-600 bg-red-50';
+      return 'text-red-400 bg-red-500/20';
     case 'level_up':
-      return 'text-yellow-600 bg-yellow-50';
+      return 'text-yellow-400 bg-yellow-500/20';
     case 'goal_complete':
-      return 'text-purple-600 bg-purple-50';
+      return 'text-purple-400 bg-purple-500/20';
     case 'city_update':
-      return 'text-amber-600 bg-amber-50';
+      return 'text-amber-400 bg-amber-500/20';
     default:
-      return 'text-gray-600 bg-gray-50';
+      return 'text-white/60 bg-white/10';
   }
 }
 
@@ -80,7 +80,7 @@ function StoryLogItem({ event, compact }: { event: StoryEvent; compact?: boolean
   return (
     <div
       className={`rounded-lg border transition-colors ${
-        expanded ? 'bg-white border-gray-300' : 'bg-gray-50 border-gray-200'
+        expanded ? 'bg-white/10 border-white/15' : 'bg-white/5 border-white/10'
       }`}
     >
       <button
@@ -100,11 +100,11 @@ function StoryLogItem({ event, compact }: { event: StoryEvent; compact?: boolean
 
           {/* Content */}
           <div className="flex-1 min-w-0">
-            <p className={`text-sm text-gray-800 ${compact ? 'line-clamp-1' : 'line-clamp-2'}`}>
+            <p className={`text-sm text-white/80 ${compact ? 'line-clamp-1' : 'line-clamp-2'}`}>
               {event.summary}
             </p>
             <div className="flex items-center gap-2 mt-1">
-              <span className="text-xs text-gray-400 flex items-center gap-1">
+              <span className="text-xs text-white/40 flex items-center gap-1">
                 <Clock className="h-3 w-3" />
                 {formatTime(event.createdAt)}
               </span>
@@ -113,7 +113,7 @@ function StoryLogItem({ event, compact }: { event: StoryEvent; compact?: boolean
 
           {/* Expand indicator */}
           {hasDescription && (
-            <span className="text-gray-400 flex-shrink-0">
+            <span className="text-white/40 flex-shrink-0">
               {expanded ? (
                 <ChevronUp className="h-4 w-4" />
               ) : (
@@ -127,8 +127,8 @@ function StoryLogItem({ event, compact }: { event: StoryEvent; compact?: boolean
       {/* Expanded description */}
       {expanded && hasDescription && (
         <div className="px-3 pb-3 pt-0">
-          <div className="pl-7 border-l-2 border-gray-200 ml-2.5">
-            <p className="text-sm text-gray-600 leading-relaxed">{event.fullDescription}</p>
+          <div className="pl-7 border-l-2 border-white/20 ml-2.5">
+            <p className="text-sm text-white/70 leading-relaxed">{event.fullDescription}</p>
           </div>
         </div>
       )}
@@ -141,7 +141,7 @@ export function StoryLogPanel({ events, maxItems = 10, compact = false }: StoryL
 
   if (displayEvents.length === 0) {
     return (
-      <div className="text-center py-8 text-gray-500">
+      <div className="text-center py-8 text-white/50">
         <p className="text-sm">Your story is just beginning...</p>
       </div>
     );

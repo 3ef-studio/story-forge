@@ -26,23 +26,20 @@ export function ResolutionBreakdownCard({
   summary,
   isRetreat = false,
 }: ResolutionBreakdownCardProps) {
-  // Outcome styling
   const outcomeStyles: Record<Outcome, { bg: string; text: string; label: string }> = {
-    success: { bg: 'bg-green-100', text: 'text-green-700', label: isRetreat ? 'Escaped' : 'Success' },
-    partial: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Partial' },
-    failure: { bg: 'bg-red-100', text: 'text-red-700', label: isRetreat ? 'Caught' : 'Failure' },
+    success: { bg: 'bg-green-500/20', text: 'text-green-400', label: isRetreat ? 'Escaped' : 'Success' },
+    partial: { bg: 'bg-yellow-500/20', text: 'text-yellow-400', label: 'Partial' },
+    failure: { bg: 'bg-red-500/20', text: 'text-red-400', label: isRetreat ? 'Caught' : 'Failure' },
   };
 
   const style = outcomeStyles[outcome];
-  // For retreat, success is when roll < target (escape chance)
-  // For normal resolution, success is when roll >= target
   const rollSuccess = isRetreat ? roll < target : roll >= target;
 
   return (
-    <div className="bg-gray-50 rounded-lg border border-gray-200 p-3 space-y-3">
+    <div className="bg-white/5 rounded-lg border border-white/10 p-3 space-y-3">
       {/* Header with outcome */}
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+        <span className="text-xs font-medium text-white/50 uppercase tracking-wide">
           Resolution
         </span>
         <span className={`text-xs font-bold px-2 py-0.5 rounded ${style.bg} ${style.text}`}>
@@ -50,49 +47,47 @@ export function ResolutionBreakdownCard({
         </span>
       </div>
 
-      {/* Roll vs Target - the main numbers */}
+      {/* Roll vs Target */}
       <div className="flex items-center justify-center gap-4">
         <div className="text-center">
-          <div className="flex items-center gap-1 text-gray-500 text-xs mb-1">
+          <div className="flex items-center gap-1 text-white/50 text-xs mb-1">
             <Dice5 className="h-3 w-3" />
             <span>Roll</span>
           </div>
-          <span className={`text-2xl font-bold ${rollSuccess ? 'text-green-600' : 'text-red-600'}`}>
+          <span className={`text-2xl font-bold ${rollSuccess ? 'text-green-400' : 'text-red-400'}`}>
             {roll}{isRetreat ? '%' : ''}
           </span>
         </div>
 
-        <div className="text-gray-400 text-lg">{isRetreat ? '<' : 'vs'}</div>
+        <div className="text-white/40 text-lg">{isRetreat ? '<' : 'vs'}</div>
 
         <div className="text-center">
-          <div className="flex items-center gap-1 text-gray-500 text-xs mb-1">
+          <div className="flex items-center gap-1 text-white/50 text-xs mb-1">
             <Target className="h-3 w-3" />
             <span>{isRetreat ? 'Escape Chance' : 'Target'}</span>
           </div>
-          <span className="text-2xl font-bold text-gray-700">{target}{isRetreat ? '%' : ''}</span>
+          <span className="text-2xl font-bold text-white/80">{target}{isRetreat ? '%' : ''}</span>
         </div>
       </div>
 
       {/* Modifiers list */}
       {modifiers.length > 0 && (
-        <div className="space-y-1 pt-2 border-t border-gray-200">
-          <span className="text-xs text-gray-500">{isRetreat ? 'Escape Modifiers:' : 'Modifiers:'}</span>
+        <div className="space-y-1 pt-2 border-t border-white/10">
+          <span className="text-xs text-white/50">{isRetreat ? 'Escape Modifiers:' : 'Modifiers:'}</span>
           <div className="space-y-0.5">
             {modifiers.map((mod, idx) => {
-              // For retreat, positive values are good (increase escape chance)
-              // For normal resolution, negative values are good (lower target)
               const isGood = isRetreat ? mod.value > 0 : mod.value < 0;
               const isBad = isRetreat ? mod.value < 0 : mod.value > 0;
 
               return (
                 <div key={idx} className="flex items-center justify-between text-xs">
-                  <span className="text-gray-600">{mod.label}</span>
+                  <span className="text-white/60">{mod.label}</span>
                   <span className={`font-medium flex items-center gap-0.5 ${
                     isGood
-                      ? 'text-green-600'
+                      ? 'text-green-400'
                       : isBad
-                      ? 'text-red-600'
-                      : 'text-gray-500'
+                      ? 'text-red-400'
+                      : 'text-white/50'
                   }`}>
                     {mod.value === 0 ? (
                       <>
@@ -119,7 +114,7 @@ export function ResolutionBreakdownCard({
       )}
 
       {/* Summary */}
-      <p className="text-xs text-gray-500 italic pt-1 border-t border-gray-200">
+      <p className="text-xs text-white/50 italic pt-1 border-t border-white/10">
         {summary}
       </p>
     </div>

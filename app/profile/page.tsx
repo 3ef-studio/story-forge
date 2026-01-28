@@ -3,8 +3,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/app/components/ui/card';
-import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import { Progress } from '@/app/components/ui/progress';
 import { getOriginById } from '@/app/data/origins';
@@ -85,10 +83,10 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="min-h-screen flex items-center justify-center bg-gray-950">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading profile...</p>
+          <p className="mt-4 text-white/60">Loading profile...</p>
         </div>
       </div>
     );
@@ -96,9 +94,9 @@ export default function ProfilePage() {
 
   if (!character) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="min-h-screen flex items-center justify-center bg-gray-950">
         <div className="text-center">
-          <p className="text-gray-600">No character found. Redirecting...</p>
+          <p className="text-white/60">No character found. Redirecting...</p>
         </div>
       </div>
     );
@@ -106,17 +104,23 @@ export default function ProfilePage() {
 
   const origin = getOriginById(character.originId);
 
-  // Get major story events (high weight)
   const majorEvents = character.storyEvents
     .filter((e) => e.weight >= 7)
     .slice(0, 5);
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div
+      className="min-h-screen bg-gray-950 game-backdrop"
+      style={{
+        backgroundImage: `url('/images/downtown.png')`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }}
+    >
       {/* Header */}
-      <header className="bg-white border-b">
+      <header className="bg-gray-950/90 border-b border-white/10 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
-          <Link href="/game" className="flex items-center gap-2 text-gray-600 hover:text-gray-900">
+          <Link href="/game" className="flex items-center gap-2 text-white/70 hover:text-white">
             <ArrowLeft className="h-5 w-5" />
             Back to Game
           </Link>
@@ -125,41 +129,41 @@ export default function ProfilePage() {
 
       <main className="max-w-4xl mx-auto px-4 py-8 space-y-6">
         {/* Character Overview */}
-        <Card>
-          <CardHeader>
+        <div className="panel-solid rounded-2xl overflow-hidden">
+          <div className="p-4 sm:p-6">
             <div className="flex items-center gap-4">
-              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
-                <User className="h-8 w-8 text-blue-500" />
+              <div className="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center">
+                <User className="h-8 w-8 text-blue-400" />
               </div>
               <div>
-                <CardTitle className="text-2xl">{character.name}</CardTitle>
-                <CardDescription>
+                <h2 className="text-2xl font-bold text-white">{character.name}</h2>
+                <p className="text-white/50">
                   {origin?.name} - Level {character.level}
-                </CardDescription>
+                </p>
               </div>
             </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
+          </div>
+          <div className="space-y-4 px-4 sm:px-6 pb-5">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="text-center p-3 bg-gray-50 rounded-lg">
-                <p className="text-sm text-gray-500">Level</p>
-                <p className="text-2xl font-bold">{character.level}</p>
+              <div className="text-center p-3 bg-white/5 rounded-lg border border-white/10">
+                <p className="text-sm text-white/50">Level</p>
+                <p className="text-2xl font-bold text-white">{character.level}</p>
               </div>
-              <div className="text-center p-3 bg-gray-50 rounded-lg">
-                <p className="text-sm text-gray-500">HP</p>
-                <p className="text-2xl font-bold">
+              <div className="text-center p-3 bg-white/5 rounded-lg border border-white/10">
+                <p className="text-sm text-white/50">HP</p>
+                <p className="text-2xl font-bold text-white">
                   {character.currentHp}/{character.maxHp}
                 </p>
               </div>
-              <div className="text-center p-3 bg-gray-50 rounded-lg">
-                <p className="text-sm text-gray-500">Energy</p>
-                <p className="text-2xl font-bold">
+              <div className="text-center p-3 bg-white/5 rounded-lg border border-white/10">
+                <p className="text-sm text-white/50">Energy</p>
+                <p className="text-2xl font-bold text-white">
                   {character.currentEnergy}/{character.maxEnergy}
                 </p>
               </div>
-              <div className="text-center p-3 bg-gray-50 rounded-lg">
-                <p className="text-sm text-gray-500">Money</p>
-                <p className="text-2xl font-bold">${character.money}</p>
+              <div className="text-center p-3 bg-white/5 rounded-lg border border-white/10">
+                <p className="text-sm text-white/50">Money</p>
+                <p className="text-2xl font-bold text-white">${character.money}</p>
               </div>
             </div>
 
@@ -170,98 +174,98 @@ export default function ProfilePage() {
               showLabel
               label={`XP to Level ${character.level + 1}`}
             />
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {/* Origin Story */}
         {origin && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+          <div className="panel-glass rounded-2xl overflow-hidden">
+            <div className="p-4 sm:p-6">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
                 <ScrollText className="h-5 w-5" />
                 Origin: {origin.name}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-gray-600">{origin.backstory}</p>
+              </h3>
+            </div>
+            <div className="space-y-4 px-4 sm:px-6 pb-5">
+              <p className="text-white/70">{origin.backstory}</p>
 
-              <div className="bg-blue-50 rounded-lg p-4">
-                <h4 className="font-semibold text-blue-900 mb-1">
+              <div className="bg-blue-500/15 border border-blue-500/20 rounded-lg p-4">
+                <h4 className="font-semibold text-blue-300 mb-1">
                   {origin.uniqueTrait.name}
                 </h4>
-                <p className="text-sm text-blue-700">
+                <p className="text-sm text-blue-200/80">
                   {origin.uniqueTrait.description}
                 </p>
-                <p className="text-xs text-blue-600 mt-1 italic">
+                <p className="text-xs text-blue-300/60 mt-1 italic">
                   {origin.uniqueTrait.mechanicalEffect}
                 </p>
               </div>
 
-              <div className="bg-gray-50 rounded-lg p-4">
-                <h4 className="font-semibold text-gray-900 mb-1">Your Goal</h4>
-                <p className="text-sm text-gray-600">{origin.personalGoal}</p>
+              <div className="bg-white/5 border border-white/10 rounded-lg p-4">
+                <h4 className="font-semibold text-white/90 mb-1">Your Goal</h4>
+                <p className="text-sm text-white/70">{origin.personalGoal}</p>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         )}
 
         {/* Attributes */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Attributes</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <div className="panel-glass rounded-2xl overflow-hidden">
+          <div className="p-4 sm:p-6">
+            <h3 className="text-lg font-bold text-white">Attributes</h3>
+          </div>
+          <div className="px-4 sm:px-6 pb-5">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {Object.entries(character.attributes).map(([id, value]) => {
                 const attr = getAttributeById(id);
                 return (
                   <div
                     key={id}
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                    className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10"
                   >
-                    <span className="text-sm text-gray-600 capitalize">
+                    <span className="text-sm text-white/60 capitalize">
                       {attr?.name || id}
                     </span>
-                    <span className="font-bold text-lg">{value}</span>
+                    <span className="font-bold text-lg text-white">{value}</span>
                   </div>
                 );
               })}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {/* Powers */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+        <div className="panel-glass rounded-2xl overflow-hidden">
+          <div className="p-4 sm:p-6">
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
               <Zap className="h-5 w-5" />
               Powers
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+            </h3>
+          </div>
+          <div className="px-4 sm:px-6 pb-5">
             {character.powers.length === 0 ? (
-              <p className="text-gray-500">No powers unlocked yet.</p>
+              <p className="text-white/50">No powers unlocked yet.</p>
             ) : (
               <div className="space-y-4">
                 {character.powers.map((power) => {
                   const powerData = getPowerById(power.powerId);
                   return (
-                    <div key={power.powerId} className="bg-gray-50 rounded-lg p-4">
+                    <div key={power.powerId} className="bg-white/5 rounded-lg border border-white/10 p-4">
                       <div className="flex items-start justify-between mb-2">
                         <div>
-                          <h4 className="font-semibold">
+                          <h4 className="font-semibold text-white/90">
                             {powerData?.name || power.powerId}
                           </h4>
-                          <p className="text-sm text-gray-500 capitalize">
+                          <p className="text-sm text-white/50 capitalize">
                             {powerData?.category}
                           </p>
                         </div>
                         <Badge variant="outline">Level {power.level}</Badge>
                       </div>
-                      <p className="text-sm text-gray-600 mb-2">
+                      <p className="text-sm text-white/60 mb-2">
                         {powerData?.description}
                       </p>
-                      <div className="text-xs text-gray-400">
+                      <div className="text-xs text-white/40">
                         Used {power.timesUsed} times
                       </div>
                     </div>
@@ -269,18 +273,18 @@ export default function ProfilePage() {
                 })}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {/* Faction Standings */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+        <div className="panel-glass rounded-2xl overflow-hidden">
+          <div className="p-4 sm:p-6">
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
               <Users className="h-5 w-5" />
               Faction Standings
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+            </h3>
+          </div>
+          <div className="px-4 sm:px-6 pb-5">
             <div className="space-y-3">
               {Object.entries(character.factions)
                 .sort(([, a], [, b]) => b - a)
@@ -291,11 +295,11 @@ export default function ProfilePage() {
                   const descriptor = getReputationDescriptor(faction, reputation);
 
                   const attitudeColors: Record<string, string> = {
-                    hostile: 'bg-red-100 text-red-700 border-red-200',
-                    suspicious: 'bg-yellow-100 text-yellow-700 border-yellow-200',
-                    neutral: 'bg-gray-100 text-gray-700 border-gray-200',
-                    friendly: 'bg-green-100 text-green-700 border-green-200',
-                    allied: 'bg-blue-100 text-blue-700 border-blue-200',
+                    hostile: 'bg-red-500/15 text-red-300 border-red-500/20',
+                    suspicious: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/20',
+                    neutral: 'bg-white/5 text-white/70 border-white/10',
+                    friendly: 'bg-green-500/15 text-green-300 border-green-500/20',
+                    allied: 'bg-blue-500/15 text-blue-300 border-blue-500/20',
                   };
 
                   return (
@@ -318,79 +322,79 @@ export default function ProfilePage() {
                   );
                 })}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {/* Major Story Events */}
         {majorEvents.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Story Highlights</CardTitle>
-            </CardHeader>
-            <CardContent>
+          <div className="panel-glass rounded-2xl overflow-hidden">
+            <div className="p-4 sm:p-6">
+              <h3 className="text-lg font-bold text-white">Story Highlights</h3>
+            </div>
+            <div className="px-4 sm:px-6 pb-5">
               <div className="space-y-2">
                 {majorEvents.map((event) => (
-                  <div key={event.id} className="p-3 bg-gray-50 rounded-lg">
-                    <p className="text-sm">{event.summary}</p>
-                    <p className="text-xs text-gray-400 mt-1">
+                  <div key={event.id} className="p-3 bg-white/5 rounded-lg border border-white/10">
+                    <p className="text-sm text-white/80">{event.summary}</p>
+                    <p className="text-xs text-white/40 mt-1">
                       {new Date(event.createdAt).toLocaleDateString()}
                     </p>
                   </div>
                 ))}
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         )}
 
         {/* Danger Zone */}
-        <Card className="border-red-200">
-          <CardHeader>
-            <CardTitle className="text-red-600">Danger Zone</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <div className="panel-solid rounded-2xl border-red-500/30 overflow-hidden">
+          <div className="p-4 sm:p-6">
+            <h3 className="text-lg font-bold text-red-400">Danger Zone</h3>
+          </div>
+          <div className="px-4 sm:px-6 pb-5">
             {!showDeleteConfirm ? (
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="font-medium">Delete Character</p>
-                  <p className="text-sm text-gray-500">
+                  <p className="font-medium text-white/90">Delete Character</p>
+                  <p className="text-sm text-white/50">
                     Permanently delete your character and all progress.
                   </p>
                 </div>
-                <Button
-                  variant="destructive"
+                <button
+                  className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-medium text-sm transition-colors flex items-center gap-2"
                   onClick={() => setShowDeleteConfirm(true)}
                 >
-                  <Trash2 className="h-4 w-4 mr-2" />
+                  <Trash2 className="h-4 w-4" />
                   Delete
-                </Button>
+                </button>
               </div>
             ) : (
-              <div className="bg-red-50 p-4 rounded-lg">
-                <p className="font-medium text-red-700 mb-2">
+              <div className="bg-red-500/15 border border-red-500/20 p-4 rounded-lg">
+                <p className="font-medium text-red-300 mb-2">
                   Are you sure you want to delete {character.name}?
                 </p>
-                <p className="text-sm text-red-600 mb-4">
+                <p className="text-sm text-red-300/70 mb-4">
                   This action cannot be undone. All progress will be lost.
                 </p>
                 <div className="flex gap-2">
-                  <Button
-                    variant="destructive"
+                  <button
+                    className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
                     onClick={handleDeleteCharacter}
-                    isLoading={deleting}
+                    disabled={deleting}
                   >
-                    Yes, Delete Forever
-                  </Button>
-                  <Button
-                    variant="outline"
+                    {deleting ? 'Deleting...' : 'Yes, Delete Forever'}
+                  </button>
+                  <button
+                    className="px-4 py-2 bg-white/10 hover:bg-white/15 text-white/80 rounded-lg font-medium text-sm transition-colors border border-white/15"
                     onClick={() => setShowDeleteConfirm(false)}
                   >
                     Cancel
-                  </Button>
+                  </button>
                 </div>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </main>
     </div>
   );

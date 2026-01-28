@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Progress } from '@/app/components/ui/progress';
 import { Badge } from '@/app/components/ui/badge';
 import { getOriginById } from '@/app/data/origins';
@@ -62,12 +61,12 @@ function SectionHeader({
       onClick={onToggle}
       className="flex items-center justify-between w-full px-4 py-3"
     >
-      <span className="text-base font-semibold flex items-center gap-2 text-gray-800">
+      <span className="text-base font-semibold flex items-center gap-2 text-white/90">
         {icon}
         {title}
       </span>
       <ChevronDown
-        className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${
+        className={`h-4 w-4 text-white/40 transition-transform duration-200 ${
           open ? 'rotate-180' : ''
         }`}
       />
@@ -95,7 +94,7 @@ export function CharacterSheet({ character }: CharacterSheetProps) {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <Card className="overflow-hidden rounded-2xl">
+      <div className="panel-glass overflow-hidden rounded-2xl">
         <div className="bg-linear-to-r from-blue-500 to-purple-600 px-4 py-3">
           <div className="flex items-center justify-between">
             <div>
@@ -107,7 +106,7 @@ export function CharacterSheet({ character }: CharacterSheetProps) {
             </Badge>
           </div>
         </div>
-        <CardContent className="space-y-3 pt-4">
+        <div className="space-y-3 p-4">
           {/* HP Bar */}
           <Progress
             value={character.currentHp}
@@ -137,27 +136,27 @@ export function CharacterSheet({ character }: CharacterSheetProps) {
 
           {/* Money */}
           <div className="flex justify-between items-center text-sm pt-2 px-1">
-            <span className="text-gray-600 flex items-center gap-1">
-              <span className="text-green-600 font-semibold">$</span>
+            <span className="text-white/60 flex items-center gap-1">
+              <span className="text-green-400 font-semibold">$</span>
               Money
             </span>
-            <span className="font-bold text-green-600 text-base">${character.money}</span>
+            <span className="font-bold text-green-400 text-base">${character.money}</span>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* Powers (shown first) */}
-      <Card className="rounded-2xl overflow-hidden">
+      <div className="panel-glass rounded-2xl overflow-hidden">
         <SectionHeader
           title="Powers"
-          icon={<Zap className="h-5 w-5 text-purple-500" />}
+          icon={<Zap className="h-5 w-5 text-purple-400" />}
           open={powersOpen}
           onToggle={() => setPowersOpen(!powersOpen)}
         />
         {powersOpen && (
-          <CardContent className="pt-0 pb-4">
+          <div className="px-4 pb-4">
             {character.powers.length === 0 ? (
-              <p className="text-sm text-gray-500">No powers unlocked yet</p>
+              <p className="text-sm text-white/50">No powers unlocked yet</p>
             ) : (
               <div className="space-y-2.5">
                 {character.powers.map((power) => {
@@ -168,56 +167,56 @@ export function CharacterSheet({ character }: CharacterSheetProps) {
                   return (
                     <div
                       key={power.powerId}
-                      className="p-3 bg-gray-50 rounded-xl"
+                      className="p-3 bg-white/5 rounded-xl border border-white/10"
                     >
                       <div className="flex items-center justify-between">
                         <div>
-                          <span className="font-semibold text-sm text-gray-900">
+                          <span className="font-semibold text-sm text-white/90">
                             {powerData?.name || power.powerId}
                           </span>
-                          <p className="text-xs text-gray-500">
+                          <p className="text-xs text-white/50">
                             {powerData?.category}
                           </p>
                         </div>
-                        <Badge variant="outline">Lv. {power.level}</Badge>
+                        <Badge variant="outline" className="border-white/20 text-white/70">Lv. {power.level}</Badge>
                       </div>
                       {/* XP Progress Bar */}
                       {!isMaxLevel && (
                         <div className="mt-2">
-                          <div className="flex justify-between text-xs text-gray-500 mb-0.5">
+                          <div className="flex justify-between text-xs text-white/50 mb-0.5">
                             <span>XP</span>
                             <span>{power.xp}/{xpToNext}</span>
                           </div>
-                          <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                          <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
                             <div
-                              className="h-full bg-purple-500 transition-all duration-300"
+                              className="h-full bg-purple-400 transition-all duration-300"
                               style={{ width: `${xpPercent}%` }}
                             />
                           </div>
                         </div>
                       )}
                       {isMaxLevel && (
-                        <div className="mt-1.5 text-xs text-purple-600 font-semibold">MAX LEVEL</div>
+                        <div className="mt-1.5 text-xs text-purple-400 font-semibold">MAX LEVEL</div>
                       )}
                     </div>
                   );
                 })}
               </div>
             )}
-          </CardContent>
+          </div>
         )}
-      </Card>
+      </div>
 
       {/* Attributes */}
-      <Card className="rounded-2xl overflow-hidden">
+      <div className="panel-glass rounded-2xl overflow-hidden">
         <SectionHeader
           title="Attributes"
-          icon={<Star className="h-5 w-5 text-yellow-500" />}
+          icon={<Star className="h-5 w-5 text-yellow-400" />}
           open={attributesOpen}
           onToggle={() => setAttributesOpen(!attributesOpen)}
         />
         {attributesOpen && (
-          <CardContent className="pt-0 pb-4">
+          <div className="px-4 pb-4">
             <div className="grid grid-cols-2 gap-2">
               {Object.entries(character.attributes)
                 .filter(([id]) => !['reputation', 'notoriety'].includes(id))
@@ -226,39 +225,39 @@ export function CharacterSheet({ character }: CharacterSheetProps) {
                   return (
                     <div
                       key={id}
-                      className="flex items-center justify-between p-2.5 bg-gray-50 rounded-xl"
+                      className="flex items-center justify-between p-2.5 bg-white/5 rounded-xl border border-white/10"
                     >
-                      <span className="flex items-center gap-1.5 text-xs text-gray-500 capitalize">
+                      <span className="flex items-center gap-1.5 text-xs text-white/50 capitalize">
                         {attributeIcons[id]}
                         {attr?.name || id}
                       </span>
-                      <span className="font-bold text-lg text-gray-900">{value}</span>
+                      <span className="font-bold text-lg text-white">{value}</span>
                     </div>
                   );
                 })}
             </div>
 
             {/* Reputation & Notoriety */}
-            <div className="mt-3 pt-3 border-t grid grid-cols-2 gap-2">
-              <div className="flex justify-between items-center p-2.5 bg-blue-50 rounded-xl">
-                <span className="text-xs text-blue-700">Reputation</span>
-                <span className="font-bold text-lg text-blue-700">
+            <div className="mt-3 pt-3 border-t border-white/10 grid grid-cols-2 gap-2">
+              <div className="flex justify-between items-center p-2.5 bg-blue-500/15 rounded-xl border border-blue-500/20">
+                <span className="text-xs text-blue-300">Reputation</span>
+                <span className="font-bold text-lg text-blue-300">
                   {character.attributes.reputation || 0}
                 </span>
               </div>
-              <div className="flex justify-between items-center p-2.5 bg-red-50 rounded-xl">
-                <span className="text-xs text-red-700">Notoriety</span>
-                <span className="font-bold text-lg text-red-700">
+              <div className="flex justify-between items-center p-2.5 bg-red-500/15 rounded-xl border border-red-500/20">
+                <span className="text-xs text-red-300">Notoriety</span>
+                <span className="font-bold text-lg text-red-300">
                   {character.attributes.notoriety || 0}
                 </span>
               </div>
             </div>
-          </CardContent>
+          </div>
         )}
-      </Card>
+      </div>
 
       {/* Factions */}
-      <Card className="rounded-2xl overflow-hidden">
+      <div className="panel-glass rounded-2xl overflow-hidden">
         <SectionHeader
           title="Factions"
           icon={<span className="text-base">🏛</span>}
@@ -266,7 +265,7 @@ export function CharacterSheet({ character }: CharacterSheetProps) {
           onToggle={() => setFactionsOpen(!factionsOpen)}
         />
         {factionsOpen && (
-          <CardContent className="pt-0 pb-4">
+          <div className="px-4 pb-4">
             <div className="space-y-2.5">
               {Object.entries(character.factions)
                 .sort(([, a], [, b]) => b - a)
@@ -281,11 +280,11 @@ export function CharacterSheet({ character }: CharacterSheetProps) {
                       key={factionId}
                       className="flex items-center justify-between py-1"
                     >
-                      <span className="text-sm text-gray-700 font-medium">
+                      <span className="text-sm text-white/80 font-medium">
                         {faction.shortName}
                       </span>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-500">
+                        <span className="text-xs text-white/50">
                           {reputation > 0 ? '+' : ''}
                           {reputation}
                         </span>
@@ -300,35 +299,31 @@ export function CharacterSheet({ character }: CharacterSheetProps) {
                   );
                 })}
             </div>
-          </CardContent>
+          </div>
         )}
-      </Card>
+      </div>
 
       {/* Active Consequence Thread */}
       {character.activeThread && (
-        <Card className="border-amber-200 bg-amber-50/50 rounded-2xl">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2 text-amber-700">
-              <AlertTriangle className="h-5 w-5" />
-              Consequence Thread
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-semibold text-amber-800">
-                  {character.activeThread.title}
-                </span>
-                <Badge variant="outline" className="text-amber-600 border-amber-300">
-                  {character.activeThread.expiresIn} actions
-                </Badge>
-              </div>
-              <p className="text-sm text-amber-700">
-                {character.activeThread.summary}
-              </p>
+        <div className="panel-solid rounded-2xl p-4">
+          <h3 className="text-base font-semibold flex items-center gap-2 text-amber-400 mb-3">
+            <AlertTriangle className="h-5 w-5" />
+            Consequence Thread
+          </h3>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-amber-300">
+                {character.activeThread.title}
+              </span>
+              <Badge variant="outline" className="text-amber-400 border-amber-500/50">
+                {character.activeThread.expiresIn} actions
+              </Badge>
             </div>
-          </CardContent>
-        </Card>
+            <p className="text-sm text-white/70">
+              {character.activeThread.summary}
+            </p>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -1,9 +1,7 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
-import { Button } from '@/app/components/ui/button';
 import { actions, type Action, type ActionCategory, getAvailableActions, normalizeActionId } from '@/app/data/actions';
 import { isActionAvailableInDistrict, isActionGlobal, type DistrictId } from '@/app/data/districts';
 import { DistrictSelector } from '@/app/components/game/DistrictSelector';
@@ -161,12 +159,12 @@ export function ActionSelector({
               key={action.id}
               onClick={() => onSelectAction(action)}
               disabled={disabled || !available || !!disabledReason}
-              className={`group text-left px-4 py-3.5 rounded-xl border shadow-sm transition-colors min-h-[56px] ${
+              className={`group text-left px-4 py-3.5 rounded-xl border transition-colors min-h-[56px] ${
                 !available || disabledReason
-                  ? 'bg-gray-50 border-gray-200 opacity-50 cursor-not-allowed'
+                  ? 'bg-white/5 border-white/10 opacity-50 cursor-not-allowed'
                   : advancesGoal
-                  ? 'bg-yellow-50 border-yellow-200 active:bg-yellow-100'
-                  : 'bg-white border-gray-200 active:bg-gray-100'
+                  ? 'bg-yellow-500/10 border-yellow-500/30 active:bg-yellow-500/20'
+                  : 'bg-white/10 border-white/10 active:bg-white/15'
               }`}
             >
               <div className="flex items-center gap-3">
@@ -175,24 +173,24 @@ export function ActionSelector({
                 </span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <span className="font-semibold text-sm text-gray-900 truncate">
+                    <span className="font-semibold text-sm text-white/90 truncate">
                       {action.name}
                     </span>
                     {advancesGoal && (
-                      <Star className="h-3.5 w-3.5 text-yellow-500 fill-yellow-500 flex-shrink-0" />
+                      <Star className="h-3.5 w-3.5 text-yellow-400 fill-yellow-400 flex-shrink-0" />
                     )}
                   </div>
-                  <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{action.description}</p>
+                  <p className="text-xs text-white/50 mt-0.5 line-clamp-1">{action.description}</p>
                 </div>
                 <div className="flex flex-col items-end gap-1 flex-shrink-0">
                   <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                    action.energyCost <= 0 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                    action.energyCost <= 0 ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300'
                   }`}>
                     <Zap className="h-3 w-3 inline -mt-0.5 mr-0.5" />
                     {action.energyCost <= 0 ? `+${Math.abs(action.energyCost)}` : action.energyCost}
                   </span>
                   {isOnCooldown(action.id) && (
-                    <span className="text-[10px] text-gray-400 flex items-center gap-0.5">
+                    <span className="text-[10px] text-white/40 flex items-center gap-0.5">
                       <Clock className="h-2.5 w-2.5" />
                       {getCooldownRemaining(action.id)}
                     </span>
@@ -202,8 +200,8 @@ export function ActionSelector({
               {disabledReason && (
                 <div className={`mt-2 flex items-center gap-1.5 text-xs rounded-lg px-2.5 py-1.5 ${
                   disabledReason === 'Not available here'
-                    ? 'text-amber-600 bg-amber-50'
-                    : 'text-red-500 bg-red-50'
+                    ? 'text-amber-400 bg-amber-500/15'
+                    : 'text-red-400 bg-red-500/15'
                 }`}>
                   {disabledReason === 'Not available here'
                     ? <MapPinOff className="h-3 w-3 flex-shrink-0" />
@@ -222,12 +220,12 @@ export function ActionSelector({
             key={action.id}
             onClick={() => onSelectAction(action)}
             disabled={disabled || !available || !!disabledReason}
-            className={`group text-left p-4 rounded-xl border-2 transition-all duration-200 ${
+            className={`group text-left p-4 rounded-xl border transition-all duration-200 ${
               !available || disabledReason
-                ? 'bg-gray-50 border-gray-200 opacity-60 cursor-not-allowed'
+                ? 'bg-white/5 border-white/10 opacity-60 cursor-not-allowed'
                 : advancesGoal
-                ? 'bg-yellow-50 border-yellow-300 hover:border-yellow-400 hover:shadow-md hover:shadow-yellow-100 hover:-translate-y-0.5 cursor-pointer active:translate-y-0 active:shadow-sm'
-                : 'bg-white border-gray-200 hover:border-blue-400 hover:shadow-md hover:shadow-blue-100 hover:-translate-y-0.5 cursor-pointer active:translate-y-0 active:shadow-sm'
+                ? 'bg-yellow-500/10 border-yellow-500/30 hover:border-yellow-400/50 hover:bg-yellow-500/15 hover:-translate-y-0.5 cursor-pointer active:translate-y-0'
+                : 'bg-white/10 border-white/10 hover:border-blue-400/40 hover:bg-white/15 hover:-translate-y-0.5 cursor-pointer active:translate-y-0'
             }`}
           >
             <div className="flex items-start justify-between gap-3">
@@ -236,17 +234,17 @@ export function ActionSelector({
                   <span className={`p-1.5 rounded-lg ${info.color} text-white shadow-sm group-hover:scale-110 transition-transform`}>
                     {info.icon}
                   </span>
-                  <span className="font-semibold text-sm text-gray-800 group-hover:text-blue-600 transition-colors">
+                  <span className="font-semibold text-sm text-white/90 group-hover:text-blue-300 transition-colors">
                     {action.name}
                   </span>
                   {advancesGoal && (
-                    <span className="flex items-center gap-1 text-xs text-yellow-600 bg-yellow-100 px-1.5 py-0.5 rounded-full">
-                      <Star className="h-3 w-3 fill-yellow-500" />
+                    <span className="flex items-center gap-1 text-xs text-yellow-400 bg-yellow-500/20 px-1.5 py-0.5 rounded-full">
+                      <Star className="h-3 w-3 fill-yellow-400" />
                       Goal
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-gray-500 mt-1.5 line-clamp-2 leading-relaxed">
+                <p className="text-xs text-white/50 mt-1.5 line-clamp-2 leading-relaxed">
                   {action.description}
                 </p>
               </div>
@@ -255,7 +253,7 @@ export function ActionSelector({
                 {/* Energy Cost */}
                 <Badge
                   variant={action.energyCost <= 0 ? 'success' : 'warning'}
-                  className="text-xs font-medium shadow-sm"
+                  className="text-xs font-medium"
                 >
                   <Zap className="h-3 w-3 mr-1" />
                   {action.energyCost <= 0 ? `+${Math.abs(action.energyCost)}` : action.energyCost}
@@ -263,7 +261,7 @@ export function ActionSelector({
 
                 {/* Cooldown indicator (static per action definition) */}
                 {action.cooldownHours && (
-                  <span className="text-xs text-gray-400 flex items-center gap-1">
+                  <span className="text-xs text-white/40 flex items-center gap-1">
                     <Clock className="h-3 w-3" />
                     {action.cooldownHours}h
                   </span>
@@ -275,8 +273,8 @@ export function ActionSelector({
             {disabledReason && (
               <div className={`mt-2.5 flex items-center gap-1.5 text-xs rounded-lg px-2 py-1.5 ${
                 disabledReason === 'Not available here'
-                  ? 'text-amber-600 bg-amber-50'
-                  : 'text-red-500 bg-red-50'
+                  ? 'text-amber-400 bg-amber-500/15'
+                  : 'text-red-400 bg-red-500/15'
               }`}>
                 {disabledReason === 'Not available here'
                   ? <MapPinOff className="h-3.5 w-3.5 flex-shrink-0" />
@@ -312,8 +310,8 @@ export function ActionSelector({
               onClick={() => setSelectedCategory(cat)}
               className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors min-h-[32px] ${
                 selectedCategory === cat
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'bg-gray-100 text-gray-600 active:bg-gray-200'
+                  ? 'bg-blue-500 text-white shadow-sm'
+                  : 'bg-white/10 text-white/60 active:bg-white/20'
               }`}
             >
               {cat === 'all' ? 'All' : categoryInfo[cat].label}
@@ -326,36 +324,38 @@ export function ActionSelector({
   }
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center justify-between">
-          <span>Actions</span>
-          <div className="flex items-center gap-1 text-sm font-normal text-gray-500">
-            <Zap className="h-4 w-4 text-yellow-500" />
+    <div className="panel-glass rounded-2xl">
+      <div className="p-4 pb-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-white/90">Actions</h3>
+          <div className="flex items-center gap-1 text-sm font-normal text-white/50">
+            <Zap className="h-4 w-4 text-yellow-400" />
             {playerEnergy}
           </div>
-        </CardTitle>
+        </div>
         {districtSelector && <div className="mt-2">{districtSelector}</div>}
 
         {/* Category Tabs */}
         <div className="mt-2 flex flex-wrap gap-1">
           {categories.map((cat) => (
-            <Button
+            <button
               key={cat}
-              variant={selectedCategory === cat ? 'default' : 'outline'}
-              size="sm"
               onClick={() => setSelectedCategory(cat)}
-              className="text-xs"
+              className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
+                selectedCategory === cat
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-white/10 text-white/60 hover:bg-white/15'
+              }`}
             >
               {cat === 'all' ? 'All' : categoryInfo[cat].label}
-            </Button>
+            </button>
           ))}
         </div>
-      </CardHeader>
+      </div>
 
-      <CardContent>
+      <div className="px-4 pb-4">
         {content}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

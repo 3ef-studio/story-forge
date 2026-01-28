@@ -1,7 +1,5 @@
 'use client';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
-
 export type GoalRecord = {
   id: string;
   goalType: string;
@@ -27,16 +25,16 @@ type ActiveGoalsPanelProps = {
 
 export function ActiveGoalsPanel({ goals, completedGoals = [] }: ActiveGoalsPanelProps) {
   return (
-    <Card className="bg-white border-gray-200">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-          <span className="text-yellow-500">&#9733;</span>
+    <div className="panel-glass rounded-2xl">
+      <div className="p-4 pb-3">
+        <h3 className="text-lg font-semibold text-white/90 flex items-center gap-2">
+          <span className="text-yellow-400">&#9733;</span>
           Active Goals
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+        </h3>
+      </div>
+      <div className="px-4 pb-4 space-y-4">
         {goals.length === 0 ? (
-          <p className="text-sm text-gray-500">No active goals</p>
+          <p className="text-sm text-white/50">No active goals</p>
         ) : (
           goals.map((goal) => (
             <GoalItem key={goal.id} goal={goal} />
@@ -44,12 +42,12 @@ export function ActiveGoalsPanel({ goals, completedGoals = [] }: ActiveGoalsPane
         )}
 
         {completedGoals.length > 0 && (
-          <div className="pt-2 border-t border-gray-100">
-            <p className="text-xs text-green-600 font-medium mb-2">Just Completed!</p>
+          <div className="pt-2 border-t border-white/10">
+            <p className="text-xs text-green-400 font-medium mb-2">Just Completed!</p>
             {completedGoals.map((goal) => (
               <div
                 key={goal.id}
-                className="flex items-center gap-2 text-sm text-green-700 bg-green-50 px-3 py-2 rounded-md"
+                className="flex items-center gap-2 text-sm text-green-300 bg-green-500/15 px-3 py-2 rounded-md border border-green-500/20"
               >
                 <span>&#10003;</span>
                 <span>{goal.title}</span>
@@ -58,8 +56,8 @@ export function ActiveGoalsPanel({ goals, completedGoals = [] }: ActiveGoalsPane
             ))}
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -71,21 +69,21 @@ function GoalItem({ goal }: { goal: GoalRecord }) {
     <div className="space-y-2">
       <div className="flex justify-between items-start">
         <div>
-          <h4 className="text-sm font-medium text-gray-900">{goal.title}</h4>
-          <p className="text-xs text-gray-500">{goal.description}</p>
+          <h4 className="text-sm font-medium text-white/90">{goal.title}</h4>
+          <p className="text-xs text-white/50">{goal.description}</p>
         </div>
-        <span className="text-xs text-gray-400 whitespace-nowrap ml-2">
+        <span className="text-xs text-white/40 whitespace-nowrap ml-2">
           +{goal.xpReward} XP
         </span>
       </div>
       <div className="flex items-center gap-2">
-        <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+        <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
           <div
-            className="h-full bg-blue-500 rounded-full transition-all duration-300"
+            className="h-full bg-blue-400 rounded-full transition-all duration-300"
             style={{ width: `${percentage}%` }}
           />
         </div>
-        <span className="text-xs text-gray-600 whitespace-nowrap">
+        <span className="text-xs text-white/60 whitespace-nowrap">
           {progress}/{goal.targetValue}
         </span>
       </div>
