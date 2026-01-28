@@ -10,7 +10,8 @@ import { personalizeSeed, toEncounterTemplate as personalizedToTemplate } from '
 import { buildCharacterContext } from '@/app/lib/ai/context-builder';
 import type { EncounterSeed } from '@/app/lib/ai/types';
 import { applyGoalProgressOnAction, checkAndCompleteGoals, getActiveGoals } from '@/app/lib/game-logic/goal-manager';
-import { buildAttributeMap, buildFactionMap, shouldRestoreEnergy, applyEnergyReset } from '@/app/lib/utils/character-utils';
+import { buildAttributeMap, buildFactionMap } from '@/app/lib/utils/character-utils';
+import { computeEnergyRegen } from '@/app/lib/game-logic/energy-regen';
 import { buildFactionStateSummary } from '@/app/lib/world/faction-state';
 import { shouldEmitCityUpdate, generateCityUpdate, type CityUpdate } from '@/app/lib/world/city-updates';
 import {
@@ -91,11 +92,22 @@ export async function POST(request: Request) {
     // Build powers list
     const powersList = character.powers.map((p) => p.powerId);
 
-    // Check and apply daily energy reset if needed (moved from GET to POST)
-    let currentEnergy = character.currentEnergy;
-    if (shouldRestoreEnergy(character.lastEnergyReset)) {
-      const resetResult = await applyEnergyReset(character.id, character.maxEnergy);
-      currentEnergy = resetResult.currentEnergy;
+    // Apply lazy energy regeneration (catch-up ticks)
+    const regenResult = computeEnergyRegen({
+      currentEnergy: character.currentEnergy,
+      maxEnergy: character.maxEnergy,
+      lastEnergyRegenAt: character.lastEnergyRegenAt,
+    });
+
+    let currentEnergy = regenResult.newEnergy;
+    if (regenResult.changed) {
+      await prisma.character.update({
+        where: { id: character.id },
+        data: {
+          currentEnergy: regenResult.newEnergy,
+          lastEnergyRegenAt: regenResult.newLastEnergyRegenAt,
+        },
+      });
     }
 
     // Check energy (handle rest action which restores energy)
@@ -362,12 +374,14 @@ export async function POST(request: Request) {
       await tx.character.update({
         where: { id: character.id },
         data: {
-          currentEnergy: newEnergy,
+          currentEnergy: leveledUp ? character.maxEnergy + 5 : newEnergy,
           currentHp: newHp,
           currentXp: newXp,
           level: newLevel,
           maxHp: leveledUp ? character.maxHp + 10 : character.maxHp,
           maxEnergy: leveledUp ? character.maxEnergy + 5 : character.maxEnergy,
+          // Reset regen timer on level-up (full energy restore)
+          ...(leveledUp ? { lastEnergyRegenAt: new Date() } : {}),
           money: character.money + action.baseMoneyReward,
           pendingLevelUpAttributePick: leveledUp ? true : undefined,
         },

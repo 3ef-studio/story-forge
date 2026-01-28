@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Progress } from '@/app/components/ui/progress';
 import { Badge } from '@/app/components/ui/badge';
 import { getOriginById } from '@/app/data/origins';
@@ -22,6 +22,8 @@ interface CharacterSheetProps {
     currentEnergy: number;
     maxEnergy: number;
     money: number;
+    nextEnergyRegenAt?: string;
+    energyRegenTickAmount?: number;
     attributes: Record<string, number>;
     powers: Array<{ powerId: string; level: number; xp: number }>;
     factions: Record<string, number>;
@@ -77,6 +79,37 @@ function SectionHeader({
 export function CharacterSheet({ character }: CharacterSheetProps) {
   const origin = getOriginById(character.originId);
 
+  // Energy regen countdown
+  const [regenCountdown, setRegenCountdown] = useState('');
+  const isEnergyFull = character.currentEnergy >= character.maxEnergy;
+
+  useEffect(() => {
+    if (!character.nextEnergyRegenAt || isEnergyFull) {
+      setRegenCountdown('');
+      return;
+    }
+
+    const targetTime = new Date(character.nextEnergyRegenAt).getTime();
+
+    function update() {
+      const remaining = targetTime - Date.now();
+      if (remaining <= 0) {
+        setRegenCountdown('soon');
+        return;
+      }
+      const hours = Math.floor(remaining / (1000 * 60 * 60));
+      const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((remaining % (1000 * 60)) / 1000);
+      setRegenCountdown(
+        `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+      );
+    }
+
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [character.nextEnergyRegenAt, isEnergyFull]);
+
   // Accordion state — powers open by default, rest collapsed
   const [powersOpen, setPowersOpen] = useState(true);
   const [attributesOpen, setAttributesOpen] = useState(false);
@@ -124,6 +157,15 @@ export function CharacterSheet({ character }: CharacterSheetProps) {
             showLabel
             label="Energy"
           />
+          {regenCountdown && (
+            <div className="flex items-center justify-between text-xs px-1 -mt-1.5">
+              <span className="text-white/40">Next energy in</span>
+              <span className="text-yellow-400 font-mono">
+                {regenCountdown === 'soon' ? 'any moment' : regenCountdown}
+                {character.energyRegenTickAmount ? ` (+${character.energyRegenTickAmount})` : ''}
+              </span>
+            </div>
+          )}
 
           {/* XP Bar */}
           <Progress

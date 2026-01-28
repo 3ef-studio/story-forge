@@ -34,6 +34,7 @@ import {
 } from '@/app/lib/game-logic/npc-manager';
 import { getNPCById } from '@/app/data/npcs';
 import { getActionById, normalizeActionId } from '@/app/data/actions';
+import { computeEnergyRegen } from '@/app/lib/game-logic/energy-regen';
 
 // Type for outcome result with optional fields
 type OutcomeResult = {
@@ -94,6 +95,24 @@ async function handleRetreat(
     return NextResponse.json({ error: 'Character not found' }, { status: 404 });
   }
 
+  // Apply lazy energy regeneration
+  const retreatRegen = computeEnergyRegen({
+    currentEnergy: character.currentEnergy,
+    maxEnergy: character.maxEnergy,
+    lastEnergyRegenAt: character.lastEnergyRegenAt,
+  });
+
+  let retreatEnergy = retreatRegen.newEnergy;
+  if (retreatRegen.changed) {
+    await prisma.character.update({
+      where: { id: character.id },
+      data: {
+        currentEnergy: retreatRegen.newEnergy,
+        lastEnergyRegenAt: retreatRegen.newLastEnergyRegenAt,
+      },
+    });
+  }
+
   // Build attribute map
   const attributesMap = buildAttributeMap(character.attributes);
   const powersList = character.powers.map((p) => p.powerId);
@@ -148,10 +167,12 @@ async function handleRetreat(
       where: { id: character.id },
       data: {
         currentHp: newHp,
-        currentEnergy: Math.max(0, character.currentEnergy - energyCost),
+        currentEnergy: leveledUp ? character.maxEnergy + 5 : Math.max(0, retreatEnergy - energyCost),
         currentXp: newXp,
         level: newLevel,
         maxHp: leveledUp ? character.maxHp + 10 : character.maxHp,
+        maxEnergy: leveledUp ? character.maxEnergy + 5 : character.maxEnergy,
+        ...(leveledUp ? { lastEnergyRegenAt: new Date() } : {}),
         pendingLevelUpAttributePick: leveledUp ? true : undefined,
       },
     });
@@ -367,6 +388,26 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Character not found' }, { status: 404 });
     }
 
+    // Apply lazy energy regeneration (catch-up ticks)
+    const regenResult = computeEnergyRegen({
+      currentEnergy: character.currentEnergy,
+      maxEnergy: character.maxEnergy,
+      lastEnergyRegenAt: character.lastEnergyRegenAt,
+    });
+
+    // Track effective energy (may be updated by regen)
+    let effectiveEnergy = regenResult.newEnergy;
+
+    if (regenResult.changed) {
+      await prisma.character.update({
+        where: { id: character.id },
+        data: {
+          currentEnergy: regenResult.newEnergy,
+          lastEnergyRegenAt: regenResult.newLastEnergyRegenAt,
+        },
+      });
+    }
+
     // Build attribute map
     const attributesMap = buildAttributeMap(character.attributes);
 
@@ -417,9 +458,9 @@ export async function POST(request: Request) {
       prepCombatBonus = calculatePrepCombatBonus(validPrepSelection, characterPowers);
 
       // Check if character has enough energy for prep
-      if (character.currentEnergy < prepEnergyCost) {
+      if (effectiveEnergy < prepEnergyCost) {
         return NextResponse.json(
-          { error: `Insufficient energy for prep action. Need ${prepEnergyCost}, have ${character.currentEnergy}` },
+          { error: `Insufficient energy for prep action. Need ${prepEnergyCost}, have ${effectiveEnergy}` },
           { status: 400 }
         );
       }
@@ -546,7 +587,7 @@ export async function POST(request: Request) {
     }
 
     // Calculate new energy after prep cost
-    const newEnergy = Math.max(0, character.currentEnergy - prepEnergyCost);
+    const newEnergy = Math.max(0, effectiveEnergy - prepEnergyCost);
 
     // Update character in transaction
     await prisma.$transaction(async (tx) => {
@@ -554,10 +595,12 @@ export async function POST(request: Request) {
         where: { id: character.id },
         data: {
           currentHp: newHp,
-          currentEnergy: newEnergy,
+          currentEnergy: leveledUp ? character.maxEnergy + 5 : newEnergy,
           currentXp: newXp,
           level: newLevel,
           maxHp: leveledUp ? character.maxHp + 10 : character.maxHp,
+          maxEnergy: leveledUp ? character.maxEnergy + 5 : character.maxEnergy,
+          ...(leveledUp ? { lastEnergyRegenAt: new Date() } : {}),
           pendingLevelUpAttributePick: leveledUp ? true : undefined,
         },
       });

@@ -5,9 +5,9 @@ import {
   buildAttributeMap,
   buildFactionMap,
   buildCooldownMap,
-  shouldRestoreEnergy,
 } from '@/app/lib/utils/character-utils';
 import { getActiveThreadForDisplay } from '@/app/lib/game-logic/thread-manager';
+import { computeEnergyRegen } from '@/app/lib/game-logic/energy-regen';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -50,9 +50,22 @@ export async function GET() {
       );
     }
 
-    // Check if energy needs restoration (read-only check)
-    // Actual reset happens during action execution (POST) to keep GET idempotent
-    const energyNeedsReset = shouldRestoreEnergy(character.lastEnergyReset);
+    // Apply lazy energy regeneration (catch-up ticks)
+    const regenResult = computeEnergyRegen({
+      currentEnergy: character.currentEnergy,
+      maxEnergy: character.maxEnergy,
+      lastEnergyRegenAt: character.lastEnergyRegenAt,
+    });
+
+    if (regenResult.changed) {
+      await prisma.character.update({
+        where: { id: character.id },
+        data: {
+          currentEnergy: regenResult.newEnergy,
+          lastEnergyRegenAt: regenResult.newLastEnergyRegenAt,
+        },
+      });
+    }
 
     // Transform data for client using utility functions
     const attributesMap = buildAttributeMap(character.attributes);
@@ -81,12 +94,13 @@ export async function GET() {
         xpToNextLevel: character.level * 100,
         currentHp: character.currentHp,
         maxHp: character.maxHp,
-        currentEnergy: character.currentEnergy,
+        currentEnergy: regenResult.newEnergy,
         maxEnergy: character.maxEnergy,
         money: character.money,
         pendingLevelUpAttributePick: character.pendingLevelUpAttributePick,
         currentDistrict: character.currentDistrict,
-        lastEnergyReset: character.lastEnergyReset.toISOString(),
+        nextEnergyRegenAt: regenResult.nextEnergyRegenAt,
+        energyRegenTickAmount: regenResult.tickAmount,
         attributes: attributesMap,
         powers: powersMap,
         factions: factionsMap,
@@ -103,7 +117,6 @@ export async function GET() {
         })),
         activeThread,
       },
-      energyNeedsReset,
     });
   } catch (error) {
     console.error('Get character error:', error);
