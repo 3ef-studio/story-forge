@@ -23,7 +23,7 @@ import type { EncounterTemplate } from '@/app/data/encounter-templates';
 import { getLocationBackground } from '@/app/lib/game-logic/location-backgrounds';
 import { LogOut, User, HelpCircle, Menu, X, Sparkles, Trophy, ArrowUp, Users } from 'lucide-react';
 import { previewEncounterResolution, inferApproachFromText } from '@/app/lib/game-logic/combat/resolve-encounter';
-import type { ResolutionPreview } from '@/app/lib/game-logic/combat/types';
+import type { ResolutionPreview, PrepSelection } from '@/app/lib/game-logic/combat/types';
 
 type GameState = 'idle' | 'executing' | 'encounter' | 'resolving' | 'outcome';
 
@@ -441,7 +441,7 @@ export default function GamePage() {
     }
   };
 
-  const handleSelectChoice = async (choiceId: string) => {
+  const handleSelectChoice = async (choiceId: string, prepSelection: PrepSelection | null = null) => {
     if (!currentEncounter || gameState !== 'encounter') return;
 
     setGameState('resolving');
@@ -459,6 +459,7 @@ export default function GamePage() {
           actionId: currentActionContext?.actionId,
           locationType: currentActionContext?.locationType,
           npcId: currentEncounter.npcId,
+          prepSelection,
         }),
       });
 
@@ -476,6 +477,7 @@ export default function GamePage() {
         description: data.outcome.description,
         xpGained: data.outcome.xpGained,
         hpChange: data.outcome.hpChange,
+        energyChange: data.outcome.energyChange,
         factionChanges: data.outcome.factionChanges,
         attributeGrowth: data.outcome.attributeGrowth,
       });
@@ -707,6 +709,8 @@ export default function GamePage() {
           choices={encounterChoices}
           onSelectChoice={handleSelectChoice}
           isResolving={gameState === 'resolving'}
+          characterEnergy={character.currentEnergy}
+          characterPowers={character.powers}
         />
       );
     }

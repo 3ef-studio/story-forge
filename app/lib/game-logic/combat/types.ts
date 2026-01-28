@@ -64,3 +64,33 @@ export type ResolutionPreview = {
   matchedPowers: string[];         // Powers that contributed to synergy
   attributePair: [string, string]; // The two attributes used for this approach
 };
+
+// =============================================================================
+// PREP PHASE TYPES
+// =============================================================================
+
+// Prep action types
+export type PrepActionId = 'momentum' | 'intel' | 'power';
+
+// Prep selection (what the player chose)
+export type PrepSelection =
+  | { type: 'momentum' }
+  | { type: 'intel' }
+  | { type: 'power'; powerId: string };
+
+// Prep applied result (returned from server)
+export type PrepApplied = {
+  type: PrepActionId;
+  combatBonus: number;
+  energyCost: number;
+  powerId?: string;
+  powerName?: string;
+};
+
+// Combat breakdown for outcome display
+export type CombatBreakdown = {
+  baseCombat: number;
+  prepBonus: number;
+  powerBonus: number;
+  totalTarget: number;
+};

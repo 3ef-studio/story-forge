@@ -17,7 +17,9 @@ import type {
   ResolutionBreakdown,
   ResolutionPreview,
   RiskTier,
+  PrepSelection,
 } from './types';
+import { calculatePowerBonus, type CharacterPower } from '../power-progression';
 
 // Approach-specific strength keywords that powers can match
 const APPROACH_STRENGTH_KEYWORDS: Record<Approach, string[]> = {
@@ -475,6 +477,82 @@ export function inferApproachFromText(text: string): Approach {
 
   // Default to tactical for anything else
   return 'tactical';
+}
+
+// =============================================================================
+// PREP PHASE HELPERS
+// =============================================================================
+
+// Prep action definitions
+const PREP_ACTIONS = {
+  momentum: { energyCost: 2, combatBonus: 10, label: 'Build Momentum' },
+  intel: { energyCost: 1, combatBonus: 5, label: 'Gather Intel' },
+} as const;
+
+/**
+ * Calculate the energy cost for a prep selection
+ */
+export function calculatePrepEnergyCost(
+  selection: PrepSelection,
+  characterPowers: CharacterPower[]
+): number {
+  if (selection.type === 'momentum') {
+    return PREP_ACTIONS.momentum.energyCost;
+  }
+  if (selection.type === 'intel') {
+    return PREP_ACTIONS.intel.energyCost;
+  }
+  if (selection.type === 'power') {
+    const power = getPowerById(selection.powerId);
+    if (!power) return 0;
+    return power.energyCost;
+  }
+  return 0;
+}
+
+/**
+ * Calculate the combat bonus for a prep selection
+ * For powers, this uses the existing calculatePowerBonus which considers power level
+ */
+export function calculatePrepCombatBonus(
+  selection: PrepSelection,
+  characterPowers: CharacterPower[]
+): number {
+  if (selection.type === 'momentum') {
+    return PREP_ACTIONS.momentum.combatBonus;
+  }
+  if (selection.type === 'intel') {
+    return PREP_ACTIONS.intel.combatBonus;
+  }
+  if (selection.type === 'power') {
+    const power = getPowerById(selection.powerId);
+    if (!power) return 0;
+
+    // Find the character's power level
+    const charPower = characterPowers.find(cp => cp.powerId === selection.powerId);
+    const powerLevel = charPower?.currentLevel ?? 1;
+
+    // Use the existing power bonus calculation (returns a bounded value)
+    return calculatePowerBonus(power, powerLevel);
+  }
+  return 0;
+}
+
+/**
+ * Get the label for a prep selection (for UI display)
+ */
+export function getPrepLabel(selection: PrepSelection): string {
+  if (selection.type === 'momentum') {
+    return PREP_ACTIONS.momentum.label;
+  }
+  if (selection.type === 'intel') {
+    return PREP_ACTIONS.intel.label;
+  }
+  if (selection.type === 'power') {
+    const power = getPowerById(selection.powerId);
+    return power?.name ?? 'Use Power';
+  }
+  return 'Prep';
 }
 
 // =============================================================================

@@ -8,8 +8,14 @@ import {
 import { calculateReputationImpact, getFactionById } from '@/app/data/factions';
 import { applyGoalProgressOnEncounterResolution, checkAndCompleteGoals, getActiveGoals } from '@/app/lib/game-logic/goal-manager';
 import { buildAttributeMap, buildFactionReputationMap } from '@/app/lib/utils/character-utils';
-import { resolveEncounter, inferApproachFromText } from '@/app/lib/game-logic/combat/resolve-encounter';
-import type { Approach, ResolutionBreakdown } from '@/app/lib/game-logic/combat/types';
+import {
+  resolveEncounter,
+  inferApproachFromText,
+  calculatePrepEnergyCost,
+  calculatePrepCombatBonus,
+  getPrepLabel,
+} from '@/app/lib/game-logic/combat/resolve-encounter';
+import type { Approach, ResolutionBreakdown, PrepSelection, PrepApplied } from '@/app/lib/game-logic/combat/types';
 import {
   selectPowerForApproach,
   calculatePowerXpGain,
@@ -245,12 +251,22 @@ type ResolveActionBody = {
   actionId?: string;
   locationType?: string;
   npcId?: string;
+  prepSelection?: PrepSelection | null;
 };
 
 function isUuidLike(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
     value
   );
+}
+
+function isValidPrepSelection(value: unknown): value is PrepSelection | null {
+  if (value === null || value === undefined) return true;
+  if (typeof value !== 'object') return false;
+  const v = value as Record<string, unknown>;
+  if (v.type === 'momentum' || v.type === 'intel') return true;
+  if (v.type === 'power' && typeof v.powerId === 'string') return true;
+  return false;
 }
 
 function isResolveActionBody(value: unknown): value is ResolveActionBody {
@@ -264,7 +280,8 @@ function isResolveActionBody(value: unknown): value is ResolveActionBody {
     (v.threadId === undefined || typeof v.threadId === 'string') &&
     (v.actionId === undefined || typeof v.actionId === 'string') &&
     (v.locationType === undefined || typeof v.locationType === 'string') &&
-    (v.npcId === undefined || typeof v.npcId === 'string')
+    (v.npcId === undefined || typeof v.npcId === 'string') &&
+    isValidPrepSelection(v.prepSelection)
   );
 }
 
@@ -290,9 +307,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const { encounterId, choiceId, threadId, actionId: rawActionId, locationType, npcId } = rawBody;
+    const { encounterId, choiceId, threadId, actionId: rawActionId, locationType, npcId, prepSelection } = rawBody;
     const actionId = rawActionId ? normalizeActionId(rawActionId) : undefined;
     const isCached = Boolean(rawBody.isCached);
+    const validPrepSelection = prepSelection ?? null;
 
     // Look up encounter from cache or templates
     // Robust behavior: UUID encounterIds are almost certainly cached AI encounters.
@@ -381,17 +399,46 @@ export async function POST(request: Request) {
     // Build faction reputation map
     const factionReputations = buildFactionReputationMap(character.factionReputations);
 
-    // Determine approach from choice (seed choices have it, templates need inference)
-    const choiceWithApproach = choice as ChoiceWithApproach;
-    const approach: Approach = choiceWithApproach.approach ?? inferApproachFromText(choice.text);
-
-    // Select power for this approach
+    // Build character powers for prep calculations
     const characterPowers = character.powers.map((p) => ({
       powerId: p.powerId,
       currentLevel: p.currentLevel,
       currentXp: p.currentXp,
       timesUsed: p.timesUsed,
     }));
+
+    // Calculate prep phase bonuses if selection provided
+    let prepEnergyCost = 0;
+    let prepCombatBonus = 0;
+    let prepApplied: PrepApplied | null = null;
+
+    if (validPrepSelection) {
+      prepEnergyCost = calculatePrepEnergyCost(validPrepSelection, characterPowers);
+      prepCombatBonus = calculatePrepCombatBonus(validPrepSelection, characterPowers);
+
+      // Check if character has enough energy for prep
+      if (character.currentEnergy < prepEnergyCost) {
+        return NextResponse.json(
+          { error: `Insufficient energy for prep action. Need ${prepEnergyCost}, have ${character.currentEnergy}` },
+          { status: 400 }
+        );
+      }
+
+      // Build prep applied result
+      prepApplied = {
+        type: validPrepSelection.type,
+        combatBonus: prepCombatBonus,
+        energyCost: prepEnergyCost,
+        powerId: validPrepSelection.type === 'power' ? validPrepSelection.powerId : undefined,
+        powerName: validPrepSelection.type === 'power' ? getPrepLabel(validPrepSelection) : undefined,
+      };
+    }
+
+    // Determine approach from choice (seed choices have it, templates need inference)
+    const choiceWithApproach = choice as ChoiceWithApproach;
+    const approach: Approach = choiceWithApproach.approach ?? inferApproachFromText(choice.text);
+
+    // Select power for this approach (auto-selected power, separate from prep power)
     const selectedPower = selectPowerForApproach(approach, characterPowers);
 
     // Calculate power level bonus if we have a selected power
@@ -402,6 +449,12 @@ export async function POST(request: Request) {
       powerLevelLabel = `${selectedPower.power.name} Lv${selectedPower.characterPower.currentLevel}`;
     }
 
+    // Add prep combat bonus to power level bonus (they stack)
+    const totalPowerLevelBonus = powerLevelBonus + prepCombatBonus;
+    const totalPowerLevelLabel = prepApplied
+      ? (powerLevelLabel ? `${powerLevelLabel} + Prep` : getPrepLabel(validPrepSelection!))
+      : powerLevelLabel;
+
     // Use the new combat resolver for deterministic, explainable resolution
     const resolution: ResolutionBreakdown = resolveEncounter({
       difficulty: encounter.difficulty,
@@ -411,8 +464,8 @@ export async function POST(request: Request) {
       repByFaction: factionReputations,
       encounterTags: encounter.narrativeTags,
       involvedFactions: encounter.requiredFactions,
-      powerLevelBonus,
-      powerLevelLabel,
+      powerLevelBonus: totalPowerLevelBonus,
+      powerLevelLabel: totalPowerLevelLabel,
     });
 
     // Determine outcome based on resolution
@@ -492,12 +545,16 @@ export async function POST(request: Request) {
       );
     }
 
+    // Calculate new energy after prep cost
+    const newEnergy = Math.max(0, character.currentEnergy - prepEnergyCost);
+
     // Update character in transaction
     await prisma.$transaction(async (tx) => {
       await tx.character.update({
         where: { id: character.id },
         data: {
           currentHp: newHp,
+          currentEnergy: newEnergy,
           currentXp: newXp,
           level: newLevel,
           maxHp: leveledUp ? character.maxHp + 10 : character.maxHp,
@@ -636,6 +693,7 @@ export async function POST(request: Request) {
         description: result.description,
         xpGained,
         hpChange: -hpLoss,
+        energyChange: prepEnergyCost > 0 ? -prepEnergyCost : undefined,
         factionChanges: Object.entries(allReputationChanges).map(([factionId, change]) => ({
           factionId,
           change,
@@ -649,6 +707,7 @@ export async function POST(request: Request) {
         modifiers: resolution.modifiers,
         summary: resolution.summary,
       },
+      prepApplied: prepApplied ?? undefined,
       leveledUp,
       newLevel: leveledUp ? newLevel : undefined,
       goals: {

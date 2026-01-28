@@ -1,11 +1,13 @@
 'use client';
 
+import { useState } from 'react';
 import { Badge } from '@/app/components/ui/badge';
 import type { EncounterTemplate } from '@/app/data/encounter-templates';
 import { getPowerById } from '@/app/data/powers';
 import { AlertTriangle, CheckCircle, XCircle, Star, Zap, LogOut, Link } from 'lucide-react';
 import { ChoicePreviewChips } from './ChoicePreviewChips';
-import type { ResolutionPreview } from '@/app/lib/game-logic/combat/types';
+import { PrepPhase } from './PrepPhase';
+import type { ResolutionPreview, PrepSelection } from '@/app/lib/game-logic/combat/types';
 
 interface EncounterChoice {
   id: string;
@@ -21,11 +23,18 @@ type EncounterWithThread = EncounterTemplate & {
   threadTitle?: string;
 };
 
+interface CharacterPower {
+  powerId: string;
+  level: number;
+}
+
 interface EncounterDisplayProps {
   encounter: EncounterWithThread;
   choices: EncounterChoice[];
-  onSelectChoice: (choiceId: string) => void;
+  onSelectChoice: (choiceId: string, prepSelection: PrepSelection | null) => void;
   isResolving?: boolean;
+  characterEnergy?: number;
+  characterPowers?: CharacterPower[];
 }
 
 export function EncounterDisplay({
@@ -33,7 +42,15 @@ export function EncounterDisplay({
   choices,
   onSelectChoice,
   isResolving = false,
+  characterEnergy = 100,
+  characterPowers = [],
 }: EncounterDisplayProps) {
+  const [prepSelection, setPrepSelection] = useState<PrepSelection | null>(null);
+
+  const handleChoiceClick = (choiceId: string) => {
+    onSelectChoice(choiceId, prepSelection);
+  };
+
   return (
     <div className="panel-glass border border-blue-500/30 rounded-2xl">
       <div className="pb-2 px-4 sm:px-6 pt-4">
@@ -66,6 +83,15 @@ export function EncounterDisplay({
           )}
         </div>
 
+        {/* Prep Phase */}
+        <PrepPhase
+          characterEnergy={characterEnergy}
+          characterPowers={characterPowers}
+          selection={prepSelection}
+          onSelectionChange={setPrepSelection}
+          disabled={isResolving}
+        />
+
         {/* Choices */}
         <div className="space-y-3">
           <h4 className="font-semibold text-white/70 text-sm uppercase tracking-wide">What do you do?</h4>
@@ -78,7 +104,7 @@ export function EncounterDisplay({
                     ? 'bg-white/10 border-white/15 hover:bg-white/15 hover:border-blue-400/40 active:bg-white/20'
                     : 'bg-white/5 border-white/5 opacity-50 cursor-not-allowed'
                 }`}
-                onClick={() => choice.available && onSelectChoice(choice.id)}
+                onClick={() => choice.available && handleChoiceClick(choice.id)}
                 disabled={!choice.available || isResolving}
               >
                 <div className="flex items-start gap-3 w-full">
@@ -125,7 +151,7 @@ export function EncounterDisplay({
           <div className="pt-3 border-t border-white/10 mt-4">
             <button
               className="w-full text-left h-auto py-3.5 px-4 text-white/60 hover:bg-white/10 hover:text-white/80 rounded-xl min-h-[48px] transition-colors"
-              onClick={() => onSelectChoice('retreat')}
+              onClick={() => handleChoiceClick('retreat')}
               disabled={isResolving}
             >
               <div className="flex items-center gap-3 w-full">
