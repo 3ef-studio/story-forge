@@ -178,7 +178,7 @@ export function CharacterSheet({ character }: CharacterSheetProps) {
                             {powerData?.category}
                           </p>
                         </div>
-                        <Badge variant="outline" className="border-white/20 text-white/70">Lv. {power.level}</Badge>
+                        <Badge variant="outline" className="border-white/20 text-black/70">Lv. {power.level}</Badge>
                       </div>
                       {/* XP Progress Bar */}
                       {!isMaxLevel && (

@@ -159,7 +159,7 @@ export function ActionSelector({
               key={action.id}
               onClick={() => onSelectAction(action)}
               disabled={disabled || !available || !!disabledReason}
-              className={`group text-left px-4 py-3.5 rounded-xl border transition-colors min-h-[56px] ${
+              className={`group text-left px-4 py-3.5 rounded-xl border transition-colors min-h-14 ${
                 !available || disabledReason
                   ? 'bg-white/5 border-white/10 opacity-50 cursor-not-allowed'
                   : advancesGoal
