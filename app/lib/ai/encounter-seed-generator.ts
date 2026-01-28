@@ -14,12 +14,16 @@ const VALID_ATTRIBUTE_IDS = [
   'reputation', 'notoriety'
 ]
 const VALID_APPROACHES = ['direct', 'subtle', 'diplomatic', 'tactical'] as const
+const VALID_TONES = ['aggressive', 'cautious', 'clever', 'desperate', 'controlled', 'risky'] as const
+const VALID_OPENING_STYLES = ['sensory', 'dialogue', 'action', 'discovery', 'aftermath'] as const
+const VALID_STAKE_TYPES = ['time_pressure', 'moral_dilemma', 'reputation_risk', 'collateral_risk', 'unknown_threat'] as const
 
 // Zod schema for seed choice
 const seedChoiceSchema = z.object({
   id: z.enum(['choice_1', 'choice_2', 'choice_3', 'choice_4']),
   genericLabel: z.string().min(1).max(100),
   approach: z.enum(VALID_APPROACHES),
+  tone: z.enum(VALID_TONES).optional(),
   requiredAttributes: z.array(z.object({
     attributeId: z.string().refine(val => VALID_ATTRIBUTE_IDS.includes(val)),
     minValue: z.number().int().min(1).max(100),
@@ -58,6 +62,9 @@ const seedOutcomeSchema = z.object({
 const seedSchema = z.object({
   title: z.string().min(1).max(100),
   situationSummary: z.string().min(10).max(300),
+  openingStyle: z.enum(VALID_OPENING_STYLES).optional(),
+  stakeType: z.enum(VALID_STAKE_TYPES).optional(),
+  seedHooks: z.array(z.string().max(60)).max(2).optional(),
   choices: z.array(seedChoiceSchema).length(4),
   outcomes: z.array(seedOutcomeSchema).length(4),
   tags: z.array(z.string()).min(1).max(10),
@@ -166,12 +173,16 @@ export async function generateSeed(input: SeedGenerationInput): Promise<Encounte
       seedId: '', // Will be assigned after caching
       title: sanitizeText(rawSeed.title),
       situationSummary: sanitizeText(rawSeed.situationSummary),
+      openingStyle: rawSeed.openingStyle,
+      stakeType: rawSeed.stakeType,
+      seedHooks: rawSeed.seedHooks?.map(sanitizeText),
       category: input.encounterType,
       difficulty: input.difficulty,
       choices: rawSeed.choices.map(c => ({
         id: c.id,
         genericLabel: sanitizeText(c.genericLabel),
         approach: c.approach,
+        tone: c.tone,
         requiredAttributes: c.requiredAttributes,
         requiredPowers: c.requiredPowers,
       })) as [SeedChoice, SeedChoice, SeedChoice, SeedChoice],

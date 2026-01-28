@@ -112,11 +112,17 @@ export type SeedGenerationInput = {
   involvedFactions: string[] // Sorted for deterministic cache key
 }
 
+// Enums for structural variety in seeds
+export type OpeningStyle = 'sensory' | 'dialogue' | 'action' | 'discovery' | 'aftermath'
+export type StakeType = 'time_pressure' | 'moral_dilemma' | 'reputation_risk' | 'collateral_risk' | 'unknown_threat'
+export type ChoiceTone = 'aggressive' | 'cautious' | 'clever' | 'desperate' | 'controlled' | 'risky'
+
 // A single seed choice - generic, no personalization
 export type SeedChoice = {
   id: string // Stable ID (choice_1, choice_2, etc.)
   genericLabel: string // Generic action description
   approach: 'direct' | 'subtle' | 'diplomatic' | 'tactical' // Approach type
+  tone?: ChoiceTone // Tonal color for choice phrasing
   requiredAttributes?: { attributeId: string; minValue: number }[]
   requiredPowers?: string[]
 }
@@ -146,6 +152,9 @@ export type EncounterSeed = {
   situationSummary: string // 1-2 sentences, neutral
   category: string
   difficulty: number
+  openingStyle?: OpeningStyle // How the encounter opens narratively
+  stakeType?: StakeType // What's at risk in this encounter
+  seedHooks?: string[] // 1-2 short generic callback hooks (max 8 words each)
   choices: [SeedChoice, SeedChoice, SeedChoice, SeedChoice] // Exactly 4 choices
   outcomes: SeedOutcome[]
   tags: string[] // Metadata for matching/filtering

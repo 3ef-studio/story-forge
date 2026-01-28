@@ -1,7 +1,7 @@
 // lib/ai/encounter-personalizer.ts
 // Personalizes encounter seeds with character context - cheap, no structure changes
 
-import type { EncounterSeed, PersonalizerInput, PersonalizedEncounter, CharacterContext } from './types'
+import type { EncounterSeed, PersonalizerInput, PersonalizedEncounter, CharacterContext, OpeningStyle, StakeType, ChoiceTone } from './types'
 import type { EncounterTemplate } from '@/app/data/encounter-templates'
 import { buildFactionStateSummary, generateFactionTextureLine, type FactionStateLine } from '@/app/lib/world/faction-state'
 
@@ -59,14 +59,19 @@ export function personalizeSeed(input: PersonalizerInput): PersonalizedEncounter
   // Build personalized narrative intro
   const description = buildPersonalizedDescription(seed, powerNames, reputationTiers, recentEncounterTags)
 
-  // Build personalized choice labels
-  const personalizedChoices = seed.choices.map(choice => ({
-    id: choice.id,
-    text: personalizeChoiceLabel(choice.genericLabel, powerNames),
-    requiredPowers: choice.requiredPowers,
-    requiredAttributes: choice.requiredAttributes,
-    narrativeDescription: choice.genericLabel, // Keep generic as narrative description
-  }))
+  // Build personalized choice labels (tone + power suffix)
+  const personalizedChoices = seed.choices.map(choice => {
+    const tonedLabel = choice.tone
+      ? applyToneToLabel(choice.genericLabel, choice.tone)
+      : choice.genericLabel
+    return {
+      id: choice.id,
+      text: personalizeChoiceLabel(tonedLabel, powerNames),
+      requiredPowers: choice.requiredPowers,
+      requiredAttributes: choice.requiredAttributes,
+      narrativeDescription: choice.genericLabel, // Keep generic as narrative description
+    }
+  })
 
   // Build personalized title (lightweight)
   const name = personalizeTitle(seed.title, seed, recentEncounterTags)
@@ -91,13 +96,74 @@ export function personalizeSeed(input: PersonalizerInput): PersonalizedEncounter
 // Narrative building blocks
 // -----------------------------
 
+// Opening line based on openingStyle (varies the first sentence)
+function buildOpeningLine(style: OpeningStyle): string {
+  switch (style) {
+    case 'sensory':
+      return 'The air shifts—something sharp, electric, wrong.'
+    case 'dialogue':
+      return '"This doesn\'t concern you." The words land before anyone turns around.'
+    case 'action':
+      return 'It\'s already happening when the scene comes into focus.'
+    case 'discovery':
+      return 'Something is off. It takes a moment to see what doesn\'t belong.'
+    case 'aftermath':
+      return 'Whatever happened here, it happened fast. The dust is still settling.'
+  }
+}
+
+// Stakes line based on stakeType
+function buildStakesLine(stake: StakeType): string {
+  switch (stake) {
+    case 'time_pressure':
+      return 'This won\'t stay contained for long.'
+    case 'moral_dilemma':
+      return 'There\'s no clean way through this one.'
+    case 'reputation_risk':
+      return 'People are watching. This will be remembered.'
+    case 'collateral_risk':
+      return 'Bystanders are too close. Collateral is a real possibility.'
+    case 'unknown_threat':
+      return 'The real danger hasn\'t shown itself yet.'
+  }
+}
+
+// Apply tone prefix to choice label
+function applyToneToLabel(label: string, tone: ChoiceTone): string {
+  // Don't double-prefix if the label already starts with a strong verb
+  const lower = label.toLowerCase()
+  switch (tone) {
+    case 'aggressive':
+      if (lower.startsWith('storm') || lower.startsWith('charge') || lower.startsWith('force')) return label
+      return `Force the issue — ${label.charAt(0).toLowerCase()}${label.slice(1)}`
+    case 'cautious':
+      if (lower.startsWith('careful')) return label
+      return `Carefully ${label.charAt(0).toLowerCase()}${label.slice(1)}`
+    case 'clever':
+      if (lower.startsWith('use misdirection') || lower.startsWith('outsmart')) return label
+      return `Outsmart them — ${label.charAt(0).toLowerCase()}${label.slice(1)}`
+    case 'desperate':
+      return `Risk it all — ${label.charAt(0).toLowerCase()}${label.slice(1)}`
+    case 'controlled':
+      return `Stay calm and ${label.charAt(0).toLowerCase()}${label.slice(1)}`
+    case 'risky':
+      return `Gamble on it — ${label.charAt(0).toLowerCase()}${label.slice(1)}`
+  }
+}
+
 function buildPersonalizedDescription(
   seed: EncounterSeed,
   powerNames: string[],
   reputationTiers: { factionId: string; tier: RepTier }[],
   recentEncounterTags: string[]
 ): string {
-  let description = seed.situationSummary
+  // Start with opening style line if available
+  const openingStyle = seed.openingStyle ?? 'action'
+  let description = `${buildOpeningLine(openingStyle)} ${seed.situationSummary}`
+
+  // Add stakes line if available
+  const stakeType = seed.stakeType ?? 'collateral_risk'
+  description += ` ${buildStakesLine(stakeType)}`
 
   // 1) Faction-aware tone (only if relevant)
   const relevantReputation = reputationTiers.find(r =>
@@ -219,6 +285,10 @@ function buildCallbackLine(seed: EncounterSeed, recentEncounterTags: string[]): 
   // so we can only do faction-based callbacks deterministically.
   const overlapFaction = seed.involvedFactions.find(f => recentEncounterTags.includes(f))
   if (overlapFaction) {
+    // Use a seedHook if one exists, otherwise fall back to the generic line
+    if (seed.seedHooks && seed.seedHooks.length > 0) {
+      return `Something nags at the edge of memory — ${seed.seedHooks[0].toLowerCase()}.`
+    }
     return 'The city has patterns. This feels like one of them tightening again.'
   }
 

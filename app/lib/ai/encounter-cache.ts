@@ -184,6 +184,9 @@ export async function cacheSeed(
           title: seed.title,
           choices: seed.choices,
           tags: seed.tags,
+          openingStyle: seed.openingStyle,
+          stakeType: seed.stakeType,
+          seedHooks: seed.seedHooks,
         } as unknown as object,
         outcomes: seed.outcomes as unknown as object,
         timesUsed: 1,
@@ -213,13 +216,20 @@ export async function getCachedSeedById(
     }
 
     // Reconstruct seed from cached data
-    const choicesData = cached.choices as { title?: string; choices?: EncounterSeed['choices']; tags?: string[] }
+    const choicesData = cached.choices as {
+      title?: string; choices?: EncounterSeed['choices']; tags?: string[]
+      openingStyle?: EncounterSeed['openingStyle']; stakeType?: EncounterSeed['stakeType']
+      seedHooks?: string[]
+    }
     const outcomes = cached.outcomes as EncounterSeed['outcomes']
 
     const seed: EncounterSeed = {
       seedId: cached.id,
       title: choicesData.title || `Encounter-${cached.id.slice(0, 8)}`,
       situationSummary: cached.description,
+      openingStyle: choicesData.openingStyle,
+      stakeType: choicesData.stakeType,
+      seedHooks: choicesData.seedHooks,
       category: cached.encounterType,
       difficulty: cached.difficulty,
       choices: choicesData.choices || [] as unknown as EncounterSeed['choices'],
@@ -253,13 +263,20 @@ function convertToEncounterSeed(
   },
   input: SeedGenerationInput
 ): EncounterSeed {
-  const choicesData = cached.choices as { title?: string; choices?: EncounterSeed['choices']; tags?: string[] }
+  const choicesData = cached.choices as {
+    title?: string; choices?: EncounterSeed['choices']; tags?: string[]
+    openingStyle?: EncounterSeed['openingStyle']; stakeType?: EncounterSeed['stakeType']
+    seedHooks?: string[]
+  }
   const outcomes = cached.outcomes as EncounterSeed['outcomes']
 
   return {
     seedId: cached.id,
     title: choicesData.title || `Encounter-${cached.id.slice(0, 8)}`,
     situationSummary: cached.description,
+    openingStyle: choicesData.openingStyle,
+    stakeType: choicesData.stakeType,
+    seedHooks: choicesData.seedHooks,
     category: cached.encounterType,
     difficulty: cached.difficulty,
     choices: choicesData.choices || [] as unknown as EncounterSeed['choices'],
