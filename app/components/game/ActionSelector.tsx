@@ -168,7 +168,7 @@ export function ActionSelector({
               }`}
             >
               <div className="flex items-center gap-3">
-                <span className={`p-1.5 rounded-lg ${info.color} text-white flex-shrink-0`}>
+                <span className={`p-1.5 rounded-lg ${info.color} text-white shrink-0`}>
                   {info.icon}
                 </span>
                 <div className="flex-1 min-w-0">
@@ -204,7 +204,7 @@ export function ActionSelector({
                     : 'text-red-400 bg-red-500/15'
                 }`}>
                   {disabledReason === 'Not available here'
-                    ? <MapPinOff className="h-3 w-3 flex-shrink-0" />
+                    ? <MapPinOff className="h-3 w-3 shrink-0" />
                     : <AlertCircle className="h-3 w-3 flex-shrink-0" />
                   }
                   {disabledReason}

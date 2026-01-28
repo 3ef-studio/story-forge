@@ -987,7 +987,7 @@ export default function GamePage() {
       {/* Level Up Modal with Attribute Selection */}
       {levelUpModal !== null && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-60 p-4">
-          <div className="bg-gradient-to-br from-yellow-50 to-amber-50 rounded-2xl p-6 sm:p-8 max-w-md w-full shadow-2xl border-2 border-yellow-300">
+          <div className="bg-linear-to-br from-yellow-50 to-amber-50 rounded-2xl p-6 sm:p-8 max-w-md w-full shadow-2xl border-2 border-yellow-300">
             <div className="text-center mb-6">
               <div className="flex justify-center gap-2 mb-4">
                 <Sparkles className="h-6 w-6 sm:h-8 sm:w-8 text-yellow-500 animate-pulse" />
