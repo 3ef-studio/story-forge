@@ -54,6 +54,7 @@ model Character {
   goals              CharacterGoal[]
   consequenceThreads ConsequenceThread[]
   knownNPCs          CharacterNPC[]
+  rival              Rival?
 
   @@map("characters")
 }
@@ -234,4 +235,25 @@ model CharacterNPC {
   @@unique([characterId, npcId])
   @@index([characterId])
   @@map("character_npcs")
+}
+
+// Rival (one per character, unlocked at level 5)
+model Rival {
+  id              String    @id @default(uuid()) @db.Uuid
+  characterId     String    @unique @map("character_id") @db.Uuid
+  name            String
+  role            String    // 'hero' | 'villain'
+  personality     String    // 'brute' | 'tactician' | 'zealot' | 'sadist' | 'hunter'
+  level           Int
+  attributes      Json      // Record<string, number>
+  powers          Json      // { powerId, currentLevel, currentXp, timesUsed }[]
+  hostility       Int       @default(0)
+  notoriety       Int       @default(0)
+  lastEncounterAt DateTime? @map("last_encounter_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@map("rivals")
 }

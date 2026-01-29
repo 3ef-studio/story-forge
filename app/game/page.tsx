@@ -126,6 +126,7 @@ export default function GamePage() {
   const [currentOutcome, setCurrentOutcome] = useState<OutcomeResult | null>(null);
   const [currentResolution, setCurrentResolution] = useState<ResolutionData | null>(null);
   const [currentPowerProgression, setCurrentPowerProgression] = useState<PowerProgressionData | null>(null);
+  const [rivalPresent, setRivalPresent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -318,6 +319,7 @@ export default function GamePage() {
         const encounter = data.encounter as EncounterTemplate & { threadId?: string; threadTitle?: string };
         setCurrentEncounter(encounter);
         setIsCachedEncounter(data.isCachedEncounter || false);
+        setRivalPresent(!!data.rivalPresence);
         setCurrentActionContext({
           actionId: action.id,
           locationType: action.locationTypes?.[0],
@@ -460,6 +462,7 @@ export default function GamePage() {
           locationType: currentActionContext?.locationType,
           npcId: currentEncounter.npcId,
           prepSelection,
+          rivalPresent,
         }),
       });
 
@@ -549,6 +552,7 @@ export default function GamePage() {
     setCurrentResolution(null);
     setCurrentPowerProgression(null);
     setCurrentActionContext(null);
+    setRivalPresent(false);
     setIsCachedEncounter(false);
     setGameState('idle');
     await fetchCharacter();

@@ -177,7 +177,7 @@ export function ActionSelector({
                       {action.name}
                     </span>
                     {advancesGoal && (
-                      <Star className="h-3.5 w-3.5 text-yellow-400 fill-yellow-400 flex-shrink-0" />
+                      <Star className="h-3.5 w-3.5 text-yellow-400 fill-yellow-400 shrink-0" />
                     )}
                   </div>
                   <p className="text-xs text-white/50 mt-0.5 line-clamp-1">{action.description}</p>
@@ -278,7 +278,7 @@ export function ActionSelector({
               }`}>
                 {disabledReason === 'Not available here'
                   ? <MapPinOff className="h-3.5 w-3.5 flex-shrink-0" />
-                  : <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                  : <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                 }
                 <span>{disabledReason}</span>
               </div>

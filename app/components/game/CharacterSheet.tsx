@@ -8,7 +8,7 @@ import { getPowerById, calculateXPForLevel } from '@/app/data/powers';
 import { getFactionById } from '@/app/data/factions';
 import { getFactionState, getFactionStateLabel, getFactionStateColor, type FactionState } from '@/app/lib/world/faction-state';
 import { getAttributeById } from '@/app/data/attributes';
-import { Heart, Zap, Star, Shield, Brain, Eye, Footprints, Sparkles, AlertTriangle, ChevronDown } from 'lucide-react';
+import { Heart, Zap, Star, Shield, Brain, Eye, Footprints, Sparkles, AlertTriangle, ChevronDown, Swords } from 'lucide-react';
 
 interface CharacterSheetProps {
   character: {
@@ -33,6 +33,18 @@ interface CharacterSheetProps {
       title: string;
       summary: string;
       expiresIn: number;
+    } | null;
+    rival?: {
+      id: string;
+      name: string;
+      role: string;
+      personality: string;
+      personalityLabel: string;
+      personalityDescription: string;
+      level: number;
+      hostility: number;
+      notoriety: number;
+      lastEncounterAt: string | null;
     } | null;
   };
 }
@@ -364,6 +376,67 @@ export function CharacterSheet({ character }: CharacterSheetProps) {
             <p className="text-sm text-white/70">
               {character.activeThread.summary}
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Rival */}
+      {character.rival && (
+        <div className="panel-glass rounded-2xl overflow-hidden">
+          <div className="px-4 py-3 flex items-center justify-between">
+            <span className="text-base font-semibold flex items-center gap-2 text-red-400">
+              <Swords className="h-5 w-5" />
+              Nemesis
+            </span>
+            <Badge
+              variant={character.rival.role === 'hero' ? 'friendly' : 'hostile'}
+              className="text-xs"
+            >
+              {character.rival.role === 'hero' ? 'Hero' : 'Villain'}
+            </Badge>
+          </div>
+          <div className="px-4 pb-4 space-y-3">
+            <div>
+              <div className="font-bold text-white text-lg">{character.rival.name}</div>
+              <div className="text-xs text-white/50">
+                {character.rival.personalityLabel} — {character.rival.personalityDescription}
+              </div>
+            </div>
+
+            {/* Hostility bar */}
+            <div>
+              <div className="flex justify-between text-xs text-white/50 mb-1">
+                <span>Hostility</span>
+                <span>{character.rival.hostility}/100</span>
+              </div>
+              <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-red-500 transition-all duration-300"
+                  style={{ width: `${character.rival.hostility}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Notoriety bar */}
+            <div>
+              <div className="flex justify-between text-xs text-white/50 mb-1">
+                <span>Notoriety</span>
+                <span>{character.rival.notoriety}/100</span>
+              </div>
+              <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-purple-500 transition-all duration-300"
+                  style={{ width: `${character.rival.notoriety}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Last seen */}
+            {character.rival.lastEncounterAt && (
+              <div className="text-xs text-white/40">
+                Last seen: {new Date(character.rival.lastEncounterAt).toLocaleDateString()}
+              </div>
+            )}
           </div>
         </div>
       )}

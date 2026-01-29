@@ -31,6 +31,8 @@ import {
   isActionGlobal,
   getDistrictById,
 } from '@/app/data/districts';
+import { generateRivalForCharacter } from '@/app/lib/game-logic/rival-generator';
+import { RIVAL_FLAVOR, type RivalIntensity } from '@/app/data/rivals';
 
 export async function POST(request: Request) {
   try {
@@ -348,6 +350,60 @@ export async function POST(request: Request) {
       }
     }
 
+    // 7. Rival encounter injection (small chance)
+    let rivalPresence: {
+      rivalId: string;
+      name: string;
+      role: string;
+      personality: string;
+      intensity: RivalIntensity;
+      flavorText: string;
+    } | null = null;
+
+    if (encounter) {
+      const rival = await prisma.rival.findUnique({
+        where: { characterId: character.id },
+      });
+
+      if (rival) {
+        const rivalRoll = Math.random();
+        // 8% chance of rival appearance, weighted by hostility
+        const rivalChance = 0.05 + (rival.hostility / 100) * 0.05;
+        if (rivalRoll < rivalChance) {
+          // Determine intensity based on hostility
+          let intensity: RivalIntensity = 'watching';
+          if (rival.hostility >= 70) {
+            intensity = 'direct';
+          } else if (rival.hostility >= 40) {
+            intensity = 'agents';
+          }
+
+          // Pick flavor text deterministically from templates
+          const templates = RIVAL_FLAVOR[intensity];
+          const templateIndex = Math.floor(Math.random() * templates.length);
+          const flavorText = templates[templateIndex].replace('{name}', rival.name);
+
+          rivalPresence = {
+            rivalId: rival.id,
+            name: rival.name,
+            role: rival.role,
+            personality: rival.personality,
+            intensity,
+            flavorText,
+          };
+
+          // Inject flavor text into encounter description
+          encounter = {
+            ...encounter,
+            description: `${encounter.description}\n\n${flavorText}`,
+            narrativeTags: [...(encounter.narrativeTags || []), 'rival_presence'],
+          } as typeof encounter;
+
+          console.log('[Encounter] Rival injected:', rival.name, intensity);
+        }
+      }
+    }
+
     // Calculate new energy (handle rest which restores energy)
     const newEnergy = Math.max(0, Math.min(character.maxEnergy, currentEnergy - energyCost));
 
@@ -494,6 +550,54 @@ export async function POST(request: Request) {
             tags: ['level_up', 'milestone'],
           },
         });
+
+        // Create rival at level 5 if one doesn't exist
+        if (newLevel >= 5) {
+          const existingRival = await tx.rival.findUnique({
+            where: { characterId: character.id },
+          });
+
+          if (!existingRival) {
+            const factionReputations = buildFactionMap(character.factionReputations);
+            const rivalInput = generateRivalForCharacter({
+              characterId: character.id,
+              characterLevel: newLevel,
+              attributes: attributesMap,
+              powers: character.powers.map((p) => ({
+                powerId: p.powerId,
+                currentLevel: p.currentLevel,
+                currentXp: p.currentXp,
+                timesUsed: p.timesUsed,
+              })),
+              factionReputations,
+            });
+
+            await tx.rival.create({
+              data: {
+                characterId: rivalInput.characterId,
+                name: rivalInput.name,
+                role: rivalInput.role,
+                personality: rivalInput.personality,
+                level: rivalInput.level,
+                attributes: rivalInput.attributes,
+                powers: JSON.parse(JSON.stringify(rivalInput.powers)),
+                hostility: rivalInput.hostility,
+                notoriety: rivalInput.notoriety,
+              },
+            });
+
+            await tx.storyEvent.create({
+              data: {
+                characterId: character.id,
+                eventType: 'rival_emerged',
+                summary: `A new presence emerges: ${rivalInput.name}`,
+                fullDescription: `As your reputation grows, a ${rivalInput.role === 'hero' ? 'heroic figure' : 'dangerous villain'} known as ${rivalInput.name} has taken notice. Their ${rivalInput.personality} nature makes them a formidable adversary.`,
+                narrativeWeight: 9,
+                tags: ['rival', 'milestone', rivalInput.role],
+              },
+            });
+          }
+        }
       }
 
       return {
@@ -512,6 +616,7 @@ export async function POST(request: Request) {
         encounter,
         isCachedEncounter,
         npcInteraction: socialNpcInteraction,
+        rivalPresence,
       };
     });
 

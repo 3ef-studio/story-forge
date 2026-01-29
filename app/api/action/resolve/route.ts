@@ -273,6 +273,7 @@ type ResolveActionBody = {
   locationType?: string;
   npcId?: string;
   prepSelection?: PrepSelection | null;
+  rivalPresent?: boolean;
 };
 
 function isUuidLike(value: string): boolean {
@@ -302,7 +303,8 @@ function isResolveActionBody(value: unknown): value is ResolveActionBody {
     (v.actionId === undefined || typeof v.actionId === 'string') &&
     (v.locationType === undefined || typeof v.locationType === 'string') &&
     (v.npcId === undefined || typeof v.npcId === 'string') &&
-    isValidPrepSelection(v.prepSelection)
+    isValidPrepSelection(v.prepSelection) &&
+    (v.rivalPresent === undefined || typeof v.rivalPresent === 'boolean')
   );
 }
 
@@ -328,7 +330,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { encounterId, choiceId, threadId, actionId: rawActionId, locationType, npcId, prepSelection } = rawBody;
+    const { encounterId, choiceId, threadId, actionId: rawActionId, locationType, npcId, prepSelection, rivalPresent } = rawBody;
     const actionId = rawActionId ? normalizeActionId(rawActionId) : undefined;
     const isCached = Boolean(rawBody.isCached);
     const validPrepSelection = prepSelection ?? null;
@@ -727,6 +729,27 @@ export async function POST(request: Request) {
         : calculateDispositionChange(isSuccess || isPartial, npc?.factionId, factionChanges);
 
       await recordNPCEncounter(character.id, npcId, dispositionChange);
+    }
+
+    // Update rival if they were present in this encounter
+    if (rivalPresent) {
+      const rival = await prisma.rival.findUnique({
+        where: { characterId: character.id },
+      });
+
+      if (rival) {
+        const hostilityDelta = isFailure ? 3 : 0;
+        const notorietyDelta = (isSuccess || isPartial) ? 2 : 0;
+
+        await prisma.rival.update({
+          where: { id: rival.id },
+          data: {
+            hostility: Math.min(100, rival.hostility + hostilityDelta),
+            notoriety: Math.min(100, rival.notoriety + notorietyDelta),
+            lastEncounterAt: new Date(),
+          },
+        });
+      }
     }
 
     return NextResponse.json({

@@ -8,6 +8,8 @@ import {
 } from '@/app/lib/utils/character-utils';
 import { getActiveThreadForDisplay } from '@/app/lib/game-logic/thread-manager';
 import { computeEnergyRegen } from '@/app/lib/game-logic/energy-regen';
+import { generateRivalForCharacter } from '@/app/lib/game-logic/rival-generator';
+import { PERSONALITY_LABELS, PERSONALITY_DESCRIPTIONS, type RivalPersonality } from '@/app/data/rivals';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -83,6 +85,57 @@ export async function GET() {
     // Get active consequence thread
     const activeThread = await getActiveThreadForDisplay(character.id);
 
+    // Fetch or backfill rival (level 5+)
+    let rival = await prisma.rival.findUnique({
+      where: { characterId: character.id },
+    });
+
+    if (!rival && character.level >= 5) {
+      // Backfill: create rival for existing characters who reached level 5
+      const rivalInput = generateRivalForCharacter({
+        characterId: character.id,
+        characterLevel: character.level,
+        attributes: attributesMap,
+        powers: character.powers.map((p) => ({
+          powerId: p.powerId,
+          currentLevel: p.currentLevel,
+          currentXp: p.currentXp,
+          timesUsed: p.timesUsed,
+        })),
+        factionReputations: factionsMap,
+      });
+
+      rival = await prisma.rival.create({
+        data: {
+          characterId: rivalInput.characterId,
+          name: rivalInput.name,
+          role: rivalInput.role,
+          personality: rivalInput.personality,
+          level: rivalInput.level,
+          attributes: rivalInput.attributes,
+          powers: JSON.parse(JSON.stringify(rivalInput.powers)),
+          hostility: rivalInput.hostility,
+          notoriety: rivalInput.notoriety,
+        },
+      });
+    }
+
+    // Transform rival for client
+    const rivalData = rival
+      ? {
+          id: rival.id,
+          name: rival.name,
+          role: rival.role,
+          personality: rival.personality,
+          personalityLabel: PERSONALITY_LABELS[rival.personality as RivalPersonality] ?? rival.personality,
+          personalityDescription: PERSONALITY_DESCRIPTIONS[rival.personality as RivalPersonality] ?? '',
+          level: rival.level,
+          hostility: rival.hostility,
+          notoriety: rival.notoriety,
+          lastEncounterAt: rival.lastEncounterAt?.toISOString() ?? null,
+        }
+      : null;
+
     return NextResponse.json({
       character: {
         id: character.id,
@@ -116,6 +169,7 @@ export async function GET() {
           createdAt: event.createdAt.toISOString(),
         })),
         activeThread,
+        rival: rivalData,
       },
     });
   } catch (error) {
