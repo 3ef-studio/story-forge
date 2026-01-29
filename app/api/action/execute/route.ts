@@ -368,7 +368,7 @@ export async function POST(request: Request) {
       if (rival) {
         const rivalRoll = Math.random();
         // 8% chance of rival appearance, weighted by hostility
-        const rivalChance = 0.05 + (rival.hostility / 100) * 0.05;
+        const rivalChance = 0.15 + (rival.hostility / 100) * 0.05;
         if (rivalRoll < rivalChance) {
           // Determine intensity based on hostility
           let intensity: RivalIntensity = 'watching';
