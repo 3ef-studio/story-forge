@@ -14,6 +14,8 @@ import { StatusStrip } from '@/app/components/game/StatusStrip';
 import { MobileTabBar, type MobileTab } from '@/app/components/game/MobileTabBar';
 import { StoryLogPanel } from '@/app/components/game/StoryLogPanel';
 import { CityUpdateCard } from '@/app/components/game/CityUpdateCard';
+import { LoadingSigil } from '@/app/components/ui/LoadingSigil';
+import { AnimatedCard } from '@/app/components/ui/AnimatedCard';
 import { useToast } from '@/app/components/ui/toast';
 import { getFactionById } from '@/app/data/factions';
 import { attributes as attributesList } from '@/app/data/attributes';
@@ -623,10 +625,10 @@ export default function GamePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading your story...</p>
+      <div className="min-h-screen flex items-center justify-center bg-gray-950">
+        <div className="text-center space-y-3">
+          <LoadingSigil label="Loading your story" />
+          <p className="text-sm text-white/50">Loading your story...</p>
         </div>
       </div>
     );
@@ -649,22 +651,27 @@ export default function GamePage() {
   const renderSceneContent = () => {
     if (gameState === 'idle') {
       return (
-        <div className="panel-glass p-5 sm:p-6 text-center">
+        <AnimatedCard variant="panel" className="panel-glass p-5 sm:p-6 text-center">
           <h2 className="text-lg sm:text-xl font-bold text-white mb-2">What will you do?</h2>
           <p className="text-white/60 text-sm sm:text-base">
             <span className="hidden sm:inline">Choose an action from the panel on the right to continue your story.</span>
             <span className="sm:hidden">Tap the <span className="font-semibold text-white/80">Actions</span> tab below to choose your next move.</span>
           </p>
-        </div>
+        </AnimatedCard>
       );
     }
 
     if (gameState === 'executing') {
       return (
-        <div className="panel-glass p-6">
+        <AnimatedCard variant="panel" className="panel-glass p-6">
           <div className="text-center space-y-4">
             {/* Title */}
             <h3 className="text-lg font-semibold text-white">Encounter forming...</h3>
+
+            {/* Animated sigil */}
+            <div className="flex justify-center">
+              <LoadingSigil label="Generating encounter" />
+            </div>
 
             {/* 3-step indicator */}
             <div className="space-y-2">
@@ -702,7 +709,7 @@ export default function GamePage() {
               </div>
             </div>
           </div>
-        </div>
+        </AnimatedCard>
       );
     }
 

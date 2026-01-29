@@ -115,6 +115,19 @@ body {
   pointer-events: none;
   z-index: 0;
 }
+/* Subtle vignette overlay for depth */
+.game-backdrop::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 50%,
+    rgba(0, 0, 0, 0.15) 100%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
 /* All direct children sit above the overlay */
 .game-backdrop > * {
   position: relative;
@@ -233,4 +246,34 @@ body {
 }
 .animate-pulse-glow {
   animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Power category accent colors */
+.power-accent-physical  { color: #f87171; } /* red-400 */
+.power-accent-mental    { color: #c084fc; } /* purple-400 */
+.power-accent-energy    { color: #60a5fa; } /* blue-400 */
+.power-accent-utility   { color: #4ade80; } /* green-400 */
+.power-accent-defensive { color: #22d3ee; } /* cyan-400 */
+
+.power-accent-physical  .power-bar { background: #f87171; }
+.power-accent-mental    .power-bar { background: #c084fc; }
+.power-accent-energy    .power-bar { background: #60a5fa; }
+.power-accent-utility   .power-bar { background: #4ade80; }
+.power-accent-defensive .power-bar { background: #22d3ee; }
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .animate-slide-in-right,
+  .animate-slide-in-up,
+  .animate-fade-in,
+  .animate-scale-in,
+  .animate-bounce-in {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .animate-pulse,
+  .animate-pulse-glow {
+    animation: none !important;
+  }
 }

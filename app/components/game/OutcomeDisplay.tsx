@@ -5,6 +5,8 @@ import { Badge } from '@/app/components/ui/badge';
 import { getFactionById } from '@/app/data/factions';
 import { ResolutionBreakdownCard } from './ResolutionBreakdownCard';
 import { CheckCircle, XCircle, TrendingUp, TrendingDown, Star, Heart, Zap, Sparkles, AlertTriangle } from 'lucide-react';
+import { AnimatedCard } from '@/app/components/ui/AnimatedCard';
+import { motion, useReducedMotion } from 'framer-motion';
 
 interface OutcomeResult {
   success: boolean;
@@ -48,9 +50,26 @@ interface OutcomeDisplayProps {
   onContinue: () => void;
 }
 
+const POWER_CATEGORY_COLORS: Record<string, string> = {
+  physical: 'text-red-400 border-red-500/30 bg-red-500/10',
+  mental: 'text-purple-400 border-purple-500/30 bg-purple-500/10',
+  energy: 'text-blue-400 border-blue-500/30 bg-blue-500/10',
+  utility: 'text-green-400 border-green-500/30 bg-green-500/10',
+  defensive: 'text-cyan-400 border-cyan-500/30 bg-cyan-500/10',
+};
+
+const POWER_BAR_COLORS: Record<string, string> = {
+  physical: 'bg-red-500',
+  mental: 'bg-purple-500',
+  energy: 'bg-blue-500',
+  utility: 'bg-green-500',
+  defensive: 'bg-cyan-500',
+};
+
 export function OutcomeDisplay({ outcome, resolution, powerProgression, onContinue }: OutcomeDisplayProps) {
   const [showContent, setShowContent] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const shouldReduceMotion = useReducedMotion();
 
   useEffect(() => {
     const timer1 = setTimeout(() => setShowContent(true), 300);
@@ -72,7 +91,7 @@ export function OutcomeDisplay({ outcome, resolution, powerProgression, onContin
     : 'border-red-500/40';
 
   return (
-    <div className={`panel-solid border-2 overflow-hidden transition-all duration-500 rounded-2xl ${borderColor}`}>
+    <AnimatedCard variant="panel" className={`panel-solid border-2 overflow-hidden transition-all duration-500 rounded-2xl ${borderColor}`}>
       <div className="pb-2 px-4 sm:px-6 pt-4">
         <div className="flex items-center gap-3">
           {isSuccess ? (
@@ -240,17 +259,28 @@ export function OutcomeDisplay({ outcome, resolution, powerProgression, onContin
 
         {/* Power Progression */}
         {powerProgression && (
-          <div className="space-y-2.5">
+          <motion.div
+            className="space-y-2.5"
+            initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.96 }}
+            animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1 }}
+            transition={{ duration: shouldReduceMotion ? 0.1 : 0.35, delay: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
+          >
             <h4 className="font-semibold text-white/70 flex items-center gap-2 text-sm uppercase tracking-wide">
-              <Zap className="h-4 w-4 text-purple-400" />
+              <Zap className={`h-4 w-4 ${POWER_CATEGORY_COLORS[powerProgression.powerCategory]?.split(' ')[0] || 'text-purple-400'}`} />
               Power Used
             </h4>
-            <div className="p-4 bg-white/10 rounded-xl border border-white/10">
+            <div className={`p-4 bg-white/10 rounded-xl border ${POWER_CATEGORY_COLORS[powerProgression.powerCategory]?.split(' ').slice(1).join(' ') || 'border-white/10'}`}>
               <div className="flex items-center justify-between mb-2">
-                <div>
+                <motion.div
+                  initial={shouldReduceMotion ? undefined : { scale: 1 }}
+                  animate={shouldReduceMotion ? undefined : { scale: [1, 1.04, 1] }}
+                  transition={{ duration: 0.6, delay: 0.6, ease: 'easeInOut' }}
+                >
                   <span className="font-semibold text-white/90">{powerProgression.powerName}</span>
-                  <span className="text-xs text-white/50 ml-2 capitalize">({powerProgression.powerCategory})</span>
-                </div>
+                  <span className={`text-xs ml-2 capitalize ${POWER_CATEGORY_COLORS[powerProgression.powerCategory]?.split(' ')[0] || 'text-white/50'}`}>
+                    ({powerProgression.powerCategory})
+                  </span>
+                </motion.div>
                 <div className="flex items-center gap-2">
                   {powerProgression.leveledUp ? (
                     <Badge variant="success" className="animate-pulse">
@@ -262,7 +292,9 @@ export function OutcomeDisplay({ outcome, resolution, powerProgression, onContin
                 </div>
               </div>
               <div className="flex items-center gap-2 text-sm">
-                <span className="text-purple-300 font-medium">+{powerProgression.xpGained} Power XP</span>
+                <span className={`font-medium ${POWER_CATEGORY_COLORS[powerProgression.powerCategory]?.split(' ')[0] || 'text-purple-300'}`}>
+                  +{powerProgression.xpGained} Power XP
+                </span>
                 {powerProgression.powerBonusApplied > 0 && (
                   <span className="text-white/50">• Applied +{powerProgression.powerBonusApplied} bonus</span>
                 )}
@@ -274,14 +306,16 @@ export function OutcomeDisplay({ outcome, resolution, powerProgression, onContin
                   <span>{powerProgression.xpAfter}/{powerProgression.xpToNextLevel}</span>
                 </div>
                 <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-purple-500 transition-all duration-500"
-                    style={{ width: `${Math.min(100, (powerProgression.xpAfter / powerProgression.xpToNextLevel) * 100)}%` }}
+                  <motion.div
+                    className={`h-full ${POWER_BAR_COLORS[powerProgression.powerCategory] || 'bg-purple-500'}`}
+                    initial={{ width: '0%' }}
+                    animate={{ width: `${Math.min(100, (powerProgression.xpAfter / powerProgression.xpToNextLevel) * 100)}%` }}
+                    transition={{ duration: shouldReduceMotion ? 0.1 : 0.8, delay: 0.5, ease: [0.25, 0.46, 0.45, 0.94] }}
                   />
                 </div>
               </div>
             </div>
-          </div>
+          </motion.div>
         )}
 
         {/* Continue Button */}
@@ -294,6 +328,6 @@ export function OutcomeDisplay({ outcome, resolution, powerProgression, onContin
           </button>
         </div>
       </div>
-    </div>
+    </AnimatedCard>
   );
 }

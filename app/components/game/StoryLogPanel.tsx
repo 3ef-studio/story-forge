@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { ChevronDown, ChevronUp, Clock } from 'lucide-react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 
 interface StoryEvent {
   id: string;
@@ -73,15 +74,23 @@ function formatTime(dateStr: string): string {
   return `${diffDays}d ago`;
 }
 
-function StoryLogItem({ event, compact }: { event: StoryEvent; compact?: boolean }) {
+function StoryLogItem({ event, compact, index }: { event: StoryEvent; compact?: boolean; index: number }) {
   const [expanded, setExpanded] = useState(false);
   const hasDescription = event.fullDescription && event.fullDescription !== event.summary;
+  const shouldReduceMotion = useReducedMotion();
 
   return (
-    <div
+    <motion.div
       className={`rounded-lg border transition-colors ${
         expanded ? 'bg-white/10 border-white/15' : 'bg-white/5 border-white/10'
       }`}
+      initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, x: -8 }}
+      animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, x: 0 }}
+      transition={{
+        duration: shouldReduceMotion ? 0.1 : 0.25,
+        delay: Math.min(index * 0.04, 0.4),
+        ease: [0.25, 0.46, 0.45, 0.94],
+      }}
     >
       <button
         onClick={() => hasDescription && setExpanded(!expanded)}
@@ -125,14 +134,22 @@ function StoryLogItem({ event, compact }: { event: StoryEvent; compact?: boolean
       </button>
 
       {/* Expanded description */}
-      {expanded && hasDescription && (
-        <div className="px-3 pb-3 pt-0">
-          <div className="pl-7 border-l-2 border-white/20 ml-2.5">
-            <p className="text-sm text-white/70 leading-relaxed">{event.fullDescription}</p>
-          </div>
-        </div>
-      )}
-    </div>
+      <AnimatePresence>
+        {expanded && hasDescription && (
+          <motion.div
+            className="px-3 pb-3 pt-0 overflow-hidden"
+            initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, height: 0 }}
+            animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, height: 'auto' }}
+            exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, height: 0 }}
+            transition={{ duration: shouldReduceMotion ? 0.1 : 0.2, ease: 'easeInOut' }}
+          >
+            <div className="pl-7 border-l-2 border-white/20 ml-2.5">
+              <p className="text-sm text-white/70 leading-relaxed">{event.fullDescription}</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }
 
@@ -149,8 +166,8 @@ export function StoryLogPanel({ events, maxItems = 10, compact = false }: StoryL
 
   return (
     <div className="space-y-2">
-      {displayEvents.map((event) => (
-        <StoryLogItem key={event.id} event={event} compact={compact} />
+      {displayEvents.map((event, index) => (
+        <StoryLogItem key={event.id} event={event} compact={compact} index={index} />
       ))}
     </div>
   );

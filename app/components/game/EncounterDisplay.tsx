@@ -8,6 +8,9 @@ import { AlertTriangle, CheckCircle, XCircle, Star, Zap, LogOut, Link } from 'lu
 import { ChoicePreviewChips } from './ChoicePreviewChips';
 import { PrepPhase } from './PrepPhase';
 import type { ResolutionPreview, PrepSelection } from '@/app/lib/game-logic/combat/types';
+import { AnimatedCard } from '@/app/components/ui/AnimatedCard';
+import { AnimatedChoiceCard } from '@/app/components/ui/AnimatedChoiceCard';
+import { LoadingSigil } from '@/app/components/ui/LoadingSigil';
 
 interface EncounterChoice {
   id: string;
@@ -52,7 +55,7 @@ export function EncounterDisplay({
   };
 
   return (
-    <div className="panel-glass border border-blue-500/30 rounded-2xl">
+    <AnimatedCard variant="panel" className="panel-glass border border-blue-500/30 rounded-2xl">
       <div className="pb-2 px-4 sm:px-6 pt-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h3 className="text-xl sm:text-lg font-bold text-white">{encounter.name}</h3>
@@ -96,9 +99,10 @@ export function EncounterDisplay({
         <div className="space-y-3">
           <h4 className="font-semibold text-white/70 text-sm uppercase tracking-wide">What do you do?</h4>
           <div className="grid gap-3">
-            {choices.map((choice) => (
-              <button
+            {choices.map((choice, index) => (
+              <AnimatedChoiceCard
                 key={choice.id}
+                delay={0.05 * index}
                 className={`w-full text-left h-auto py-4 px-4 rounded-xl min-h-[56px] border transition-colors ${
                   choice.available
                     ? 'bg-white/10 border-white/15 hover:bg-white/15 hover:border-blue-400/40 active:bg-white/20'
@@ -143,7 +147,7 @@ export function EncounterDisplay({
                     )}
                   </div>
                 </div>
-              </button>
+              </AnimatedChoiceCard>
             ))}
           </div>
 
@@ -168,33 +172,12 @@ export function EncounterDisplay({
         </div>
 
         {isResolving && (
-          <div className="flex items-center justify-center py-6">
-            <div className="flex items-center gap-2 text-white/50">
-              <svg
-                className="h-5 w-5 animate-spin"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                />
-              </svg>
-              <span>Resolving...</span>
-            </div>
+          <div className="flex flex-col items-center justify-center py-6 gap-2">
+            <LoadingSigil label="Resolving encounter" />
+            <span className="text-sm text-white/50">Resolving...</span>
           </div>
         )}
       </div>
-    </div>
+    </AnimatedCard>
   );
 }
