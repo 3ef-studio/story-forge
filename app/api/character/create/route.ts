@@ -189,8 +189,8 @@ export async function POST(request: Request) {
       return newCharacter;
     });
 
-    // Initialize starting goals for the character
-    await initializeGoalsForNewCharacter(character.id, originId);
+    // Initialize starting goals for the character (pass power IDs for validation)
+    await initializeGoalsForNewCharacter(character.id, originId, allPowerIds);
 
     return NextResponse.json(
       {

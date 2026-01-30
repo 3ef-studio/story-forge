@@ -256,6 +256,124 @@ export const goalDefinitions: GoalDefinition[] = [
     xpReward: 50,
     metadata: { powerId: 'force_field' },
   },
+
+  // === ADDITIONAL ACTION COUNT GOALS ===
+  {
+    id: 'investigate_mystery_3',
+    goalType: 'action_count',
+    titleTemplate: 'Case Worker',
+    descriptionTemplate: 'Investigate mysteries 3 times',
+    targetValue: 3,
+    xpReward: 60,
+    metadata: { actionId: 'investigate_mystery' },
+  },
+  {
+    id: 'train_powers_3',
+    goalType: 'action_count',
+    titleTemplate: 'Power Discipline',
+    descriptionTemplate: 'Train your powers 3 times',
+    targetValue: 3,
+    xpReward: 50,
+    metadata: { actionId: 'train_powers' },
+  },
+  {
+    id: 'recruit_ally_2',
+    goalType: 'action_count',
+    titleTemplate: 'Building a Team',
+    descriptionTemplate: 'Recruit allies 2 times',
+    targetValue: 2,
+    xpReward: 60,
+    metadata: { actionId: 'recruit_ally' },
+  },
+  {
+    id: 'network_contacts_3',
+    goalType: 'action_count',
+    titleTemplate: 'Connected',
+    descriptionTemplate: 'Network with contacts 3 times',
+    targetValue: 3,
+    xpReward: 50,
+    metadata: { actionId: 'network_contacts' },
+  },
+
+  // === ADDITIONAL LOCATION COUNT GOALS ===
+  {
+    id: 'visit_underground_3',
+    goalType: 'location_count',
+    titleTemplate: 'Underworld Explorer',
+    descriptionTemplate: 'Take 3 actions in underground areas',
+    targetValue: 3,
+    xpReward: 60,
+    metadata: { location: 'underground' },
+  },
+  {
+    id: 'visit_rooftops_3',
+    goalType: 'location_count',
+    titleTemplate: 'Rooftop Runner',
+    descriptionTemplate: 'Take 3 actions on rooftops',
+    targetValue: 3,
+    xpReward: 50,
+    metadata: { location: 'rooftops' },
+  },
+
+  // === ADDITIONAL ENCOUNTER WIN GOALS ===
+  {
+    id: 'win_encounters_10',
+    goalType: 'encounter_win_count',
+    titleTemplate: 'Veteran Fighter',
+    descriptionTemplate: 'Win 10 encounters',
+    targetValue: 10,
+    xpReward: 150,
+    metadata: {},
+  },
+
+  // === ADDITIONAL CATEGORY COUNT GOALS ===
+  {
+    id: 'heroic_actions_10',
+    goalType: 'category_count',
+    titleTemplate: 'Beacon of Hope',
+    descriptionTemplate: 'Complete 10 heroic actions',
+    targetValue: 10,
+    xpReward: 150,
+    metadata: { category: 'heroic' },
+  },
+  {
+    id: 'criminal_actions_5',
+    goalType: 'category_count',
+    titleTemplate: 'Underworld Presence',
+    descriptionTemplate: 'Complete 5 criminal actions',
+    targetValue: 5,
+    xpReward: 100,
+    metadata: { category: 'criminal' },
+  },
+  {
+    id: 'social_actions_5',
+    goalType: 'category_count',
+    titleTemplate: 'Social Butterfly',
+    descriptionTemplate: 'Complete 5 social actions',
+    targetValue: 5,
+    xpReward: 80,
+    metadata: { category: 'social' },
+  },
+  {
+    id: 'training_actions_6',
+    goalType: 'category_count',
+    titleTemplate: 'Constant Improvement',
+    descriptionTemplate: 'Complete 6 training actions',
+    targetValue: 6,
+    xpReward: 100,
+    metadata: { category: 'training' },
+  },
+
+  // === ADDITIONAL FACTION REPUTATION GOALS ===
+  {
+    id: 'gain_media_rep_15',
+    goalType: 'faction_rep_gain',
+    titleTemplate: 'Media Darling',
+    descriptionTemplate: 'Gain 15 reputation with Media Corporations',
+    targetValue: 15,
+    xpReward: 70,
+    metadata: { factionId: 'media_corporations' },
+  },
 ]
 
 // Helper to get goal definition by ID

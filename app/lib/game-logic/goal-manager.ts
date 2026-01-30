@@ -65,13 +65,43 @@ export async function getActiveGoals(characterId: string): Promise<GoalRecord[]>
 // Initialize goals for a new character based on origin
 export async function initializeGoalsForNewCharacter(
   characterId: string,
-  originId: string
+  originId: string,
+  powerIds: string[]
 ): Promise<void> {
   const startingGoalIds = ORIGIN_STARTING_GOALS[originId] ?? FALLBACK_STARTING_GOALS
+  const powerIdSet = new Set(powerIds)
 
-  const goalsToCreate = startingGoalIds
-    .map(id => getGoalDefinitionById(id))
-    .filter((g): g is GoalDefinition => g !== undefined)
+  // Validate each starting goal — replace invalid power goals with fallbacks
+  const goalsToCreate: GoalDefinition[] = []
+  const usedIds = new Set<string>()
+
+  for (const goalId of startingGoalIds) {
+    const def = getGoalDefinitionById(goalId)
+    if (!def) continue
+
+    // Check if it's a power goal the character can't complete
+    if (def.goalType === 'power_use_count' && def.metadata.powerId && !powerIdSet.has(def.metadata.powerId)) {
+      // Try to find a power goal for a power they DO have
+      const substitute = goalDefinitions.find(
+        g => g.goalType === 'power_use_count' && g.metadata.powerId && powerIdSet.has(g.metadata.powerId) && !usedIds.has(g.id)
+      )
+      if (substitute) {
+        goalsToCreate.push(substitute)
+        usedIds.add(substitute.id)
+        continue
+      }
+      // No matching power goal — fall back to a generic goal
+      const fallbackDef = getGoalDefinitionById('win_encounters_3')
+      if (fallbackDef && !usedIds.has(fallbackDef.id)) {
+        goalsToCreate.push(fallbackDef)
+        usedIds.add(fallbackDef.id)
+      }
+      continue
+    }
+
+    goalsToCreate.push(def)
+    usedIds.add(def.id)
+  }
 
   if (goalsToCreate.length === 0) {
     console.error('[Goals] No valid starting goals found for origin:', originId)
@@ -279,6 +309,13 @@ export async function getGoalChoices(characterId: string): Promise<GoalDefinitio
     select: { goalType: true, metadata: true },
   })
 
+  // Get character's power IDs to filter power_use_count goals
+  const characterPowers = await prisma.characterPower.findMany({
+    where: { characterId },
+    select: { powerId: true },
+  })
+  const characterPowerIds = new Set(characterPowers.map(p => p.powerId))
+
   // Build a set of "used" goal identifiers to avoid duplicates
   const usedGoalKeys = new Set(
     existingGoals.map(g => {
@@ -287,10 +324,17 @@ export async function getGoalChoices(characterId: string): Promise<GoalDefinitio
     })
   )
 
-  // Filter out already used goals
+  // Filter out already used goals AND power goals the character can't complete
   const availableGoals = goalDefinitions.filter(def => {
     const key = `${def.goalType}:${def.metadata.actionId || ''}:${def.metadata.category || ''}:${def.metadata.factionId || ''}:${def.metadata.powerId || ''}:${def.metadata.location || ''}`
-    return !usedGoalKeys.has(key)
+    if (usedGoalKeys.has(key)) return false
+
+    // Filter out power_use_count goals for powers the character doesn't have
+    if (def.goalType === 'power_use_count' && def.metadata.powerId) {
+      return characterPowerIds.has(def.metadata.powerId)
+    }
+
+    return true
   })
 
   // Return 2-3 random choices using unbiased Fisher-Yates shuffle
