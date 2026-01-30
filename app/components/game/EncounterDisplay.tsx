@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Badge } from '@/app/components/ui/badge';
 import type { EncounterTemplate } from '@/app/data/encounter-templates';
 import { getPowerById } from '@/app/data/powers';
-import { AlertTriangle, CheckCircle, XCircle, Star, Zap, LogOut, Link } from 'lucide-react';
+import { AlertTriangle, CheckCircle, XCircle, Star, Zap, LogOut, Link, Eye, Sword, Shield } from 'lucide-react';
 import { ChoicePreviewChips } from './ChoicePreviewChips';
 import { PrepPhase } from './PrepPhase';
 import type { ResolutionPreview, PrepSelection } from '@/app/lib/game-logic/combat/types';
@@ -31,6 +31,20 @@ interface CharacterPower {
   level: number;
 }
 
+type FocusMode = 'power' | 'awareness' | 'aggression' | 'defense';
+
+interface FocusResultDisplay {
+  mode: FocusMode | null;
+  modifier: number;
+}
+
+const FOCUS_DISPLAY: Record<FocusMode, { label: string; icon: typeof Zap; color: string }> = {
+  power: { label: 'Power', icon: Zap, color: 'text-purple-400' },
+  awareness: { label: 'Awareness', icon: Eye, color: 'text-blue-400' },
+  aggression: { label: 'Aggression', icon: Sword, color: 'text-red-400' },
+  defense: { label: 'Defense', icon: Shield, color: 'text-green-400' },
+};
+
 interface EncounterDisplayProps {
   encounter: EncounterWithThread;
   choices: EncounterChoice[];
@@ -38,6 +52,7 @@ interface EncounterDisplayProps {
   isResolving?: boolean;
   characterEnergy?: number;
   characterPowers?: CharacterPower[];
+  focusResult?: FocusResultDisplay;
 }
 
 export function EncounterDisplay({
@@ -47,6 +62,7 @@ export function EncounterDisplay({
   isResolving = false,
   characterEnergy = 100,
   characterPowers = [],
+  focusResult,
 }: EncounterDisplayProps) {
   const [prepSelection, setPrepSelection] = useState<PrepSelection | null>(null);
 
@@ -85,6 +101,20 @@ export function EncounterDisplay({
             </p>
           )}
         </div>
+
+        {/* Focus Charged indicator */}
+        {focusResult && focusResult.mode && focusResult.modifier > 0 && (() => {
+          const config = FOCUS_DISPLAY[focusResult.mode];
+          const Icon = config.icon;
+          return (
+            <div className={`flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 ${config.color}`}>
+              <Icon className="h-4 w-4" />
+              <span className="text-sm font-medium">
+                Focus Charged: +{focusResult.modifier} ({config.label})
+              </span>
+            </div>
+          );
+        })()}
 
         {/* Prep Phase */}
         <PrepPhase

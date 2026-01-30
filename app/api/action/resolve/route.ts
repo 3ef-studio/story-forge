@@ -265,6 +265,9 @@ async function handleRetreat(
   });
 }
 
+type FocusModeValue = 'power' | 'awareness' | 'aggression' | 'defense';
+const VALID_FOCUS_MODES: FocusModeValue[] = ['power', 'awareness', 'aggression', 'defense'];
+
 type ResolveActionBody = {
   encounterId: string;
   choiceId: string;
@@ -275,6 +278,8 @@ type ResolveActionBody = {
   npcId?: string;
   prepSelection?: PrepSelection | null;
   rivalPresent?: boolean;
+  focusMode?: FocusModeValue | null;
+  focusModifier?: number;
 };
 
 function isUuidLike(value: string): boolean {
@@ -305,7 +310,9 @@ function isResolveActionBody(value: unknown): value is ResolveActionBody {
     (v.locationType === undefined || typeof v.locationType === 'string') &&
     (v.npcId === undefined || typeof v.npcId === 'string') &&
     isValidPrepSelection(v.prepSelection) &&
-    (v.rivalPresent === undefined || typeof v.rivalPresent === 'boolean')
+    (v.rivalPresent === undefined || typeof v.rivalPresent === 'boolean') &&
+    (v.focusMode === undefined || v.focusMode === null || (typeof v.focusMode === 'string' && VALID_FOCUS_MODES.includes(v.focusMode as FocusModeValue))) &&
+    (v.focusModifier === undefined || (typeof v.focusModifier === 'number' && Number.isFinite(v.focusModifier)))
   );
 }
 
@@ -331,10 +338,16 @@ export async function POST(request: Request) {
       );
     }
 
-    const { encounterId, choiceId, threadId, actionId: rawActionId, locationType, npcId, prepSelection, rivalPresent } = rawBody;
+    const { encounterId, choiceId, threadId, actionId: rawActionId, locationType, npcId, prepSelection, rivalPresent, focusMode: rawFocusMode, focusModifier: rawFocusModifier } = rawBody;
     const actionId = rawActionId ? normalizeActionId(rawActionId) : undefined;
     const isCached = Boolean(rawBody.isCached);
     const validPrepSelection = prepSelection ?? null;
+
+    // Validate and sanitize focus fields
+    const focusMode: FocusModeValue | null = rawFocusMode && VALID_FOCUS_MODES.includes(rawFocusMode) ? rawFocusMode : null;
+    const focusModifier = typeof rawFocusModifier === 'number' && Number.isFinite(rawFocusModifier)
+      ? Math.max(0, Math.min(3, Math.round(rawFocusModifier)))
+      : 0;
 
     // Look up encounter from cache or templates
     // Robust behavior: UUID encounterIds are almost certainly cached AI encounters.
@@ -534,6 +547,8 @@ export async function POST(request: Request) {
       powerLevelLabel: totalPowerLevelLabel,
       npcInfluenceBonus,
       npcInfluenceLabel,
+      focusBonus: focusModifier,
+      focusBonusLabel: focusMode ? `Focus (${focusMode.charAt(0).toUpperCase() + focusMode.slice(1)})` : undefined,
     });
 
     // Determine outcome based on resolution
@@ -806,6 +821,7 @@ export async function POST(request: Request) {
         modifiers: resolution.modifiers,
         summary: resolution.summary,
       },
+      focus: focusModifier > 0 ? { mode: focusMode, modifier: focusModifier } : undefined,
       prepApplied: prepApplied ?? undefined,
       leveledUp,
       newLevel: leveledUp ? newLevel : undefined,

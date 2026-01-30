@@ -391,7 +391,7 @@ function generateSummary(approach: Approach, outcome: Outcome): string {
  * Uses same math as preview to ensure consistency.
  */
 export function resolveEncounter(input: ResolveEncounterInput): ResolutionBreakdown {
-  const { rng = Math.random, powerLevelBonus, powerLevelLabel, npcInfluenceBonus, npcInfluenceLabel, ...resolutionInput } = input;
+  const { rng = Math.random, powerLevelBonus, powerLevelLabel, npcInfluenceBonus, npcInfluenceLabel, focusBonus, focusBonusLabel, ...resolutionInput } = input;
 
   // Use shared math computation
   const math = computeResolutionMath(resolutionInput);
@@ -415,6 +415,16 @@ export function resolveEncounter(input: ResolveEncounterInput): ResolutionBreakd
     const bonusValue = -npcInfluenceBonus; // Positive influence = lower target = easier
     modifiers.push({
       label: npcInfluenceLabel ?? 'NPC Influence',
+      value: bonusValue,
+    });
+    target = clamp(target + bonusValue, 5, 99);
+  }
+
+  // Apply focus channeling bonus if provided (positive = helps, lowers target)
+  if (focusBonus && focusBonus > 0) {
+    const bonusValue = -focusBonus; // Positive focus = lower target = easier
+    modifiers.push({
+      label: focusBonusLabel ?? 'Focus',
       value: bonusValue,
     });
     target = clamp(target + bonusValue, 5, 99);

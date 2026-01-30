@@ -43,6 +43,8 @@ export type ResolveEncounterInput = ResolutionInput & {
   powerLevelLabel?: string;              // Optional label for power level modifier
   npcInfluenceBonus?: number;            // Optional bonus from NPC disposition/familiarity
   npcInfluenceLabel?: string;            // Label for NPC influence modifier
+  focusBonus?: number;                   // Optional bonus from focus channeling (0..4)
+  focusBonusLabel?: string;              // Label for focus bonus modifier
 };
 
 // Risk tier for previews

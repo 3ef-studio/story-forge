@@ -16,6 +16,7 @@ import { StoryLogPanel } from '@/app/components/game/StoryLogPanel';
 import { CityUpdateCard } from '@/app/components/game/CityUpdateCard';
 import { LoadingSigil } from '@/app/components/ui/LoadingSigil';
 import { AnimatedCard } from '@/app/components/ui/AnimatedCard';
+import { FocusChannel, type FocusResult, type FocusMode } from '@/app/components/game/FocusChannel';
 import { useToast } from '@/app/components/ui/toast';
 import { getFactionById } from '@/app/data/factions';
 import { attributes as attributesList } from '@/app/data/attributes';
@@ -136,6 +137,7 @@ export default function GamePage() {
   const [levelUpAttributeLoading, setLevelUpAttributeLoading] = useState(false);
   const [isCachedEncounter, setIsCachedEncounter] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
+  const [focusResult, setFocusResult] = useState<FocusResult>({ mode: null, modifier: 0 });
 
   // Mobile tab state
   const [mobileTab, setMobileTab] = useState<MobileTab>('scene');
@@ -288,6 +290,7 @@ export default function GamePage() {
     setGameState('executing');
     setError(null);
     setLoadingStep(0);
+    setFocusResult({ mode: null, modifier: 0 });
     // Switch to scene tab on mobile when action is selected
     setMobileTab('scene');
 
@@ -465,6 +468,8 @@ export default function GamePage() {
           npcId: currentEncounter.npcId,
           prepSelection,
           rivalPresent,
+          focusMode: focusResult.mode,
+          focusModifier: focusResult.modifier,
         }),
       });
 
@@ -664,49 +669,48 @@ export default function GamePage() {
     if (gameState === 'executing') {
       return (
         <AnimatedCard variant="panel" className="panel-glass p-6">
-          <div className="text-center space-y-4">
-            {/* Title */}
-            <h3 className="text-lg font-semibold text-white">Encounter forming...</h3>
+          <div className="space-y-5">
+            <div className="text-center space-y-4">
+              {/* Title */}
+              <h3 className="text-lg font-semibold text-white">Encounter forming...</h3>
 
-            {/* Animated sigil */}
-            <div className="flex justify-center">
-              <LoadingSigil label="Generating encounter" />
-            </div>
+              {/* Animated sigil */}
+              <div className="flex justify-center">
+                <LoadingSigil label="Generating encounter" />
+              </div>
 
-            {/* 3-step indicator */}
-            <div className="space-y-2">
-              {LOADING_STEPS.map((step, index) => (
-                <div
-                  key={step}
-                  className={`flex items-center gap-2 justify-center transition-opacity duration-300 ${
-                    index === loadingStep ? 'opacity-100' : 'opacity-30'
-                  }`}
-                >
+              {/* 3-step indicator */}
+              <div className="space-y-2">
+                {LOADING_STEPS.map((step, index) => (
                   <div
-                    className={`w-2 h-2 rounded-full ${
-                      index === loadingStep ? 'bg-blue-400 animate-pulse' : 'bg-white/30'
-                    }`}
-                  />
-                  <span
-                    className={`text-sm ${
-                      index === loadingStep ? 'text-blue-300 font-medium' : 'text-white/40'
+                    key={step}
+                    className={`flex items-center gap-2 justify-center transition-opacity duration-300 ${
+                      index === loadingStep ? 'opacity-100' : 'opacity-30'
                     }`}
                   >
-                    {step}
-                  </span>
-                </div>
-              ))}
+                    <div
+                      className={`w-2 h-2 rounded-full ${
+                        index === loadingStep ? 'bg-blue-400 animate-pulse' : 'bg-white/30'
+                      }`}
+                    />
+                    <span
+                      className={`text-sm ${
+                        index === loadingStep ? 'text-blue-300 font-medium' : 'text-white/40'
+                      }`}
+                    >
+                      {step}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
 
-            {/* Skeleton card preview */}
-            <div className="mt-4 p-4 bg-white/5 rounded-lg border border-white/10 animate-pulse">
-              <div className="h-4 bg-white/10 rounded w-3/4 mx-auto mb-3"></div>
-              <div className="h-3 bg-white/10 rounded w-full mb-2"></div>
-              <div className="h-3 bg-white/10 rounded w-5/6 mb-4"></div>
-              <div className="space-y-2">
-                <div className="h-10 bg-white/10 rounded"></div>
-                <div className="h-10 bg-white/10 rounded"></div>
-              </div>
+            {/* Focus Channeling Mini-Game */}
+            <div className="border-t border-white/10 pt-4">
+              <FocusChannel
+                active={gameState === 'executing'}
+                onComplete={setFocusResult}
+              />
             </div>
           </div>
         </AnimatedCard>
@@ -722,6 +726,7 @@ export default function GamePage() {
           isResolving={gameState === 'resolving'}
           characterEnergy={character.currentEnergy}
           characterPowers={character.powers}
+          focusResult={focusResult}
         />
       );
     }
