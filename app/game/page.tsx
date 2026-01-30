@@ -27,8 +27,12 @@ import { getLocationBackground } from '@/app/lib/game-logic/location-backgrounds
 import { LogOut, User, HelpCircle, Menu, X, Sparkles, Trophy, ArrowUp, Users } from 'lucide-react';
 import { previewEncounterResolution, inferApproachFromText } from '@/app/lib/game-logic/combat/resolve-encounter';
 import type { ResolutionPreview, PrepSelection } from '@/app/lib/game-logic/combat/types';
+import { ConflictPane } from '@/app/components/game/ConflictPane';
+import { initConflict, executeTurn, evaluateOutcome } from '@/app/lib/game-logic/conflict/engine';
+import type { ConflictState, ConflictResult, MoveId } from '@/app/lib/game-logic/conflict/types';
+import { getNPCById } from '@/app/data/npcs';
 
-type GameState = 'idle' | 'executing' | 'encounter' | 'resolving' | 'outcome';
+type GameState = 'idle' | 'executing' | 'encounter' | 'conflict' | 'resolving' | 'outcome';
 
 // 3-step loading messages that cycle every ~800ms
 const LOADING_STEPS = [
@@ -138,6 +142,12 @@ export default function GamePage() {
   const [isCachedEncounter, setIsCachedEncounter] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
   const [focusResult, setFocusResult] = useState<FocusResult>({ mode: null, modifier: 0 });
+
+  // Conflict state
+  const [conflictState, setConflictState] = useState<ConflictState | null>(null);
+  const [conflictResult, setConflictResult] = useState<ConflictResult | null>(null);
+  const [pendingChoiceId, setPendingChoiceId] = useState<string | null>(null);
+  const [pendingPrepSelection, setPendingPrepSelection] = useState<PrepSelection | null>(null);
 
   // Mobile tab state
   const [mobileTab, setMobileTab] = useState<MobileTab>('scene');
@@ -451,6 +461,46 @@ export default function GamePage() {
   const handleSelectChoice = async (choiceId: string, prepSelection: PrepSelection | null = null) => {
     if (!currentEncounter || gameState !== 'encounter') return;
 
+    // Save pending state for after conflict resolution
+    setPendingChoiceId(choiceId);
+    setPendingPrepSelection(prepSelection);
+
+    // Look up NPC tags for AI profile
+    const npcTags: string[] = [];
+    if (currentEncounter.npcId) {
+      const npc = getNPCById(currentEncounter.npcId);
+      if (npc) npcTags.push(...npc.tags);
+    }
+
+    // Initialize conflict
+    const conflict = initConflict({
+      encounterCategory: currentEncounter.category,
+      encounterDifficulty: currentEncounter.difficulty,
+      npcTags,
+      playerLabel: character?.name || 'You',
+      opponentLabel: currentEncounter.npcId
+        ? (getNPCById(currentEncounter.npcId)?.name || 'Opponent')
+        : 'Opponent',
+    });
+
+    setConflictState(conflict);
+    setGameState('conflict');
+  };
+
+  const handleConflictMove = (moveId: MoveId) => {
+    if (!conflictState || conflictState.ended) return;
+    const newState = executeTurn(conflictState, moveId);
+    setConflictState(newState);
+  };
+
+  const handleConflictContinue = async () => {
+    if (!conflictState || !currentEncounter) return;
+
+    // Evaluate and store conflict result (displayed but does not influence resolve outcome for v1)
+    const result = evaluateOutcome(conflictState);
+    setConflictResult(result);
+
+    // Now run the original resolve fetch logic using pending choiceId/prepSelection
     setGameState('resolving');
     setError(null);
 
@@ -460,13 +510,13 @@ export default function GamePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           encounterId: currentEncounter.id,
-          choiceId,
+          choiceId: pendingChoiceId,
           isCached: isCachedEncounter,
           threadId: currentEncounter.threadId,
           actionId: currentActionContext?.actionId,
           locationType: currentActionContext?.locationType,
           npcId: currentEncounter.npcId,
-          prepSelection,
+          prepSelection: pendingPrepSelection,
           rivalPresent,
           focusMode: focusResult.mode,
           focusModifier: focusResult.modifier,
@@ -561,6 +611,10 @@ export default function GamePage() {
     setCurrentActionContext(null);
     setRivalPresent(false);
     setIsCachedEncounter(false);
+    setConflictState(null);
+    setConflictResult(null);
+    setPendingChoiceId(null);
+    setPendingPrepSelection(null);
     setGameState('idle');
     await fetchCharacter();
   };
@@ -650,7 +704,7 @@ export default function GamePage() {
   }
 
   // Determine if we have an active encounter for tab indicator
-  const hasActiveEncounter = gameState === 'encounter' || gameState === 'executing' || gameState === 'outcome';
+  const hasActiveEncounter = gameState === 'encounter' || gameState === 'executing' || gameState === 'conflict' || gameState === 'outcome';
 
   // Scene content (shared between mobile tab and desktop center column)
   const renderSceneContent = () => {
@@ -727,6 +781,16 @@ export default function GamePage() {
           characterEnergy={character.currentEnergy}
           characterPowers={character.powers}
           focusResult={focusResult}
+        />
+      );
+    }
+
+    if (gameState === 'conflict' && conflictState) {
+      return (
+        <ConflictPane
+          state={conflictState}
+          onPlayerMove={handleConflictMove}
+          onContinue={handleConflictContinue}
         />
       );
     }

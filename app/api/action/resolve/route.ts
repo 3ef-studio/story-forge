@@ -268,6 +268,9 @@ async function handleRetreat(
 type FocusModeValue = 'power' | 'awareness' | 'aggression' | 'defense';
 const VALID_FOCUS_MODES: FocusModeValue[] = ['power', 'awareness', 'aggression', 'defense'];
 
+type ResolutionOutcomeOverride = 'success' | 'partial' | 'failure';
+const VALID_OUTCOME_OVERRIDES: ResolutionOutcomeOverride[] = ['success', 'partial', 'failure'];
+
 type ResolveActionBody = {
   encounterId: string;
   choiceId: string;
@@ -280,6 +283,7 @@ type ResolveActionBody = {
   rivalPresent?: boolean;
   focusMode?: FocusModeValue | null;
   focusModifier?: number;
+  resolutionOutcomeOverride?: ResolutionOutcomeOverride;
 };
 
 function isUuidLike(value: string): boolean {
@@ -312,7 +316,8 @@ function isResolveActionBody(value: unknown): value is ResolveActionBody {
     isValidPrepSelection(v.prepSelection) &&
     (v.rivalPresent === undefined || typeof v.rivalPresent === 'boolean') &&
     (v.focusMode === undefined || v.focusMode === null || (typeof v.focusMode === 'string' && VALID_FOCUS_MODES.includes(v.focusMode as FocusModeValue))) &&
-    (v.focusModifier === undefined || (typeof v.focusModifier === 'number' && Number.isFinite(v.focusModifier)))
+    (v.focusModifier === undefined || (typeof v.focusModifier === 'number' && Number.isFinite(v.focusModifier))) &&
+    (v.resolutionOutcomeOverride === undefined || (typeof v.resolutionOutcomeOverride === 'string' && VALID_OUTCOME_OVERRIDES.includes(v.resolutionOutcomeOverride as ResolutionOutcomeOverride)))
   );
 }
 
@@ -338,7 +343,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { encounterId, choiceId, threadId, actionId: rawActionId, locationType, npcId, prepSelection, rivalPresent, focusMode: rawFocusMode, focusModifier: rawFocusModifier } = rawBody;
+    const { encounterId, choiceId, threadId, actionId: rawActionId, locationType, npcId, prepSelection, rivalPresent, focusMode: rawFocusMode, focusModifier: rawFocusModifier, resolutionOutcomeOverride } = rawBody;
     const actionId = rawActionId ? normalizeActionId(rawActionId) : undefined;
     const isCached = Boolean(rawBody.isCached);
     const validPrepSelection = prepSelection ?? null;
@@ -534,28 +539,47 @@ export async function POST(request: Request) {
       }
     }
 
-    // Use the new combat resolver for deterministic, explainable resolution
-    const resolution: ResolutionBreakdown = resolveEncounter({
-      difficulty: encounter.difficulty,
-      approach,
-      attributes: attributesMap,
-      powerIds: powersList,
-      repByFaction: factionReputations,
-      encounterTags: encounter.narrativeTags,
-      involvedFactions: encounter.requiredFactions,
-      powerLevelBonus: totalPowerLevelBonus,
-      powerLevelLabel: totalPowerLevelLabel,
-      npcInfluenceBonus,
-      npcInfluenceLabel,
-      focusBonus: focusModifier,
-      focusBonusLabel: focusMode ? `Focus (${focusMode.charAt(0).toUpperCase() + focusMode.slice(1)})` : undefined,
-    });
+    // Resolve encounter outcome — either via conflict engine override or standard combat resolver
+    let resolution: ResolutionBreakdown;
+    let isSuccess: boolean;
+    let isPartial: boolean;
+    let isFailure: boolean;
 
-    // Determine outcome based on resolution
-    // success = full rewards, partial = success rewards at 50%, failure = failure penalties
-    const isSuccess = resolution.outcome === 'success';
-    const isPartial = resolution.outcome === 'partial';
-    const isFailure = resolution.outcome === 'failure';
+    if (resolutionOutcomeOverride && VALID_OUTCOME_OVERRIDES.includes(resolutionOutcomeOverride)) {
+      // Client-side conflict engine provided the outcome — skip resolveEncounter()
+      isSuccess = resolutionOutcomeOverride === 'success';
+      isPartial = resolutionOutcomeOverride === 'partial';
+      isFailure = resolutionOutcomeOverride === 'failure';
+
+      resolution = {
+        outcome: resolutionOutcomeOverride,
+        roll: 0,
+        target: 0,
+        modifiers: [{ label: 'Conflict resolution', value: 0 }],
+        summary: `Outcome determined by conflict resolution: ${resolutionOutcomeOverride}.`,
+      } as ResolutionBreakdown;
+    } else {
+      // Standard combat resolver path
+      resolution = resolveEncounter({
+        difficulty: encounter.difficulty,
+        approach,
+        attributes: attributesMap,
+        powerIds: powersList,
+        repByFaction: factionReputations,
+        encounterTags: encounter.narrativeTags,
+        involvedFactions: encounter.requiredFactions,
+        powerLevelBonus: totalPowerLevelBonus,
+        powerLevelLabel: totalPowerLevelLabel,
+        npcInfluenceBonus,
+        npcInfluenceLabel,
+        focusBonus: focusModifier,
+        focusBonusLabel: focusMode ? `Focus (${focusMode.charAt(0).toUpperCase() + focusMode.slice(1)})` : undefined,
+      });
+
+      isSuccess = resolution.outcome === 'success';
+      isPartial = resolution.outcome === 'partial';
+      isFailure = resolution.outcome === 'failure';
+    }
 
     // Select base result - partial uses success result with reduced rewards
     const baseResult: OutcomeResult = (isSuccess || isPartial)
@@ -849,3 +873,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'An error occurred' }, { status: 500 });
   }
 }
+
+// Manual test steps for resolutionOutcomeOverride:
+// 1. Start game, execute action, trigger encounter, pick a choice.
+// 2. In the conflict phase UI, play through turns, get a ConflictResult.
+// 3. The client maps ConflictResult.outcome → resolutionOutcomeOverride:
+//      player_victory → "success", opponent_victory → "failure", stalemate → "partial"
+// 4. POST /api/action/resolve with body including resolutionOutcomeOverride: "success"
+// 5. Verify response.resolution.summary starts with "Outcome determined by conflict resolution"
+// 6. Verify rewards/XP/faction changes still apply correctly.
+// 7. Omit resolutionOutcomeOverride → standard resolveEncounter() path runs as before.
