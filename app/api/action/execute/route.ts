@@ -203,7 +203,8 @@ export async function POST(request: Request) {
         encounterType,
         difficulty,
         location,
-        involvedFactions
+        involvedFactions,
+        action.moralIntent ?? 'neutral'
       );
 
       let seed: EncounterSeed | null = null;
@@ -255,6 +256,7 @@ export async function POST(request: Request) {
             recentEncounterTags: characterContext.previousEncounters
               .slice(0, 3)
               .flatMap(e => e.factionsInvolved),
+            moralIntent: action.moralIntent ?? 'neutral',
           });
 
           // Convert to EncounterTemplate for API compatibility

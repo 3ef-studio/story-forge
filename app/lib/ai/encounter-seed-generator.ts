@@ -222,13 +222,15 @@ export function buildSeedInput(
   encounterType: string,
   difficulty: number,
   location: string,
-  involvedFactions: string[]
+  involvedFactions: string[],
+  moralIntent: 'heroic' | 'neutral' | 'villainous' = 'neutral'
 ): SeedGenerationInput {
   const difficultyBucket = difficulty <= 3 ? 'easy' : difficulty <= 6 ? 'medium' : 'hard'
 
   return {
     actionId,
     actionCategory,
+    moralIntent,
     encounterType,
     difficulty,
     difficultyBucket,

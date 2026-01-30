@@ -52,12 +52,24 @@ export function buildPersonalizerInput(
   }
 }
 
+// Moral intent flavor lines - appended to description
+const MORAL_INTENT_FLAVOR: Record<string, string> = {
+  heroic: 'Your presence inspires cautious hope.',
+  neutral: 'You weigh the situation for opportunity.',
+  villainous: 'Fear and tension ripple outward at your arrival.',
+}
+
 // Personalize seed into full encounter - DETERMINISTIC, no AI
 export function personalizeSeed(input: PersonalizerInput): PersonalizedEncounter {
-  const { seed, powerNames, reputationTiers, recentEncounterTags } = input
+  const { seed, powerNames, reputationTiers, recentEncounterTags, moralIntent } = input
 
   // Build personalized narrative intro
-  const description = buildPersonalizedDescription(seed, powerNames, reputationTiers, recentEncounterTags)
+  let description = buildPersonalizedDescription(seed, powerNames, reputationTiers, recentEncounterTags)
+
+  // Append moral intent flavor
+  if (moralIntent && MORAL_INTENT_FLAVOR[moralIntent]) {
+    description += ` ${MORAL_INTENT_FLAVOR[moralIntent]}`
+  }
 
   // Build personalized choice labels (tone + power suffix)
   const personalizedChoices = seed.choices.map(choice => {

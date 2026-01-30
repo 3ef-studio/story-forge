@@ -132,8 +132,32 @@ VALID FACTION IDS:
 VALID ATTRIBUTE IDS:
 - strength, agility, endurance, intelligence, perception, willpower, charisma, stealth`
 
+// Build moral intent guidance for seed prompt
+function buildMoralIntentSection(moralIntent: string): string {
+  switch (moralIntent) {
+    case 'heroic':
+      return `PLAYER INTENT: heroic
+- Frame the player as attempting to protect, stop harm, or defend others.
+- NPCs should react as if a protector or authority figure has arrived.
+- Situation framing should emphasize threats to innocents or justice.`
+    case 'villainous':
+      return `PLAYER INTENT: villainous
+- Frame the player as predatory, coercive, intimidating, or opportunistic.
+- Do NOT frame the player as protecting civilians or acting altruistically.
+- NPCs should react with fear, compliance, or resistance — not gratitude.
+- Situation framing should emphasize targets, vulnerability, and leverage.`
+    default:
+      return `PLAYER INTENT: neutral
+- Frame the player as pragmatic, self-interested, or exploratory.
+- NPCs should react with caution, curiosity, or indifference.
+- Situation framing should emphasize opportunity and information.`
+  }
+}
+
 // Build seed generation prompt from inputs
 export function buildSeedPrompt(input: SeedGenerationInput): string {
+  const moralSection = buildMoralIntentSection(input.moralIntent)
+
   return `Generate a GENERIC encounter seed for:
 
 SCENARIO:
@@ -142,6 +166,11 @@ SCENARIO:
 - Location: ${input.location}
 - Involved Factions: ${input.involvedFactions.join(', ')}
 - Action Category: ${input.actionCategory}
+
+${moralSection}
+
+This must influence situation framing, NPC reactions, and choice flavor.
+Do NOT change choice structure or counts.
 
 REQUIREMENTS:
 1. Title should be generic (no character references)

@@ -105,6 +105,7 @@ export type CachedEncounterData = {
 export type SeedGenerationInput = {
   actionId: string
   actionCategory: string
+  moralIntent: 'heroic' | 'neutral' | 'villainous'
   encounterType: string
   difficulty: number
   difficultyBucket: 'easy' | 'medium' | 'hard' // For cache key grouping
@@ -179,6 +180,7 @@ export type PersonalizerInput = {
   powerNames: string[]
   reputationTiers: { factionId: string; tier: 'hostile' | 'unfriendly' | 'neutral' | 'friendly' | 'allied' }[]
   recentEncounterTags: string[] // Tags from last 3 encounters
+  moralIntent?: 'heroic' | 'neutral' | 'villainous'
 }
 
 // Personalized encounter output - adds flavor without changing structure

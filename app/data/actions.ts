@@ -2,12 +2,15 @@
 
 export type ActionCategory = 'heroic' | 'criminal' | 'neutral' | 'training' | 'social'
 
+export type MoralIntent = 'heroic' | 'neutral' | 'villainous'
+
 export type Action = {
   id: string
   name: string
   description: string
   category: ActionCategory
-  
+  moralIntent: MoralIntent
+
   // Requirements
   requiredPowers?: string[] // Must have at least one of these powers
   requiredAttributes?: { attributeId: string, minValue: number }[]
@@ -62,6 +65,7 @@ export const actions: Action[] = [
     name: 'Patrol Area',
     description: 'Maintain a visible presence and respond to everyday crime.',
     category: 'heroic',
+    moralIntent: 'heroic',
     energyCost: 10,
     factionImpacts: [
       { factionId: 'metro_police', reputationChange: 1 },
@@ -104,6 +108,7 @@ export const actions: Action[] = [
     name: 'Hunt Major Threats',
     description: 'Seek out dangerous superhuman criminals and high-level threats.',
     category: 'heroic',
+    moralIntent: 'heroic',
     energyCost: 18,
     factionImpacts: [
       { factionId: 'metro_police', reputationChange: 2 },
@@ -145,6 +150,7 @@ export const actions: Action[] = [
     name: 'Respond to Emergency',
     description: 'Rush to a disaster or emergency situation to help',
     category: 'heroic',
+    moralIntent: 'heroic',
     energyCost: 15,
     requiredAttributes: [
       { attributeId: 'agility', minValue: 12 }
@@ -182,6 +188,7 @@ export const actions: Action[] = [
     name: 'Cooperate with Police',
     description: 'Work directly with law enforcement on a case or operation',
     category: 'heroic',
+    moralIntent: 'heroic',
     energyCost: 12,
     factionImpacts: [
       { factionId: 'metro_police', reputationChange: 4 },
@@ -215,6 +222,7 @@ export const actions: Action[] = [
     name: 'Rob a Bank',
     description: 'Use your powers to steal money from a financial institution',
     category: 'criminal',
+    moralIntent: 'villainous',
     energyCost: 15,
     factionImpacts: [
       { factionId: 'metro_police', reputationChange: -5 },
@@ -249,6 +257,7 @@ export const actions: Action[] = [
     name: 'Extort Local Businesses',
     description: 'Demand protection money from businesses in a neighborhood',
     category: 'criminal',
+    moralIntent: 'villainous',
     energyCost: 10,
     factionImpacts: [
       { factionId: 'civilian_population', reputationChange: -3 },
@@ -282,6 +291,7 @@ export const actions: Action[] = [
     name: 'Take a Syndicate Job',
     description: 'Work as muscle for organized crime',
     category: 'criminal',
+    moralIntent: 'villainous',
     energyCost: 12,
     factionImpacts: [
       { factionId: 'syndicate', reputationChange: 4 },
@@ -315,6 +325,7 @@ export const actions: Action[] = [
     name: 'Attack a Hero',
     description: 'Hunt down and confront a known hero or vigilante',
     category: 'criminal',
+    moralIntent: 'villainous',
     energyCost: 18,
     requiredAttributes: [
       { attributeId: 'notoriety', minValue: 20 }
@@ -354,6 +365,7 @@ export const actions: Action[] = [
     name: 'Investigate a Mystery',
     description: 'Look into strange occurrences or gather intelligence',
     category: 'neutral',
+    moralIntent: 'neutral',
     energyCost: 10,
     requiredAttributes: [
       { attributeId: 'intelligence', minValue: 12 }
@@ -384,6 +396,7 @@ export const actions: Action[] = [
     name: 'Explore New Territory',
     description: 'Scout out unfamiliar parts of the city',
     category: 'neutral',
+    moralIntent: 'neutral',
     energyCost: 8,
     factionImpacts: [],
     attributeGrowthChance: [
@@ -411,6 +424,7 @@ export const actions: Action[] = [
     name: 'Visit Black Market',
     description: 'Trade with underground dealers for rare items and information',
     category: 'neutral',
+    moralIntent: 'neutral',
     energyCost: 5,
     factionImpacts: [
       { factionId: 'black_market', reputationChange: 2 },
@@ -440,6 +454,7 @@ export const actions: Action[] = [
     name: 'Give Media Interview',
     description: 'Speak to reporters and shape your public image',
     category: 'neutral',
+    moralIntent: 'neutral',
     energyCost: 8,
     requiredAttributes: [
       { attributeId: 'reputation', minValue: 15 }
@@ -475,6 +490,7 @@ export const actions: Action[] = [
     name: 'Train Your Powers',
     description: 'Practice and refine your abilities in a safe environment',
     category: 'training',
+    moralIntent: 'neutral',
     energyCost: 12,
     factionImpacts: [],
     attributeGrowthChance: [
@@ -501,6 +517,7 @@ export const actions: Action[] = [
     name: 'Physical Training',
     description: 'Work on your strength, speed, and endurance',
     category: 'training',
+    moralIntent: 'neutral',
     energyCost: 10,
     factionImpacts: [],
     attributeGrowthChance: [
@@ -529,6 +546,7 @@ export const actions: Action[] = [
     name: 'Study Tactics',
     description: 'Research combat strategies and analyze past encounters',
     category: 'training',
+    moralIntent: 'neutral',
     energyCost: 8,
     factionImpacts: [],
     attributeGrowthChance: [
@@ -556,6 +574,7 @@ export const actions: Action[] = [
     name: 'Meditation & Focus',
     description: 'Clear your mind and strengthen your mental discipline',
     category: 'training',
+    moralIntent: 'neutral',
     energyCost: 5,
     factionImpacts: [],
     attributeGrowthChance: [
@@ -584,6 +603,7 @@ export const actions: Action[] = [
     name: 'Recruit an Ally',
     description: 'Seek out and convince someone to join your cause',
     category: 'social',
+    moralIntent: 'neutral',
     energyCost: 10,
     requiredAttributes: [
       { attributeId: 'charisma', minValue: 15 }
@@ -614,6 +634,7 @@ export const actions: Action[] = [
     name: 'Network with Contacts',
     description: 'Build relationships and gather information from various sources',
     category: 'social',
+    moralIntent: 'neutral',
     energyCost: 8,
     factionImpacts: [
       { factionId: 'black_market', reputationChange: 1 }
@@ -643,6 +664,7 @@ export const actions: Action[] = [
     name: 'Rest & Recover',
     description: 'Take time to heal wounds and regain energy',
     category: 'neutral',
+    moralIntent: 'neutral',
     energyCost: -20, // Actually restores energy
     factionImpacts: [],
     attributeGrowthChance: [
