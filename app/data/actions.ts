@@ -142,7 +142,7 @@ export const actions: Action[] = [
     ],
     baseXPReward: 40,
     baseMoneyReward: 10,
-    cooldownHours: 4
+    cooldownHours: 3
   },
 
   {
@@ -180,7 +180,7 @@ export const actions: Action[] = [
     locationTypes: ['disaster_sites', 'anywhere_in_crisis'],
     baseXPReward: 40,
     baseMoneyReward: 0,
-    cooldownHours: 6
+    cooldownHours: 3
   },
 
   {
@@ -248,8 +248,8 @@ export const actions: Action[] = [
     narrativeContext: 'Player commits high-profile robbery, willing to use powers for personal gain',
     locationTypes: ['banks', 'financial_district', 'downtown'],
     baseXPReward: 40,
-    baseMoneyReward: 500,
-    cooldownHours: 12
+    baseMoneyReward: 300,
+    cooldownHours: 3
   },
 
   {
@@ -283,7 +283,7 @@ export const actions: Action[] = [
     locationTypes: ['commercial_areas', 'neighborhoods', 'small_businesses'],
     baseXPReward: 20,
     baseMoneyReward: 150,
-    cooldownHours: 8
+    cooldownHours: 4
   },
 
   {
@@ -317,7 +317,7 @@ export const actions: Action[] = [
     locationTypes: ['docks', 'warehouses', 'syndicate_territory'],
     baseXPReward: 35,
     baseMoneyReward: 300,
-    cooldownHours: 10
+    cooldownHours: 5
   },
 
   {
