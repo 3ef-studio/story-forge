@@ -49,18 +49,59 @@ const DISPOSITION_LABELS: { threshold: number; label: string }[] = [
   { threshold: -30, label: 'Hostile' },
 ];
 
-function getFamiliarityLabel(familiarity: number): string {
+export function getFamiliarityLabel(familiarity: number): string {
   for (const { threshold, label } of FAMILIARITY_LABELS) {
     if (familiarity >= threshold) return label;
   }
   return 'Stranger';
 }
 
-function getDispositionLabel(disposition: number): string {
+export function getDispositionLabel(disposition: number): string {
   for (const { threshold, label } of DISPOSITION_LABELS) {
     if (disposition >= threshold) return label;
   }
   return 'Enemy';
+}
+
+/**
+ * Compute a small combat modifier from NPC disposition + familiarity.
+ * Disposition dominates sign; familiarity scales magnitude.
+ * Range: [-4, +4]
+ */
+export function getNpcInfluenceModifier(
+  disposition: number,
+  familiarity: number
+): { modifier: number; label: string } {
+  // Disposition → base sign and magnitude
+  // Thresholds: >=30 Trusted Ally, >=15 Friendly, >=5 Warm,
+  //             >=-5 Neutral, >=-15 Cold, >=-30 Hostile, <-30 Enemy
+  let base: number;
+  if (disposition >= 30) base = 3;
+  else if (disposition >= 15) base = 2;
+  else if (disposition >= 5) base = 1;
+  else if (disposition >= -5) base = 0;
+  else if (disposition >= -15) base = -1;
+  else if (disposition >= -30) base = -2;
+  else base = -3;
+
+  // Familiarity scales magnitude: 0 = no effect, 3+ = +1, 5+ = already counted above
+  // Only boost if disposition is non-zero (familiarity amplifies, not creates)
+  let familiarityBonus = 0;
+  if (base !== 0 && familiarity >= 3) {
+    familiarityBonus = base > 0 ? 1 : -1;
+  }
+
+  const modifier = Math.max(-4, Math.min(4, base + familiarityBonus));
+
+  if (modifier === 0) {
+    return { modifier: 0, label: '' };
+  }
+
+  const dispLabel = getDispositionLabel(disposition);
+  const famLabel = getFamiliarityLabel(familiarity);
+  const label = `${dispLabel}, ${famLabel}`;
+
+  return { modifier, label };
 }
 
 /**

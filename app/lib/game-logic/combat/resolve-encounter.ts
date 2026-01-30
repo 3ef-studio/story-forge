@@ -391,7 +391,7 @@ function generateSummary(approach: Approach, outcome: Outcome): string {
  * Uses same math as preview to ensure consistency.
  */
 export function resolveEncounter(input: ResolveEncounterInput): ResolutionBreakdown {
-  const { rng = Math.random, powerLevelBonus, powerLevelLabel, ...resolutionInput } = input;
+  const { rng = Math.random, powerLevelBonus, powerLevelLabel, npcInfluenceBonus, npcInfluenceLabel, ...resolutionInput } = input;
 
   // Use shared math computation
   const math = computeResolutionMath(resolutionInput);
@@ -405,6 +405,16 @@ export function resolveEncounter(input: ResolveEncounterInput): ResolutionBreakd
     const bonusValue = -powerLevelBonus; // Convert to target modifier (negative bonus = lower target)
     modifiers.push({
       label: powerLevelLabel ?? 'Power Level',
+      value: bonusValue,
+    });
+    target = clamp(target + bonusValue, 5, 99);
+  }
+
+  // Apply NPC influence bonus if provided (positive = helps, lowers target)
+  if (npcInfluenceBonus && npcInfluenceBonus !== 0) {
+    const bonusValue = -npcInfluenceBonus; // Positive influence = lower target = easier
+    modifiers.push({
+      label: npcInfluenceLabel ?? 'NPC Influence',
       value: bonusValue,
     });
     target = clamp(target + bonusValue, 5, 99);

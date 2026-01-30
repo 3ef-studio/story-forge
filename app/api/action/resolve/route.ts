@@ -31,6 +31,7 @@ import {
   recordNPCEncounter,
   calculateDispositionChange,
   calculateSocialDispositionChange,
+  getNpcInfluenceModifier,
 } from '@/app/lib/game-logic/npc-manager';
 import { getNPCById } from '@/app/data/npcs';
 import { getActionById, normalizeActionId } from '@/app/data/actions';
@@ -498,6 +499,28 @@ export async function POST(request: Request) {
       ? (powerLevelLabel ? `${powerLevelLabel} + Prep` : getPrepLabel(validPrepSelection!))
       : powerLevelLabel;
 
+    // Look up NPC influence modifier if an NPC is present
+    let npcInfluenceBonus = 0;
+    let npcInfluenceLabel: string | undefined;
+    let npcInfluenceName: string | undefined;
+    if (npcId) {
+      const npcData = getNPCById(npcId);
+      if (npcData) {
+        // Get the character's relationship with this NPC from the DB
+        const characterNpc = await prisma.characterNPC.findUnique({
+          where: { characterId_npcId: { characterId: character.id, npcId } },
+        });
+        const disposition = characterNpc?.disposition ?? npcData.baseDisposition;
+        const familiarity = characterNpc?.familiarity ?? 0;
+        const influence = getNpcInfluenceModifier(disposition, familiarity);
+        if (influence.modifier !== 0) {
+          npcInfluenceBonus = influence.modifier;
+          npcInfluenceName = npcData.alias || npcData.name;
+          npcInfluenceLabel = `${npcInfluenceName} (${influence.label})`;
+        }
+      }
+    }
+
     // Use the new combat resolver for deterministic, explainable resolution
     const resolution: ResolutionBreakdown = resolveEncounter({
       difficulty: encounter.difficulty,
@@ -509,6 +532,8 @@ export async function POST(request: Request) {
       involvedFactions: encounter.requiredFactions,
       powerLevelBonus: totalPowerLevelBonus,
       powerLevelLabel: totalPowerLevelLabel,
+      npcInfluenceBonus,
+      npcInfluenceLabel,
     });
 
     // Determine outcome based on resolution
@@ -526,11 +551,19 @@ export async function POST(request: Request) {
     const xpMultiplier = isPartial ? 0.5 : 1.0;
     const effectiveXpGain = Math.floor(baseResult.xpGain * xpMultiplier);
 
+    // Build NPC influence flavor line
+    let npcFlavorLine = '';
+    if (npcInfluenceBonus > 0 && npcInfluenceName) {
+      npcFlavorLine = ` ${npcInfluenceName} intervenes at the right moment.`;
+    } else if (npcInfluenceBonus < 0 && npcInfluenceName) {
+      npcFlavorLine = ` ${npcInfluenceName} complicates things when it matters.`;
+    }
+
     // Build effective result with adjusted values
     const result: OutcomeResult = {
-      description: isPartial
+      description: (isPartial
         ? `${baseResult.description} (Partial success)`
-        : baseResult.description,
+        : baseResult.description) + npcFlavorLine,
       xpGain: effectiveXpGain,
       factionChanges: baseResult.factionChanges.map(fc => ({
         ...fc,

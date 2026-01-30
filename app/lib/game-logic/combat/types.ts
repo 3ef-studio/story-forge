@@ -41,6 +41,8 @@ export type ResolveEncounterInput = ResolutionInput & {
   rng?: () => number;                    // Optional RNG for testing (0-1)
   powerLevelBonus?: number;              // Optional bonus from power level (negative = easier)
   powerLevelLabel?: string;              // Optional label for power level modifier
+  npcInfluenceBonus?: number;            // Optional bonus from NPC disposition/familiarity
+  npcInfluenceLabel?: string;            // Label for NPC influence modifier
 };
 
 // Risk tier for previews
