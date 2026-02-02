@@ -271,6 +271,16 @@ const VALID_FOCUS_MODES: FocusModeValue[] = ['power', 'awareness', 'aggression',
 type ResolutionOutcomeOverride = 'success' | 'partial' | 'failure';
 const VALID_OUTCOME_OVERRIDES: ResolutionOutcomeOverride[] = ['success', 'partial', 'failure'];
 
+/** Conflict outcome payload sent by the client after the Resource Fracture mini-game */
+type ConflictOutcomePayload = {
+  result: 'victory' | 'defeat' | 'stalemate';
+  turnsUsed?: number;
+  final?: {
+    player: { control: number; stability: number; position: number };
+    opponent: { control: number; stability: number; position: number };
+  };
+};
+
 type ResolveActionBody = {
   encounterId: string;
   choiceId: string;
@@ -284,6 +294,7 @@ type ResolveActionBody = {
   focusMode?: FocusModeValue | null;
   focusModifier?: number;
   resolutionOutcomeOverride?: ResolutionOutcomeOverride;
+  conflictOutcome?: ConflictOutcomePayload;
 };
 
 function isUuidLike(value: string): boolean {
@@ -317,7 +328,8 @@ function isResolveActionBody(value: unknown): value is ResolveActionBody {
     (v.rivalPresent === undefined || typeof v.rivalPresent === 'boolean') &&
     (v.focusMode === undefined || v.focusMode === null || (typeof v.focusMode === 'string' && VALID_FOCUS_MODES.includes(v.focusMode as FocusModeValue))) &&
     (v.focusModifier === undefined || (typeof v.focusModifier === 'number' && Number.isFinite(v.focusModifier))) &&
-    (v.resolutionOutcomeOverride === undefined || (typeof v.resolutionOutcomeOverride === 'string' && VALID_OUTCOME_OVERRIDES.includes(v.resolutionOutcomeOverride as ResolutionOutcomeOverride)))
+    (v.resolutionOutcomeOverride === undefined || (typeof v.resolutionOutcomeOverride === 'string' && VALID_OUTCOME_OVERRIDES.includes(v.resolutionOutcomeOverride as ResolutionOutcomeOverride))) &&
+    (v.conflictOutcome === undefined || (typeof v.conflictOutcome === 'object' && v.conflictOutcome !== null && ['victory', 'defeat', 'stalemate'].includes((v.conflictOutcome as Record<string, unknown>).result as string)))
   );
 }
 
@@ -343,7 +355,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { encounterId, choiceId, threadId, actionId: rawActionId, locationType, npcId, prepSelection, rivalPresent, focusMode: rawFocusMode, focusModifier: rawFocusModifier, resolutionOutcomeOverride } = rawBody;
+    const { encounterId, choiceId, threadId, actionId: rawActionId, locationType, npcId, prepSelection, rivalPresent, focusMode: rawFocusMode, focusModifier: rawFocusModifier, resolutionOutcomeOverride, conflictOutcome } = rawBody;
     const actionId = rawActionId ? normalizeActionId(rawActionId) : undefined;
     const isCached = Boolean(rawBody.isCached);
     const validPrepSelection = prepSelection ?? null;
@@ -558,6 +570,11 @@ export async function POST(request: Request) {
         modifiers: [{ label: 'Conflict resolution', value: 0 }],
         summary: `Outcome determined by conflict resolution: ${resolutionOutcomeOverride}.`,
       } as ResolutionBreakdown;
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Resolve] Conflict outcome received:', conflictOutcome);
+        console.log('[Resolve] Using resolutionOutcomeOverride:', resolutionOutcomeOverride, '→', { isSuccess, isPartial, isFailure });
+      }
     } else {
       // Standard combat resolver path
       resolution = resolveEncounter({
@@ -824,9 +841,21 @@ export async function POST(request: Request) {
       }
     }
 
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Resolve] Rewards applied once:', {
+        xpGained,
+        hpLoss,
+        prepEnergyCost,
+        factionChanges: Object.keys(allReputationChanges).length,
+        powerProgression: powerProgression?.powerId ?? 'none',
+        conflictDriven: !!resolutionOutcomeOverride,
+      });
+    }
+
     return NextResponse.json({
       success: isSuccess,
       partial: isPartial,
+      conflictOutcome: conflictOutcome ?? undefined,
       outcome: {
         description: result.description,
         xpGained,

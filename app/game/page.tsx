@@ -520,11 +520,34 @@ export default function GamePage() {
   const handleConflictContinue = async () => {
     if (!conflictState || !currentEncounter) return;
 
-    // Evaluate and store conflict result (displayed but does not influence resolve outcome for v1)
+    // Evaluate conflict result — this is the authoritative success/failure signal
     const result = evaluateOutcome(conflictState);
     setConflictResult(result);
 
-    // Now run the original resolve fetch logic using pending choiceId/prepSelection
+    // Map conflict outcome → resolution override
+    // player_victory → success, opponent_victory → failure, stalemate → partial
+    const resolutionOutcomeOverride =
+      result.outcome === 'player_victory' ? 'success'
+      : result.outcome === 'opponent_victory' ? 'failure'
+      : 'partial';
+
+    // Build conflict outcome payload for the resolver
+    const conflictOutcome = {
+      result: result.outcome === 'player_victory' ? 'victory' as const : result.outcome === 'opponent_victory' ? 'defeat' as const : 'stalemate' as const,
+      turnsUsed: result.turnsPlayed,
+      final: {
+        player: { ...result.playerFinalResources },
+        opponent: { ...result.opponentFinalResources },
+      },
+    };
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Conflict→Resolve] Conflict result:', result.outcome);
+      console.log('[Conflict→Resolve] Mapped to resolutionOutcomeOverride:', resolutionOutcomeOverride);
+      console.log('[Conflict→Resolve] conflictOutcome payload:', conflictOutcome);
+    }
+
+    // Transition to resolving — the legacy results screen is the final output
     setGameState('resolving');
     setError(null);
 
@@ -544,6 +567,8 @@ export default function GamePage() {
           rivalPresent: !!rivalPresence,
           focusMode: focusResult.mode,
           focusModifier: focusResult.modifier,
+          resolutionOutcomeOverride,
+          conflictOutcome,
         }),
       });
 
@@ -825,6 +850,7 @@ export default function GamePage() {
           outcome={currentOutcome}
           resolution={currentResolution ?? undefined}
           powerProgression={currentPowerProgression ?? undefined}
+          conflictResult={conflictResult ?? undefined}
           onContinue={handleContinue}
         />
       );

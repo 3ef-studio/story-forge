@@ -43,10 +43,18 @@ interface PowerProgressionData {
   xpToNextLevel: number;
 }
 
+interface ConflictResultData {
+  outcome: 'player_victory' | 'opponent_victory' | 'stalemate';
+  turnsPlayed: number;
+  playerFinalResources: { control: number; stability: number; position: number };
+  opponentFinalResources: { control: number; stability: number; position: number };
+}
+
 interface OutcomeDisplayProps {
   outcome: OutcomeResult;
   resolution?: ResolutionData;
   powerProgression?: PowerProgressionData;
+  conflictResult?: ConflictResultData;
   onContinue: () => void;
 }
 
@@ -66,7 +74,7 @@ const POWER_BAR_COLORS: Record<string, string> = {
   defensive: 'bg-cyan-500',
 };
 
-export function OutcomeDisplay({ outcome, resolution, powerProgression, onContinue }: OutcomeDisplayProps) {
+export function OutcomeDisplay({ outcome, resolution, powerProgression, conflictResult, onContinue }: OutcomeDisplayProps) {
   const [showContent, setShowContent] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const shouldReduceMotion = useReducedMotion();
@@ -118,6 +126,40 @@ export function OutcomeDisplay({ outcome, resolution, powerProgression, onContin
         </div>
       </div>
       <div className="space-y-5 px-4 sm:px-6 pb-5">
+        {/* Conflict Result Banner (shown when encounter went through Resource Fracture) */}
+        {conflictResult && (
+          <div
+            className={`flex items-center justify-between p-3 rounded-xl border ${
+              conflictResult.outcome === 'player_victory'
+                ? 'bg-green-500/10 border-green-500/30'
+                : conflictResult.outcome === 'opponent_victory'
+                ? 'bg-red-500/10 border-red-500/30'
+                : 'bg-amber-500/10 border-amber-500/30'
+            }`}
+          >
+            <span className={`text-sm font-semibold ${
+              conflictResult.outcome === 'player_victory'
+                ? 'text-green-400'
+                : conflictResult.outcome === 'opponent_victory'
+                ? 'text-red-400'
+                : 'text-amber-400'
+            }`}>
+              {conflictResult.outcome === 'player_victory'
+                ? 'Victory'
+                : conflictResult.outcome === 'opponent_victory'
+                ? 'Defeat'
+                : 'Stalemate'}
+            </span>
+            <span className="text-xs text-white/40">
+              {conflictResult.turnsPlayed} turn{conflictResult.turnsPlayed !== 1 ? 's' : ''}
+              {' · '}
+              C{conflictResult.playerFinalResources.control}/S{conflictResult.playerFinalResources.stability}/P{conflictResult.playerFinalResources.position}
+              {' vs '}
+              C{conflictResult.opponentFinalResources.control}/S{conflictResult.opponentFinalResources.stability}/P{conflictResult.opponentFinalResources.position}
+            </span>
+          </div>
+        )}
+
         {/* Section 1: Outcome Description */}
         <div
           className={`bg-white/10 rounded-xl p-4 sm:p-5 border border-white/10 transition-all duration-500 ${
@@ -129,23 +171,7 @@ export function OutcomeDisplay({ outcome, resolution, powerProgression, onContin
           </p>
         </div>
 
-        {/* Section 2: Combat Breakdown */}
-        {resolution && (
-          <div
-            className={`transition-all duration-500 delay-100 ${
-              showContent ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
-            }`}
-          >
-            <ResolutionBreakdownCard
-              outcome={resolution.outcome}
-              roll={resolution.roll}
-              target={resolution.target}
-              modifiers={resolution.modifiers}
-              summary={resolution.summary}
-              isRetreat={resolution.isRetreat}
-            />
-          </div>
-        )}
+        
 
         {/* Section 3: Rewards */}
         <div
@@ -160,7 +186,7 @@ export function OutcomeDisplay({ outcome, resolution, powerProgression, onContin
           <div className="grid grid-cols-2 gap-2.5">
             {/* XP */}
             <div className="flex items-center gap-2 p-3 bg-white/10 rounded-xl border border-white/10">
-              <Star className="h-4 w-4 text-yellow-400 flex-shrink-0" />
+              <Star className="h-4 w-4 text-yellow-400 shrink-0" />
               <span className="text-sm text-white/70">XP</span>
               <Badge variant="success" className="ml-auto">
                 +{outcome.xpGained}
@@ -170,7 +196,7 @@ export function OutcomeDisplay({ outcome, resolution, powerProgression, onContin
             {/* HP Change */}
             {outcome.hpChange && outcome.hpChange !== 0 && (
               <div className="flex items-center gap-2 p-3 bg-white/10 rounded-xl border border-white/10">
-                <Heart className="h-4 w-4 text-red-400 flex-shrink-0" />
+                <Heart className="h-4 w-4 text-red-400 shrink-0" />
                 <span className="text-sm text-white/70">HP</span>
                 <Badge
                   variant={outcome.hpChange > 0 ? 'success' : 'destructive'}
@@ -185,7 +211,7 @@ export function OutcomeDisplay({ outcome, resolution, powerProgression, onContin
             {/* Energy Change */}
             {outcome.energyChange && outcome.energyChange !== 0 && (
               <div className="flex items-center gap-2 p-3 bg-white/10 rounded-xl border border-white/10">
-                <Zap className="h-4 w-4 text-yellow-400 flex-shrink-0" />
+                <Zap className="h-4 w-4 text-yellow-400 shrink-0" />
                 <span className="text-sm text-white/70">Energy</span>
                 <Badge
                   variant={outcome.energyChange > 0 ? 'success' : 'warning'}
@@ -322,7 +348,7 @@ export function OutcomeDisplay({ outcome, resolution, powerProgression, onContin
         <div className="pt-2 pb-1">
           <button
             onClick={onContinue}
-            className="w-full min-h-[48px] text-base font-semibold rounded-xl bg-blue-500 hover:bg-blue-600 text-white transition-colors"
+            className="w-full min-h-12 text-base font-semibold rounded-xl bg-blue-500 hover:bg-blue-600 text-white transition-colors"
           >
             Continue
           </button>
