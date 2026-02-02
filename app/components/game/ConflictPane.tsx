@@ -98,7 +98,19 @@ export function ConflictPane({ state, onPlayerMove, onContinue }: ConflictPanePr
             Turn {Math.min(state.turn, state.maxTurns)}/{state.maxTurns}
           </span>
         </div>
-        <span className="text-sm text-white/50">vs {state.opponent.label}</span>
+        <div className="flex items-center gap-2">
+          {state.opponentIdentity && (
+            <>
+              <span className="text-xs px-1.5 py-0.5 rounded bg-white/10 text-white/50 capitalize">
+                {state.opponentIdentity.archetype}
+              </span>
+              <span className="text-xs px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">
+                Threat {state.opponentIdentity.threatTier}
+              </span>
+            </>
+          )}
+          <span className="text-sm text-white/50">vs {state.opponent.label}</span>
+        </div>
       </div>
 
       {/* Resource Display */}
@@ -121,7 +133,12 @@ export function ConflictPane({ state, onPlayerMove, onContinue }: ConflictPanePr
           </div>
           {/* Opponent */}
           <div>
-            <h3 className="text-xs font-semibold text-white/80 mb-2">{state.opponent.label}</h3>
+            <h3 className="text-xs font-semibold text-white/80 mb-2">
+              {state.opponent.label}
+              {state.opponentIdentity?.factionId && (
+                <span className="ml-2 font-normal text-white/40">({state.opponentIdentity.factionId})</span>
+              )}
+            </h3>
             <div className="space-y-1.5">
               {(['control', 'stability', 'position'] as const).map((key) => (
                 <ResourceBar

@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { initConflict, executeTurn, evaluateOutcome, getPlayerMoves } from '../engine';
 import type { ConflictInit, ConflictState, MoveId, PlayerBuildSnapshot } from '../types';
+import { resolveOpponentIdentity } from '../opponent-identity';
+import type { OpponentIdentity } from '../opponent-identity';
 
 const DEFAULT_INIT: ConflictInit = {
   encounterCategory: 'combat',
@@ -294,6 +296,95 @@ describe('build-influenced executeTurn', () => {
     const moves: MoveId[] = ['pressure', 'reposition', 'stabilize', 'feint'];
     const state1 = playFullConflict(BUILD_INIT, moves);
     const state2 = playFullConflict(BUILD_INIT, moves);
+    const result1 = evaluateOutcome(state1);
+    const result2 = evaluateOutcome(state2);
+
+    expect(result1.outcome).toBe(result2.outcome);
+    expect(result1.turnsPlayed).toBe(result2.turnsPlayed);
+    expect(result1.playerFinalResources).toEqual(result2.playerFinalResources);
+    expect(result1.opponentFinalResources).toEqual(result2.opponentFinalResources);
+  });
+});
+
+// --- Opponent Identity integration tests ---
+
+const ENFORCER_IDENTITY: OpponentIdentity = resolveOpponentIdentity({
+  encounterCategory: 'combat',
+  encounterDifficulty: 6,
+  npc: { id: 'n1', name: 'Grim', tags: ['enforcer', 'gang'], factionId: 'syndicate' },
+});
+
+const IDENTITY_INIT: ConflictInit = {
+  ...DEFAULT_INIT,
+  opponentIdentity: ENFORCER_IDENTITY,
+};
+
+describe('initConflict with opponentIdentity', () => {
+  it('applies starting resource bonus to opponent', () => {
+    const withIdentity = initConflict(IDENTITY_INIT);
+    const withoutIdentity = initConflict(DEFAULT_INIT);
+    // Enforcer at tier 6 gets control +1 starting bonus
+    expect(withIdentity.opponent.resources.control).toBe(
+      withoutIdentity.opponent.resources.control + 1
+    );
+  });
+
+  it('stores opponentIdentity on state', () => {
+    const state = initConflict(IDENTITY_INIT);
+    expect(state.opponentIdentity).toBeDefined();
+    expect(state.opponentIdentity!.archetype).toBe('enforcer');
+    expect(state.opponentIdentity!.name).toBe('Grim');
+  });
+
+  it('keeps opponent resources clamped 0-5', () => {
+    // High threat tier with high difficulty
+    const highTier = resolveOpponentIdentity({
+      encounterCategory: 'combat',
+      encounterDifficulty: 10, // opponent gets 4/4/4 base
+      npc: { id: 'n1', name: 'Boss', tags: ['enforcer'] },
+    });
+    const state = initConflict({
+      ...DEFAULT_INIT,
+      encounterDifficulty: 10,
+      opponentIdentity: highTier,
+    });
+    for (const key of ['control', 'stability', 'position'] as const) {
+      expect(state.opponent.resources[key]).toBeGreaterThanOrEqual(0);
+      expect(state.opponent.resources[key]).toBeLessThanOrEqual(5);
+    }
+  });
+
+  it('does not change behavior when opponentIdentity is undefined', () => {
+    const withoutIdentity = initConflict(DEFAULT_INIT);
+    expect(withoutIdentity.opponentIdentity).toBeUndefined();
+    expect(withoutIdentity.opponent.resources).toEqual({ control: 3, stability: 3, position: 3 });
+  });
+});
+
+describe('executeTurn with opponentIdentity', () => {
+  it('resources stay clamped 0-5 with identity bonuses', () => {
+    const moves: MoveId[] = ['pressure', 'pressure', 'pressure', 'pressure'];
+    let state = initConflict(IDENTITY_INIT);
+    for (const move of moves) {
+      if (state.ended) break;
+      const available = getPlayerMoves(state);
+      const safeMove = available.includes(move) ? move : available[0];
+      state = executeTurn(state, safeMove);
+    }
+    for (const entry of state.log) {
+      for (const key of ['control', 'stability', 'position'] as const) {
+        expect(entry.playerSnapshot[key]).toBeGreaterThanOrEqual(0);
+        expect(entry.playerSnapshot[key]).toBeLessThanOrEqual(5);
+        expect(entry.opponentSnapshot[key]).toBeGreaterThanOrEqual(0);
+        expect(entry.opponentSnapshot[key]).toBeLessThanOrEqual(5);
+      }
+    }
+  });
+
+  it('is deterministic with opponent identity', () => {
+    const moves: MoveId[] = ['pressure', 'reposition', 'stabilize', 'feint'];
+    const state1 = playFullConflict(IDENTITY_INIT, moves);
+    const state2 = playFullConflict(IDENTITY_INIT, moves);
     const result1 = evaluateOutcome(state1);
     const result2 = evaluateOutcome(state2);
 

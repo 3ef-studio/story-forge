@@ -1,3 +1,5 @@
+import type { OpponentIdentity } from './opponent-identity';
+
 /** Resource triple used by both player and opponent */
 export interface ConflictResources {
   control: number;
@@ -96,6 +98,7 @@ export interface ConflictInit {
   playerLabel: string;
   opponentLabel: string;
   playerBuild?: PlayerBuildSnapshot;
+  opponentIdentity?: OpponentIdentity;
 }
 
 export type ConflictOutcome = 'player_victory' | 'opponent_victory' | 'stalemate';
@@ -130,4 +133,5 @@ export interface ConflictState {
   encounterContext?: EncounterContext;
   playerBuild?: PlayerBuildSnapshot;
   initBreakdown?: BonusBreakdown;
+  opponentIdentity?: OpponentIdentity;
 }

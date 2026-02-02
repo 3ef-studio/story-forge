@@ -16,6 +16,7 @@ import {
   computeMoveBonus,
   logBonusBreakdown,
 } from './build-bonuses';
+import { logOpponentIdentity } from './opponent-identity';
 
 // Re-export for UI convenience
 export { CONFLICT_MOVES, isMoveAvailable } from './moves';
@@ -95,13 +96,23 @@ export function initConflict(init: ConflictInit): ConflictState {
     logBonusBreakdown('Init starting bonuses', initBreakdown);
   }
 
+  // Opponent starting resources (base from difficulty)
+  let opponentResources = opponentStartResources(init.encounterDifficulty);
+
+  // Apply opponent identity starting bonus if present
+  if (init.opponentIdentity) {
+    const bonus = init.opponentIdentity.mechanics.startingResourceBonus;
+    opponentResources = clampResources(applyEffect(opponentResources, bonus));
+    logOpponentIdentity(init.opponentIdentity);
+  }
+
   return {
     player: {
       resources: playerResources,
       label: init.playerLabel,
     },
     opponent: {
-      resources: opponentStartResources(init.encounterDifficulty),
+      resources: opponentResources,
       label: init.opponentLabel,
     },
     turn: 1,
@@ -115,6 +126,7 @@ export function initConflict(init: ConflictInit): ConflictState {
     encounterContext,
     playerBuild: init.playerBuild,
     initBreakdown,
+    opponentIdentity: init.opponentIdentity,
   };
 }
 
@@ -167,6 +179,20 @@ export function executeTurn(state: ConflictState, playerMoveId: MoveId): Conflic
         }
       }
       logBonusBreakdown(`Turn ${state.turn} move bonus (${playerMoveId})`, playerMoveBonus);
+    }
+  }
+
+  // Apply opponent identity move bonuses (after base effects, before counters)
+  if (state.opponentIdentity?.mechanics.moveBonuses[opponentMoveId]) {
+    const moveBonus = state.opponentIdentity.mechanics.moveBonuses[opponentMoveId]!;
+    if (moveBonus.self) {
+      newOpponentRes = applyEffect(newOpponentRes, moveBonus.self);
+    }
+    if (moveBonus.opponent) {
+      newPlayerRes = applyEffect(newPlayerRes, moveBonus.opponent);
+    }
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[Opponent Identity] Move bonus for ${opponentMoveId}:`, moveBonus);
     }
   }
 

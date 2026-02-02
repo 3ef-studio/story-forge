@@ -360,6 +360,8 @@ export async function POST(request: Request) {
       personality: string;
       intensity: RivalIntensity;
       flavorText: string;
+      level: number;
+      hostility: number;
     } | null = null;
 
     if (encounter) {
@@ -392,6 +394,8 @@ export async function POST(request: Request) {
             personality: rival.personality,
             intensity,
             flavorText,
+            level: rival.level,
+            hostility: rival.hostility,
           };
 
           // Inject flavor text into encounter description

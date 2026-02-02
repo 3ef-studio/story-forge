@@ -31,6 +31,8 @@ import { ConflictPane } from '@/app/components/game/ConflictPane';
 import { initConflict, executeTurn, evaluateOutcome } from '@/app/lib/game-logic/conflict/engine';
 import type { ConflictState, ConflictResult, MoveId } from '@/app/lib/game-logic/conflict/types';
 import { getNPCById } from '@/app/data/npcs';
+import { resolveOpponentIdentity, logOpponentIdentity } from '@/app/lib/game-logic/conflict/opponent-identity';
+import type { RivalPersonality } from '@/app/data/rivals';
 
 type GameState = 'idle' | 'executing' | 'encounter' | 'conflict' | 'resolving' | 'outcome';
 
@@ -133,7 +135,10 @@ export default function GamePage() {
   const [currentOutcome, setCurrentOutcome] = useState<OutcomeResult | null>(null);
   const [currentResolution, setCurrentResolution] = useState<ResolutionData | null>(null);
   const [currentPowerProgression, setCurrentPowerProgression] = useState<PowerProgressionData | null>(null);
-  const [rivalPresent, setRivalPresent] = useState(false);
+  const [rivalPresence, setRivalPresence] = useState<{
+    rivalId: string; name: string; role: string; personality: string;
+    intensity: string; flavorText: string; level: number; hostility: number;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -334,7 +339,7 @@ export default function GamePage() {
         const encounter = data.encounter as EncounterTemplate & { threadId?: string; threadTitle?: string };
         setCurrentEncounter(encounter);
         setIsCachedEncounter(data.isCachedEncounter || false);
-        setRivalPresent(!!data.rivalPresence);
+        setRivalPresence(data.rivalPresence ?? null);
         setCurrentActionContext({
           actionId: action.id,
           locationType: action.locationTypes?.[0],
@@ -466,11 +471,26 @@ export default function GamePage() {
     setPendingPrepSelection(prepSelection);
 
     // Look up NPC tags for AI profile
-    const npcTags: string[] = [];
-    if (currentEncounter.npcId) {
-      const npc = getNPCById(currentEncounter.npcId);
-      if (npc) npcTags.push(...npc.tags);
-    }
+    const npc = currentEncounter.npcId ? getNPCById(currentEncounter.npcId) : null;
+    const npcTags: string[] = npc ? [...npc.tags] : [];
+
+    // Resolve opponent identity
+    const opponentIdentity = resolveOpponentIdentity({
+      rival: rivalPresence ? {
+        id: rivalPresence.rivalId,
+        name: rivalPresence.name,
+        personality: rivalPresence.personality as RivalPersonality,
+        level: rivalPresence.level,
+        hostility: rivalPresence.hostility,
+      } : undefined,
+      npc: npc ? { id: npc.id, name: npc.name, tags: npc.tags, factionId: npc.factionId } : undefined,
+      encounterCategory: currentEncounter.category,
+      encounterDifficulty: currentEncounter.difficulty,
+      encounterTags: currentEncounter.narrativeTags,
+      district: character?.currentDistrict,
+      factionId: currentEncounter.requiredFactions?.[0],
+    });
+    logOpponentIdentity(opponentIdentity);
 
     // Initialize conflict
     const conflict = initConflict({
@@ -478,9 +498,8 @@ export default function GamePage() {
       encounterDifficulty: currentEncounter.difficulty,
       npcTags,
       playerLabel: character?.name || 'You',
-      opponentLabel: currentEncounter.npcId
-        ? (getNPCById(currentEncounter.npcId)?.name || 'Opponent')
-        : 'Opponent',
+      opponentLabel: opponentIdentity.name,
+      opponentIdentity,
       playerBuild: character ? {
         level: character.level,
         attributes: character.attributes,
@@ -522,7 +541,7 @@ export default function GamePage() {
           locationType: currentActionContext?.locationType,
           npcId: currentEncounter.npcId,
           prepSelection: pendingPrepSelection,
-          rivalPresent,
+          rivalPresent: !!rivalPresence,
           focusMode: focusResult.mode,
           focusModifier: focusResult.modifier,
         }),
@@ -614,7 +633,7 @@ export default function GamePage() {
     setCurrentResolution(null);
     setCurrentPowerProgression(null);
     setCurrentActionContext(null);
-    setRivalPresent(false);
+    setRivalPresence(null);
     setIsCachedEncounter(false);
     setConflictState(null);
     setConflictResult(null);
