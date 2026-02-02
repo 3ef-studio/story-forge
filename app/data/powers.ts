@@ -412,7 +412,12 @@ export const powers: Power[] = [
       attributeRequirement: { attributeId: 'intelligence', minValue: 12 }
     },
     damageOverTime: true,
-    areaEffect: true
+    areaEffect: true,
+    mechanics: {
+      startingResourceBonus: { resource: 'control', delta: 1 },
+      moveBonus: { move: 'pressure', resource: 'position', delta: -1, target: 'opponent' },
+      encounterTypeAffinity: ['combat'],
+    },
   },
 
   {
