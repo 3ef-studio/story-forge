@@ -481,6 +481,11 @@ export default function GamePage() {
       opponentLabel: currentEncounter.npcId
         ? (getNPCById(currentEncounter.npcId)?.name || 'Opponent')
         : 'Opponent',
+      playerBuild: character ? {
+        level: character.level,
+        attributes: character.attributes,
+        powers: character.powers.map(p => ({ powerId: p.powerId, level: p.level })),
+      } : undefined,
     });
 
     setConflictState(conflict);

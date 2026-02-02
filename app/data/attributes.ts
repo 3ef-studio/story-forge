@@ -1,21 +1,32 @@
 // data/attributes.ts
 
+import type { EncounterType, ConflictResources, MoveId } from '@/app/lib/game-logic/conflict/types'
+
+export type AttributeMechanics = {
+  startingResourceBonus?: { resource: keyof ConflictResources; delta: number }
+  moveBonus?: { move: MoveId; resource: keyof ConflictResources; delta: number; target: 'self' | 'opponent' }
+  encounterTypeAffinity: EncounterType[]
+}
+
 export type Attribute = {
   id: string
   name: string
   description: string
   baseValue: number // Starting value for new characters (1-100 scale)
-  
+
   // How this attribute grows
   growthTriggers: string[] // Actions/events that can increase this
   growthRate: number // Multiplier for XP gains (0.5 = slow, 1.0 = normal, 2.0 = fast)
-  
+
   // Narrative impact - helps AI understand what this affects
   influencesNarrative: string[] // Story elements this attribute affects
-  
+
   // Mechanical impact
   affectsCombat: boolean
   combatMultiplier?: number // If affects combat, how much (1.0 = normal)
+
+  // Conflict mechanics hooks
+  mechanics?: AttributeMechanics
 }
 
 export const attributes: Attribute[] = [
@@ -40,9 +51,14 @@ export const attributes: Attribute[] = [
       'crowd_control'
     ],
     affectsCombat: true,
-    combatMultiplier: 1.5
+    combatMultiplier: 1.5,
+    mechanics: {
+      startingResourceBonus: { resource: 'control', delta: 1 },
+      moveBonus: { move: 'pressure', resource: 'stability', delta: -1, target: 'opponent' },
+      encounterTypeAffinity: ['combat'],
+    },
   },
-  
+
   {
     id: 'agility',
     name: 'Agility',
@@ -64,9 +80,14 @@ export const attributes: Attribute[] = [
       'escape_ability'
     ],
     affectsCombat: true,
-    combatMultiplier: 1.3
+    combatMultiplier: 1.3,
+    mechanics: {
+      startingResourceBonus: { resource: 'position', delta: 1 },
+      moveBonus: { move: 'reposition', resource: 'position', delta: 1, target: 'self' },
+      encounterTypeAffinity: ['combat', 'stealth'],
+    },
   },
-  
+
   {
     id: 'intelligence',
     name: 'Intelligence',
@@ -88,9 +109,14 @@ export const attributes: Attribute[] = [
       'strategy'
     ],
     affectsCombat: true,
-    combatMultiplier: 1.2
+    combatMultiplier: 1.2,
+    mechanics: {
+      startingResourceBonus: { resource: 'control', delta: 1 },
+      moveBonus: { move: 'feint', resource: 'position', delta: -1, target: 'opponent' },
+      encounterTypeAffinity: ['investigation'],
+    },
   },
-  
+
   {
     id: 'charisma',
     name: 'Charisma',
@@ -111,9 +137,14 @@ export const attributes: Attribute[] = [
       'leadership',
       'intimidation_alternative'
     ],
-    affectsCombat: false
+    affectsCombat: false,
+    mechanics: {
+      startingResourceBonus: { resource: 'control', delta: 1 },
+      moveBonus: { move: 'seize_control', resource: 'control', delta: 1, target: 'self' },
+      encounterTypeAffinity: ['social'],
+    },
   },
-  
+
   {
     id: 'willpower',
     name: 'Willpower',
@@ -135,9 +166,14 @@ export const attributes: Attribute[] = [
       'corruption_resistance'
     ],
     affectsCombat: true,
-    combatMultiplier: 1.1
+    combatMultiplier: 1.1,
+    mechanics: {
+      startingResourceBonus: { resource: 'stability', delta: 1 },
+      moveBonus: { move: 'stabilize', resource: 'stability', delta: 1, target: 'self' },
+      encounterTypeAffinity: ['combat', 'social'],
+    },
   },
-  
+
   {
     id: 'perception',
     name: 'Perception',
@@ -159,9 +195,14 @@ export const attributes: Attribute[] = [
       'investigation'
     ],
     affectsCombat: true,
-    combatMultiplier: 1.15
+    combatMultiplier: 1.15,
+    mechanics: {
+      startingResourceBonus: { resource: 'position', delta: 1 },
+      moveBonus: { move: 'feint', resource: 'control', delta: -1, target: 'opponent' },
+      encounterTypeAffinity: ['investigation', 'stealth'],
+    },
   },
-  
+
   {
     id: 'endurance',
     name: 'Endurance',
@@ -183,9 +224,14 @@ export const attributes: Attribute[] = [
       'survival'
     ],
     affectsCombat: true,
-    combatMultiplier: 1.4
+    combatMultiplier: 1.4,
+    mechanics: {
+      startingResourceBonus: { resource: 'stability', delta: 1 },
+      moveBonus: { move: 'stabilize', resource: 'stability', delta: 1, target: 'self' },
+      encounterTypeAffinity: ['combat'],
+    },
   },
-  
+
   {
     id: 'stealth',
     name: 'Stealth',
@@ -207,9 +253,14 @@ export const attributes: Attribute[] = [
       'ambush_setup'
     ],
     affectsCombat: true,
-    combatMultiplier: 1.25
+    combatMultiplier: 1.25,
+    mechanics: {
+      startingResourceBonus: { resource: 'position', delta: 1 },
+      moveBonus: { move: 'reposition', resource: 'position', delta: 1, target: 'self' },
+      encounterTypeAffinity: ['stealth'],
+    },
   },
-  
+
   {
     id: 'reputation',
     name: 'Reputation',
@@ -230,9 +281,12 @@ export const attributes: Attribute[] = [
       'recruitment_offers',
       'villain_targeting'
     ],
-    affectsCombat: false
+    affectsCombat: false,
+    mechanics: {
+      encounterTypeAffinity: ['social'],
+    },
   },
-  
+
   {
     id: 'notoriety',
     name: 'Notoriety',
@@ -254,7 +308,11 @@ export const attributes: Attribute[] = [
       'criminal_recruitment'
     ],
     affectsCombat: true,
-    combatMultiplier: 1.1
+    combatMultiplier: 1.1,
+    mechanics: {
+      moveBonus: { move: 'pressure', resource: 'control', delta: -1, target: 'opponent' },
+      encounterTypeAffinity: ['combat'],
+    },
   }
 ]
 

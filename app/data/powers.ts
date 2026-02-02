@@ -1,43 +1,54 @@
 // data/powers.ts
 
+import type { EncounterType, ConflictResources, MoveId } from '@/app/lib/game-logic/conflict/types'
+
 export type PowerCategory = 'physical' | 'mental' | 'energy' | 'utility' | 'defensive'
+
+export type PowerMechanics = {
+  startingResourceBonus?: { resource: keyof ConflictResources; delta: number }
+  moveBonus?: { move: MoveId; resource: keyof ConflictResources; delta: number; target: 'self' | 'opponent' }
+  encounterTypeAffinity: EncounterType[]
+}
 
 export type Power = {
   id: string
   name: string
   description: string
   category: PowerCategory
-  
+
   // Starting stats
   baseLevel: number // Always starts at 1
   baseCombatEffectiveness: number // 1-100, starting combat power
   energyCost: number // Cost per use
-  
+
   // Leveling
   maxLevel: number
   xpToNextLevel: number // Base XP needed (scales with level)
   levelScaling: number // Multiplier for combat effectiveness per level
-  
+
   // Narrative hooks for AI generation
   narrativeStrengths: string[] // What this power is good for in stories
   narrativeWeaknesses: string[] // What this power struggles with
   visualDescription: string // How it looks when used (for flavor text)
-  
+
   // Unlock requirements
   unlockRequirements?: {
     level?: number // Character level needed
     attributeRequirement?: { attributeId: string, minValue: number }
     powerRequired?: string // Must have another power first
   }
-  
+
   // Evolution
   evolvesInto?: string // Advanced version at max level
-  
+
   // Special mechanics
   cooldownTurns?: number // Turns before can use again
   damageOverTime?: boolean // Does it have DOT effects
   areaEffect?: boolean // Affects multiple targets
   requiresLineOfSight?: boolean
+
+  // Conflict mechanics hooks
+  mechanics?: PowerMechanics
 }
 
 export const powers: Power[] = [
@@ -72,7 +83,12 @@ export const powers: Power[] = [
     unlockRequirements: {
       attributeRequirement: { attributeId: 'strength', minValue: 15 }
     },
-    evolvesInto: 'titan_strength'
+    evolvesInto: 'titan_strength',
+    mechanics: {
+      startingResourceBonus: { resource: 'control', delta: 1 },
+      moveBonus: { move: 'pressure', resource: 'stability', delta: -1, target: 'opponent' },
+      encounterTypeAffinity: ['combat'],
+    },
   },
 
   {
@@ -105,7 +121,12 @@ export const powers: Power[] = [
     unlockRequirements: {
       attributeRequirement: { attributeId: 'agility', minValue: 20 }
     },
-    evolvesInto: 'time_dilation'
+    evolvesInto: 'time_dilation',
+    mechanics: {
+      startingResourceBonus: { resource: 'position', delta: 1 },
+      moveBonus: { move: 'reposition', resource: 'position', delta: 1, target: 'self' },
+      encounterTypeAffinity: ['combat', 'stealth'],
+    },
   },
 
   {
@@ -135,7 +156,12 @@ export const powers: Power[] = [
     visualDescription: 'Attacks bounce off hardened skin, barely leaving a mark',
     unlockRequirements: {
       attributeRequirement: { attributeId: 'endurance', minValue: 15 }
-    }
+    },
+    mechanics: {
+      startingResourceBonus: { resource: 'stability', delta: 1 },
+      moveBonus: { move: 'stabilize', resource: 'stability', delta: 1, target: 'self' },
+      encounterTypeAffinity: ['combat'],
+    },
   },
 
   {
@@ -199,7 +225,12 @@ export const powers: Power[] = [
       attributeRequirement: { attributeId: 'intelligence', minValue: 18 }
     },
     requiresLineOfSight: true,
-    evolvesInto: 'mind_control'
+    evolvesInto: 'mind_control',
+    mechanics: {
+      startingResourceBonus: { resource: 'control', delta: 1 },
+      moveBonus: { move: 'feint', resource: 'position', delta: -1, target: 'opponent' },
+      encounterTypeAffinity: ['social', 'investigation'],
+    },
   },
 
   {
@@ -232,7 +263,12 @@ export const powers: Power[] = [
       attributeRequirement: { attributeId: 'intelligence', minValue: 15 }
     },
     requiresLineOfSight: true,
-    areaEffect: true
+    areaEffect: true,
+    mechanics: {
+      startingResourceBonus: { resource: 'control', delta: 1 },
+      moveBonus: { move: 'seize_control', resource: 'control', delta: 1, target: 'self' },
+      encounterTypeAffinity: ['combat'],
+    },
   },
 
   {
@@ -264,7 +300,12 @@ export const powers: Power[] = [
       level: 3,
       attributeRequirement: { attributeId: 'perception', minValue: 20 }
     },
-    cooldownTurns: 3
+    cooldownTurns: 3,
+    mechanics: {
+      startingResourceBonus: { resource: 'position', delta: 1 },
+      moveBonus: { move: 'feint', resource: 'control', delta: -1, target: 'opponent' },
+      encounterTypeAffinity: ['combat', 'investigation'],
+    },
   },
 
   // === ENERGY CATEGORY ===
@@ -298,7 +339,12 @@ export const powers: Power[] = [
       attributeRequirement: { attributeId: 'willpower', minValue: 15 }
     },
     areaEffect: true,
-    cooldownTurns: 1
+    cooldownTurns: 1,
+    mechanics: {
+      startingResourceBonus: { resource: 'control', delta: 1 },
+      moveBonus: { move: 'pressure', resource: 'position', delta: -1, target: 'opponent' },
+      encounterTypeAffinity: ['combat'],
+    },
   },
 
   {
@@ -328,7 +374,12 @@ export const powers: Power[] = [
     visualDescription: 'Shimmering translucent barrier materializes in the air',
     unlockRequirements: {
       attributeRequirement: { attributeId: 'willpower', minValue: 12 }
-    }
+    },
+    mechanics: {
+      startingResourceBonus: { resource: 'stability', delta: 1 },
+      moveBonus: { move: 'stabilize', resource: 'stability', delta: 1, target: 'self' },
+      encounterTypeAffinity: ['combat'],
+    },
   },
 
   {
@@ -428,7 +479,12 @@ export const powers: Power[] = [
     visualDescription: 'You rise into the air, weightless and free',
     unlockRequirements: {
       attributeRequirement: { attributeId: 'agility', minValue: 14 }
-    }
+    },
+    mechanics: {
+      startingResourceBonus: { resource: 'position', delta: 1 },
+      moveBonus: { move: 'reposition', resource: 'stability', delta: 1, target: 'self' },
+      encounterTypeAffinity: ['combat', 'stealth'],
+    },
   },
 
   {
@@ -461,7 +517,12 @@ export const powers: Power[] = [
     unlockRequirements: {
       level: 3,
       attributeRequirement: { attributeId: 'stealth', minValue: 18 }
-    }
+    },
+    mechanics: {
+      startingResourceBonus: { resource: 'position', delta: 1 },
+      moveBonus: { move: 'reposition', resource: 'position', delta: 1, target: 'self' },
+      encounterTypeAffinity: ['stealth'],
+    },
   },
 
   {
@@ -491,7 +552,12 @@ export const powers: Power[] = [
     visualDescription: 'Wounds knit together, flesh mending before your eyes',
     unlockRequirements: {
       attributeRequirement: { attributeId: 'endurance', minValue: 18 }
-    }
+    },
+    mechanics: {
+      startingResourceBonus: { resource: 'stability', delta: 1 },
+      moveBonus: { move: 'stabilize', resource: 'stability', delta: 1, target: 'self' },
+      encounterTypeAffinity: ['combat'],
+    },
   },
 
   {
@@ -524,7 +590,12 @@ export const powers: Power[] = [
     unlockRequirements: {
       level: 4,
       attributeRequirement: { attributeId: 'intelligence', minValue: 16 }
-    }
+    },
+    mechanics: {
+      startingResourceBonus: { resource: 'position', delta: 1 },
+      moveBonus: { move: 'feint', resource: 'position', delta: -1, target: 'opponent' },
+      encounterTypeAffinity: ['social', 'stealth'],
+    },
   },
 
   // === ADVANCED POWERS (Evolutions) ===

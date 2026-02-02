@@ -6,9 +6,16 @@ import type {
   ConflictLogEntry,
   MoveId,
   ConflictOutcome,
+  BonusBreakdown,
 } from './types';
 import { CONFLICT_MOVES, isMoveAvailable, getAvailableMoves } from './moves';
 import { resolveProfile, selectOpponentMove } from './ai';
+import {
+  deriveEncounterContext,
+  computeStartingBonuses,
+  computeMoveBonus,
+  logBonusBreakdown,
+} from './build-bonuses';
 
 // Re-export for UI convenience
 export { CONFLICT_MOVES, isMoveAvailable } from './moves';
@@ -68,10 +75,29 @@ function describeEffect(effect: Partial<ConflictResources>, prefix: string): str
 /** Create a fresh conflict state from initialization parameters */
 export function initConflict(init: ConflictInit): ConflictState {
   const profile = resolveProfile(init.npcTags, init.encounterCategory);
+  const encounterContext = deriveEncounterContext(
+    init.encounterCategory,
+    init.encounterDifficulty,
+    init.npcTags,
+  );
+
+  let playerResources: ConflictResources = { control: 3, stability: 3, position: 3 };
+  let initBreakdown: BonusBreakdown | undefined;
+
+  if (init.playerBuild) {
+    initBreakdown = computeStartingBonuses(init.playerBuild, encounterContext);
+    const bonus = initBreakdown.finalBonus;
+    playerResources = clampResources({
+      control: playerResources.control + (bonus.control ?? 0),
+      stability: playerResources.stability + (bonus.stability ?? 0),
+      position: playerResources.position + (bonus.position ?? 0),
+    });
+    logBonusBreakdown('Init starting bonuses', initBreakdown);
+  }
 
   return {
     player: {
-      resources: { control: 3, stability: 3, position: 3 },
+      resources: playerResources,
       label: init.playerLabel,
     },
     opponent: {
@@ -86,6 +112,9 @@ export function initConflict(init: ConflictInit): ConflictState {
     category: init.encounterCategory,
     npcTags: init.npcTags,
     opponentProfile: profile,
+    encounterContext,
+    playerBuild: init.playerBuild,
+    initBreakdown,
   };
 }
 
@@ -119,6 +148,27 @@ export function executeTurn(state: ConflictState, playerMoveId: MoveId): Conflic
   // Apply opponent effects (player's move hits opponent, and vice versa)
   newOpponentRes = applyEffect(newOpponentRes, playerMove.opponentEffect);
   newPlayerRes = applyEffect(newPlayerRes, opponentMove.opponentEffect);
+
+  // Apply build-based move bonuses (before counter bonuses)
+  let playerMoveBonus: BonusBreakdown | undefined;
+  if (state.playerBuild && state.encounterContext) {
+    playerMoveBonus = computeMoveBonus(playerMoveId, state.playerBuild, state.encounterContext);
+    if (playerMoveBonus.entries.length > 0) {
+      const bonus = playerMoveBonus.finalBonus;
+      for (const key of ['control', 'stability', 'position'] as const) {
+        const delta = bonus[key];
+        if (!delta) continue;
+        if (delta > 0) {
+          // Positive = self benefit
+          newPlayerRes = applyEffect(newPlayerRes, { [key]: delta });
+        } else {
+          // Negative = opponent damage
+          newOpponentRes = applyEffect(newOpponentRes, { [key]: delta });
+        }
+      }
+      logBonusBreakdown(`Turn ${state.turn} move bonus (${playerMoveId})`, playerMoveBonus);
+    }
+  }
 
   // Check counter bonuses
   let playerCounterTriggered = false;
@@ -191,6 +241,7 @@ export function executeTurn(state: ConflictState, playerMoveId: MoveId): Conflic
     opponentSnapshot: { ...newOpponentRes },
     playerCounterTriggered,
     opponentCounterTriggered,
+    playerMoveBonus: playerMoveBonus?.entries.length ? playerMoveBonus : undefined,
   };
 
   const ended = !!playerCollapse || !!opponentCollapse || state.turn >= state.maxTurns;

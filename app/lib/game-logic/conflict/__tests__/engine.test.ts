@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { initConflict, executeTurn, evaluateOutcome, getPlayerMoves } from '../engine';
-import type { ConflictInit, ConflictState, MoveId } from '../types';
+import type { ConflictInit, ConflictState, MoveId, PlayerBuildSnapshot } from '../types';
 
 const DEFAULT_INIT: ConflictInit = {
   encounterCategory: 'combat',
@@ -205,5 +205,101 @@ describe('log integrity', () => {
     for (let i = 0; i < state.log.length; i++) {
       expect(state.log[i].turn).toBe(i + 1);
     }
+  });
+});
+
+// --- Build-influenced integration tests ---
+
+const STRONG_BUILD: PlayerBuildSnapshot = {
+  level: 5,
+  attributes: {
+    strength: 80,  // modifier +1, combat affinity → control +1 start
+    agility: 50,
+    intelligence: 50,
+    charisma: 50,
+    willpower: 50,
+    perception: 50,
+    endurance: 50,
+    stealth: 50,
+    reputation: 50,
+    notoriety: 50,
+  },
+  powers: [{ powerId: 'super_strength', level: 5 }], // combat: control +1 start
+};
+
+const BUILD_INIT: ConflictInit = {
+  ...DEFAULT_INIT,
+  playerBuild: STRONG_BUILD,
+};
+
+describe('build-influenced initConflict', () => {
+  it('produces different player resources than default 3/3/3', () => {
+    const withBuild = initConflict(BUILD_INIT);
+    const withoutBuild = initConflict(DEFAULT_INIT);
+    // Strong build in combat → control should be higher
+    expect(withBuild.player.resources.control).toBeGreaterThan(withoutBuild.player.resources.control);
+  });
+
+  it('stores encounterContext on state', () => {
+    const state = initConflict(BUILD_INIT);
+    expect(state.encounterContext).toBeDefined();
+    expect(state.encounterContext!.type).toBe('combat');
+  });
+
+  it('stores playerBuild and initBreakdown on state', () => {
+    const state = initConflict(BUILD_INIT);
+    expect(state.playerBuild).toBeDefined();
+    expect(state.initBreakdown).toBeDefined();
+    expect(state.initBreakdown!.entries.length).toBeGreaterThan(0);
+  });
+
+  it('clamps resources to 0-5 range', () => {
+    const state = initConflict(BUILD_INIT);
+    for (const key of ['control', 'stability', 'position'] as const) {
+      expect(state.player.resources[key]).toBeGreaterThanOrEqual(0);
+      expect(state.player.resources[key]).toBeLessThanOrEqual(5);
+    }
+  });
+});
+
+describe('build-influenced executeTurn', () => {
+  it('produces playerMoveBonus on log entries when build matches', () => {
+    let state = initConflict(BUILD_INIT);
+    // Pressure with high strength in combat should trigger move bonus
+    state = executeTurn(state, 'pressure');
+    expect(state.log[0].playerMoveBonus).toBeDefined();
+    expect(state.log[0].playerMoveBonus!.entries.length).toBeGreaterThan(0);
+  });
+
+  it('does not produce playerMoveBonus when no build', () => {
+    let state = initConflict(DEFAULT_INIT);
+    state = executeTurn(state, 'pressure');
+    expect(state.log[0].playerMoveBonus).toBeUndefined();
+  });
+
+  it('keeps resources clamped after move bonuses', () => {
+    const moves: MoveId[] = ['pressure', 'pressure', 'pressure', 'pressure'];
+    const state = playFullConflict(BUILD_INIT, moves);
+    for (const entry of state.log) {
+      for (const key of ['control', 'stability', 'position'] as const) {
+        expect(entry.playerSnapshot[key]).toBeGreaterThanOrEqual(0);
+        expect(entry.playerSnapshot[key]).toBeLessThanOrEqual(5);
+        expect(entry.opponentSnapshot[key]).toBeGreaterThanOrEqual(0);
+        expect(entry.opponentSnapshot[key]).toBeLessThanOrEqual(5);
+      }
+    }
+  });
+
+  it('is deterministic with build data', () => {
+    const moves: MoveId[] = ['pressure', 'reposition', 'stabilize', 'feint'];
+    const state1 = playFullConflict(BUILD_INIT, moves);
+    const state2 = playFullConflict(BUILD_INIT, moves);
+    const result1 = evaluateOutcome(state1);
+    const result2 = evaluateOutcome(state2);
+
+    expect(result1.outcome).toBe(result2.outcome);
+    expect(result1.turnsPlayed).toBe(result2.turnsPlayed);
+    expect(result1.playerFinalResources).toEqual(result2.playerFinalResources);
+    expect(result1.opponentFinalResources).toEqual(result2.opponentFinalResources);
   });
 });

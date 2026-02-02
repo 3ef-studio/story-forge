@@ -5,6 +5,35 @@ export interface ConflictResources {
   position: number;
 }
 
+// --- Encounter Context & Build types ---
+
+export type EncounterType = 'combat' | 'social' | 'stealth' | 'investigation';
+
+export interface EncounterContext {
+  type: EncounterType;
+  difficultyTier: 'low' | 'medium' | 'high';
+  tags: string[];
+  stakes: 'low' | 'medium' | 'high';
+}
+
+export interface PlayerBuildSnapshot {
+  level: number;
+  attributes: Record<string, number>;
+  powers: Array<{ powerId: string; level: number }>;
+}
+
+export interface BonusBreakdownEntry {
+  source: string;
+  resource: keyof ConflictResources;
+  delta: number;
+  reason: string;
+}
+
+export interface BonusBreakdown {
+  entries: BonusBreakdownEntry[];
+  finalBonus: Partial<ConflictResources>;
+}
+
 export type MoveId =
   | 'pressure'
   | 'seize_control'
@@ -46,6 +75,7 @@ export interface ConflictLogEntry {
   opponentSnapshot: ConflictResources;
   playerCounterTriggered: boolean;
   opponentCounterTriggered: boolean;
+  playerMoveBonus?: BonusBreakdown;
 }
 
 export interface AIContext {
@@ -65,6 +95,7 @@ export interface ConflictInit {
   npcTags: string[];
   playerLabel: string;
   opponentLabel: string;
+  playerBuild?: PlayerBuildSnapshot;
 }
 
 export type ConflictOutcome = 'player_victory' | 'opponent_victory' | 'stalemate';
@@ -96,4 +127,7 @@ export interface ConflictState {
   category: string;
   npcTags: string[];
   opponentProfile: OpponentProfile;
+  encounterContext?: EncounterContext;
+  playerBuild?: PlayerBuildSnapshot;
+  initBreakdown?: BonusBreakdown;
 }

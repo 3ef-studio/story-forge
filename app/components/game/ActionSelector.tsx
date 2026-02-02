@@ -182,7 +182,7 @@ export function ActionSelector({
                   </div>
                   <p className="text-xs text-white/50 mt-0.5 line-clamp-1">{action.description}</p>
                 </div>
-                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                <div className="flex flex-col items-end gap-1 shrink-0">
                   <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
                     action.energyCost <= 0 ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300'
                   }`}>
@@ -205,7 +205,7 @@ export function ActionSelector({
                 }`}>
                   {disabledReason === 'Not available here'
                     ? <MapPinOff className="h-3 w-3 shrink-0" />
-                    : <AlertCircle className="h-3 w-3 flex-shrink-0" />
+                    : <AlertCircle className="h-3 w-3 shrink-0" />
                   }
                   {disabledReason}
                 </div>
@@ -277,7 +277,7 @@ export function ActionSelector({
                   : 'text-red-400 bg-red-500/15'
               }`}>
                 {disabledReason === 'Not available here'
-                  ? <MapPinOff className="h-3.5 w-3.5 flex-shrink-0" />
+                  ? <MapPinOff className="h-3.5 w-3.5 shrink-0" />
                   : <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                 }
                 <span>{disabledReason}</span>
@@ -308,7 +308,7 @@ export function ActionSelector({
             <button
               key={cat}
               onClick={() => setSelectedCategory(cat)}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors min-h-[32px] ${
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors min-h-8 ${
                 selectedCategory === cat
                   ? 'bg-blue-500 text-white shadow-sm'
                   : 'bg-white/10 text-white/60 active:bg-white/20'
