@@ -2,7 +2,7 @@
 
 import { Zap, Target, Brain, ChevronDown } from 'lucide-react';
 import type { PrepSelection } from '@/app/lib/game-logic/combat/types';
-import { getPowerById } from '@/app/data/powers';
+import { getPowerById, type Power, type PowerCategory } from '@/app/data/powers';
 
 interface CharacterPower {
   powerId: string;
@@ -17,11 +17,41 @@ interface PrepPhaseProps {
   disabled?: boolean;
 }
 
-// Prep option definitions
+// Leverage types matching the conflict system
+export type LeverageType = 'control' | 'stability' | 'position';
+
+// Prep option definitions with leverage instead of combat bonus
 const PREP_OPTIONS = {
-  momentum: { energyCost: 2, combatBonus: 10, label: 'Build Momentum', description: 'Focus your energy for a powerful strike' },
-  intel: { energyCost: 1, combatBonus: 5, label: 'Gather Intel', description: 'Assess the situation before acting' },
+  momentum: { energyCost: 2, leverageType: 'stability' as LeverageType, label: 'Build Momentum', description: 'Build up energy for sustained pressure' },
+  intel: { energyCost: 1, leverageType: 'control' as LeverageType, label: 'Gather Intel', description: 'Assess the situation to gain tactical control' },
 } as const;
+
+/**
+ * Derive leverage type from a power.
+ * Priority: power.mechanics.startingResourceBonus.resource > category mapping > default
+ */
+export function deriveLeverageTypeFromPower(power: Power): LeverageType {
+  // If power has explicit starting resource bonus, use that resource
+  if (power.mechanics?.startingResourceBonus?.resource) {
+    return power.mechanics.startingResourceBonus.resource;
+  }
+
+  // Otherwise, derive from category
+  const categoryMapping: Record<PowerCategory, LeverageType> = {
+    physical: 'control',    // Direct force → control
+    mental: 'control',      // Mental dominance → control
+    energy: 'control',      // Raw power → control
+    defensive: 'stability', // Protection → stability
+    utility: 'position',    // Tactical advantage → position
+  };
+
+  return categoryMapping[power.category] ?? 'stability';
+}
+
+/** Format leverage type for display */
+function formatLeverageType(type: LeverageType): string {
+  return type.charAt(0).toUpperCase() + type.slice(1);
+}
 
 export function PrepPhase({
   characterEnergy,
@@ -33,28 +63,25 @@ export function PrepPhase({
   const canAffordMomentum = characterEnergy >= PREP_OPTIONS.momentum.energyCost;
   const canAffordIntel = characterEnergy >= PREP_OPTIONS.intel.energyCost;
 
-  // Calculate current selection cost and bonus for display
+  // Calculate current selection cost and leverage for display
   let currentCost = 0;
-  let currentBonus = 0;
+  let currentLeverageType: LeverageType | null = null;
   let currentLabel = '';
 
   if (selection) {
     if (selection.type === 'momentum') {
       currentCost = PREP_OPTIONS.momentum.energyCost;
-      currentBonus = PREP_OPTIONS.momentum.combatBonus;
+      currentLeverageType = PREP_OPTIONS.momentum.leverageType;
       currentLabel = PREP_OPTIONS.momentum.label;
     } else if (selection.type === 'intel') {
       currentCost = PREP_OPTIONS.intel.energyCost;
-      currentBonus = PREP_OPTIONS.intel.combatBonus;
+      currentLeverageType = PREP_OPTIONS.intel.leverageType;
       currentLabel = PREP_OPTIONS.intel.label;
     } else if (selection.type === 'power') {
       const power = getPowerById(selection.powerId);
       if (power) {
         currentCost = power.energyCost;
-        const charPower = characterPowers.find(cp => cp.powerId === selection.powerId);
-        const level = charPower?.level ?? 1;
-        // Combat bonus = power level * base effectiveness / 12 (matches calculatePowerBonus)
-        currentBonus = Math.floor((power.baseCombatEffectiveness * Math.pow(power.levelScaling, level - 1)) / 12);
+        currentLeverageType = deriveLeverageTypeFromPower(power);
         currentLabel = `Use ${power.name}`;
       }
     }
@@ -99,6 +126,7 @@ export function PrepPhase({
         ...cp,
         power,
         canAfford: characterEnergy >= power.energyCost,
+        leverageType: deriveLeverageTypeFromPower(power),
       };
     })
     .filter((p): p is NonNullable<typeof p> => p !== null);
@@ -123,7 +151,7 @@ export function PrepPhase({
 
       {/* Prep Options */}
       <div className="grid grid-cols-2 gap-2">
-        {/* Build Momentum */}
+        {/* Build Momentum → +1 Stability leverage */}
         <button
           onClick={handleSelectMomentum}
           disabled={disabled || !canAffordMomentum}
@@ -140,12 +168,12 @@ export function PrepPhase({
             <span className="text-sm font-medium text-white/90">Momentum</span>
           </div>
           <div className="flex items-center justify-between text-xs">
-            <span className="text-green-400">+{PREP_OPTIONS.momentum.combatBonus}</span>
+            <span className="text-green-400">+1 {formatLeverageType(PREP_OPTIONS.momentum.leverageType)}</span>
             <span className="text-yellow-400">-{PREP_OPTIONS.momentum.energyCost} energy</span>
           </div>
         </button>
 
-        {/* Gather Intel */}
+        {/* Gather Intel → +1 Control leverage */}
         <button
           onClick={handleSelectIntel}
           disabled={disabled || !canAffordIntel}
@@ -162,7 +190,7 @@ export function PrepPhase({
             <span className="text-sm font-medium text-white/90">Intel</span>
           </div>
           <div className="flex items-center justify-between text-xs">
-            <span className="text-green-400">+{PREP_OPTIONS.intel.combatBonus}</span>
+            <span className="text-green-400">+1 {formatLeverageType(PREP_OPTIONS.intel.leverageType)}</span>
             <span className="text-yellow-400">-{PREP_OPTIONS.intel.energyCost} energy</span>
           </div>
         </button>
@@ -199,7 +227,7 @@ export function PrepPhase({
                   disabled={!cp.canAfford}
                   className="bg-gray-900"
                 >
-                  {cp.power.name} (Lv{cp.level}) — {cp.power.energyCost} energy
+                  {cp.power.name} (+1 {formatLeverageType(cp.leverageType)}) — {cp.power.energyCost} energy
                 </option>
               ))}
             </select>
@@ -214,13 +242,16 @@ export function PrepPhase({
           ? 'bg-green-500/10 border border-green-500/20'
           : 'bg-white/5 border border-white/10'
       }`}>
-        {selection ? (
-          <div className="flex items-center justify-between">
-            <span className="text-white/70">{currentLabel}</span>
-            <div className="flex items-center gap-3">
-              <span className="text-green-400 font-medium">+{currentBonus} combat</span>
-              <span className="text-yellow-400">-{currentCost} energy</span>
+        {selection && currentLeverageType ? (
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-white/70">{currentLabel}</span>
+              <div className="flex items-center gap-3">
+                <span className="text-green-400 font-medium">+1 {formatLeverageType(currentLeverageType)} leverage</span>
+                <span className="text-yellow-400">-{currentCost} energy</span>
+              </div>
             </div>
+            <p className="text-xs text-white/40">Leverage persists and can be spent in conflict.</p>
           </div>
         ) : (
           <span className="text-white/40">No prep selected (optional)</span>
@@ -229,3 +260,6 @@ export function PrepPhase({
     </div>
   );
 }
+
+// Export for use in EncounterDisplay
+export { PREP_OPTIONS };

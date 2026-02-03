@@ -62,7 +62,7 @@ export const LEVERAGE_EFFECT_LABELS: Record<LeverageSpendEffect['type'], string>
 // --- Constants ---
 
 const MAX_PER_TYPE = 2;
-const MAX_TOTAL = 3;
+const MAX_TOTAL = 6;
 const OVERCAP_MAX = 7;
 const DECAY_INTERVAL = 3; // actions per decay tick
 

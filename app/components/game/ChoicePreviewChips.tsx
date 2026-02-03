@@ -1,11 +1,13 @@
 'use client';
 
-import type { DisplayChip, RiskTier } from '@/app/lib/game-logic/combat/types';
+import type { RiskTier } from '@/app/lib/game-logic/combat/types';
 
 interface ChoicePreviewChipsProps {
   riskTier: RiskTier;
-  estimatedChance: number;
-  displayChips: DisplayChip[];
+  estimatedChance?: number;
+  /** Optional hint text to show instead of percent (e.g., "Prep: +1 Stability leverage") */
+  hintText?: string;
+  /** Show percent only if explicitly true AND no hintText provided */
   showPercent?: boolean;
 }
 
@@ -17,57 +19,35 @@ const RISK_STYLES: Record<RiskTier, { bg: string; text: string; label: string }>
   dangerous: { bg: 'bg-red-100', text: 'text-red-700', label: 'Dangerous' },
 };
 
-// Format chip value with sign
-function formatChipValue(value: number | undefined): string {
-  if (value === undefined || value === 0) return '';
-  return value > 0 ? ` +${value}` : ` ${value}`;
-}
-
 export function ChoicePreviewChips({
   riskTier,
   estimatedChance,
-  displayChips,
-  showPercent = true,
+  hintText,
+  showPercent = false,
 }: ChoicePreviewChipsProps) {
   const riskStyle = RISK_STYLES[riskTier];
 
-  // Mobile: max 2 chips, Desktop: max 3 chips
-  // We'll use responsive classes to show/hide the third chip
-  const visibleChips = displayChips.slice(0, 3);
+  // Determine what to show after risk label
+  const showPercentValue = showPercent && !hintText && estimatedChance !== undefined;
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      {/* Risk label with optional percent */}
+      {/* Risk label */}
       <span
         className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${riskStyle.bg} ${riskStyle.text}`}
       >
         {riskStyle.label}
-        {showPercent && (
+        {showPercentValue && (
           <span className="ml-1 opacity-80">~{estimatedChance}%</span>
         )}
       </span>
 
-      {/* Modifier chips */}
-      {visibleChips.map((chip, index) => (
-        <span
-          key={`${chip.type}-${index}`}
-          className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700 ${
-            // Hide third chip on mobile
-            index === 2 ? 'hidden sm:inline-flex' : ''
-          }`}
-        >
-          {chip.label}
-          {chip.value !== undefined && chip.value !== 0 && (
-            <span
-              className={`ml-0.5 ${
-                chip.value > 0 ? 'text-green-600' : 'text-red-600'
-              }`}
-            >
-              {formatChipValue(chip.value)}
-            </span>
-          )}
+      {/* Hint text (e.g., "Prep: +1 Stability leverage") */}
+      {hintText && (
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-500/20 text-blue-300">
+          {hintText}
         </span>
-      ))}
+      )}
     </div>
   );
 }

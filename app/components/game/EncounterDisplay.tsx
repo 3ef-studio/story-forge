@@ -6,7 +6,7 @@ import type { EncounterTemplate } from '@/app/data/encounter-templates';
 import { getPowerById } from '@/app/data/powers';
 import { AlertTriangle, CheckCircle, XCircle, Star, Zap, LogOut, Link, Eye, Sword, Shield } from 'lucide-react';
 import { ChoicePreviewChips } from './ChoicePreviewChips';
-import { PrepPhase } from './PrepPhase';
+import { PrepPhase, PREP_OPTIONS, deriveLeverageTypeFromPower, type LeverageType } from './PrepPhase';
 import type { ResolutionPreview, PrepSelection } from '@/app/lib/game-logic/combat/types';
 import { AnimatedCard } from '@/app/components/ui/AnimatedCard';
 import { AnimatedChoiceCard } from '@/app/components/ui/AnimatedChoiceCard';
@@ -45,6 +45,14 @@ const FOCUS_DISPLAY: Record<FocusMode, { label: string; icon: typeof Zap; color:
   defense: { label: 'Defense', icon: Shield, color: 'text-green-400' },
 };
 
+// Focus mode → leverage type mapping
+const FOCUS_LEVERAGE_MAP: Record<FocusMode, LeverageType> = {
+  power: 'control',
+  awareness: 'position',
+  aggression: 'control',
+  defense: 'stability',
+};
+
 interface EncounterDisplayProps {
   encounter: EncounterWithThread;
   choices: EncounterChoice[];
@@ -53,6 +61,50 @@ interface EncounterDisplayProps {
   characterEnergy?: number;
   characterPowers?: CharacterPower[];
   focusResult?: FocusResultDisplay;
+}
+
+/** Format leverage type for display */
+function formatLeverageType(type: LeverageType): string {
+  return type.charAt(0).toUpperCase() + type.slice(1);
+}
+
+/**
+ * Compute leverage hint text based on prep selection and focus result.
+ * Returns a string like "Prep: +1 Stability" or "Prep: +1 Control, Focus: +1 Position"
+ */
+function computeLeverageHint(
+  prepSelection: PrepSelection | null,
+  focusResult: FocusResultDisplay | undefined
+): string | undefined {
+  const hints: string[] = [];
+
+  // Prep leverage
+  if (prepSelection) {
+    let leverageType: LeverageType | null = null;
+
+    if (prepSelection.type === 'momentum') {
+      leverageType = PREP_OPTIONS.momentum.leverageType;
+    } else if (prepSelection.type === 'intel') {
+      leverageType = PREP_OPTIONS.intel.leverageType;
+    } else if (prepSelection.type === 'power') {
+      const power = getPowerById(prepSelection.powerId);
+      if (power) {
+        leverageType = deriveLeverageTypeFromPower(power);
+      }
+    }
+
+    if (leverageType) {
+      hints.push(`Prep: +1 ${formatLeverageType(leverageType)}`);
+    }
+  }
+
+  // Focus leverage (only if modifier > 0)
+  if (focusResult?.mode && focusResult.modifier > 0) {
+    const focusLeverageType = FOCUS_LEVERAGE_MAP[focusResult.mode];
+    hints.push(`Focus: +1 ${formatLeverageType(focusLeverageType)}`);
+  }
+
+  return hints.length > 0 ? hints.join(', ') : undefined;
 }
 
 export function EncounterDisplay({
@@ -69,6 +121,9 @@ export function EncounterDisplay({
   const handleChoiceClick = (choiceId: string) => {
     onSelectChoice(choiceId, prepSelection);
   };
+
+  // Compute leverage hint for choice chips
+  const leverageHint = computeLeverageHint(prepSelection, focusResult);
 
   return (
     <AnimatedCard variant="panel" className="panel-glass border border-blue-500/30 rounded-2xl">
@@ -106,11 +161,12 @@ export function EncounterDisplay({
         {focusResult && focusResult.mode && focusResult.modifier > 0 && (() => {
           const config = FOCUS_DISPLAY[focusResult.mode];
           const Icon = config.icon;
+          const focusLeverageType = FOCUS_LEVERAGE_MAP[focusResult.mode];
           return (
             <div className={`flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 ${config.color}`}>
               <Icon className="h-4 w-4" />
               <span className="text-sm font-medium">
-                Focus Charged: +{focusResult.modifier} ({config.label})
+                Focus Charged: +1 {formatLeverageType(focusLeverageType)} leverage ({config.label})
               </span>
             </div>
           );
@@ -161,12 +217,12 @@ export function EncounterDisplay({
                         </span>
                       )}
                     </div>
-                    {/* Preview chips for available choices */}
+                    {/* Preview chips for available choices - no percent, optional leverage hint */}
                     {choice.available && choice.preview && (
                       <ChoicePreviewChips
                         riskTier={choice.preview.riskTier}
-                        estimatedChance={choice.preview.estimatedChance}
-                        displayChips={choice.preview.displayChips}
+                        hintText={leverageHint}
+                        showPercent={false}
                       />
                     )}
                     {!choice.available && choice.reason && (
