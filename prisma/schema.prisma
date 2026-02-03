@@ -261,3 +261,68 @@ model Rival {
 
   @@map("rivals")
 }
+
+// Encounter telemetry for balance + behavior analysis
+model EncounterRun {
+  id                    String    @id @default(uuid()) @db.Uuid
+  createdAt             DateTime  @default(now()) @map("created_at")
+
+  // Core identifiers
+  characterId           String    @map("character_id") @db.Uuid
+  userId                String?   @map("user_id") @db.Uuid
+  actionType            String    @map("action_type")
+  encounterId           String?   @map("encounter_id")
+  seedId                String?   @map("seed_id") @db.Uuid
+
+  // Encounter context
+  encounterType         String    @map("encounter_type")
+  difficultyTier        Int       @map("difficulty_tier")
+  district              String?
+  tags                  Json?     // string[]
+  factions              Json?     // string[]
+
+  // NPC / Rival / Opponent
+  npcId                 String?   @map("npc_id")
+  npcName               String?   @map("npc_name")
+  rivalId               String?   @map("rival_id") @db.Uuid
+  rivalName             String?   @map("rival_name")
+  opponentKind          String?   @map("opponent_kind") // "rival" | "npc" | "archetype"
+  opponentName          String?   @map("opponent_name")
+  opponentArchetype     String?   @map("opponent_archetype")
+  opponentThreatTier    Int?      @map("opponent_threat_tier")
+
+  // Prep + Focus
+  prepType              String?   @map("prep_type") // "momentum" | "intel" | "power"
+  prepPowerId           String?   @map("prep_power_id")
+  focusMode             String?   @map("focus_mode") // "power" | "awareness" | "aggression" | "defense"
+  focusModifier         Int?      @map("focus_modifier")
+
+  // Leverage tracking (JSON for compactness: {c,s,p})
+  leverageDbStart       Json?     @map("leverage_db_start")
+  leverageGained        Json?     @map("leverage_gained")
+  leverageSpent         Json?     @map("leverage_spent")
+  leverageFinal         Json?     @map("leverage_final")
+  actionCounterBefore   Int?      @map("action_counter_before")
+  actionCounterAfter    Int?      @map("action_counter_after")
+  decayApplied          Boolean?  @map("decay_applied")
+  decayRemovedType      String?   @map("decay_removed_type")
+
+  // Conflict timeline (JSON array of turn entries)
+  turns                 Json?     // [{turnIndex,playerMove,opponentMove,leverageSpent,resourcesBefore,resourcesAfter}]
+
+  // Outcome + rewards
+  conflictResult        String?   @map("conflict_result") // "victory" | "defeat" | "stalemate"
+  turnsUsed             Int?      @map("turns_used")
+  finalResources        Json?     @map("final_resources") // {player:{c,s,p},opponent:{c,s,p}}
+  rewardSummary         Json?     @map("reward_summary") // {xpGained,hpLoss,prepEnergyCost,factionChangesCount,...}
+  isConflictDriven      Boolean   @default(true) @map("is_conflict_driven")
+
+  // Performance (optional)
+  executeMs             Int?      @map("execute_ms")
+  resolveMs             Int?      @map("resolve_ms")
+
+  @@index([characterId, createdAt])
+  @@index([encounterType])
+  @@index([difficultyTier])
+  @@map("encounter_runs")
+}

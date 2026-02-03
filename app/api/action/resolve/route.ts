@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { auth } from '@/app/lib/auth';
 import { prisma } from '@/app/lib/db';
 import {
@@ -282,6 +283,24 @@ type ConflictOutcomePayload = {
   };
 };
 
+/** Turn timeline entry for telemetry */
+type TurnTimelineEntry = {
+  turnIndex: number;
+  playerMove: string;
+  opponentMove: string;
+  leverageSpent: { type: string; effect: string } | null;
+  resourcesBefore: { player: { c: number; s: number; p: number }; opponent: { c: number; s: number; p: number } } | null;
+  resourcesAfter: { player: { c: number; s: number; p: number }; opponent: { c: number; s: number; p: number } };
+};
+
+/** Opponent identity payload for telemetry */
+type OpponentIdentityPayload = {
+  kind: string;
+  name: string;
+  archetype: string;
+  threatTier: number;
+};
+
 type ResolveActionBody = {
   encounterId: string;
   choiceId: string;
@@ -297,6 +316,9 @@ type ResolveActionBody = {
   resolutionOutcomeOverride?: ResolutionOutcomeOverride;
   conflictOutcome?: ConflictOutcomePayload;
   leverageSpent?: LeverageState;
+  // Telemetry fields
+  turnTimeline?: TurnTimelineEntry[];
+  opponentIdentity?: OpponentIdentityPayload;
 };
 
 function isUuidLike(value: string): boolean {
@@ -357,7 +379,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { encounterId, choiceId, threadId, actionId: rawActionId, locationType, npcId, prepSelection, rivalPresent, focusMode: rawFocusMode, focusModifier: rawFocusModifier, resolutionOutcomeOverride, conflictOutcome } = rawBody;
+    const { encounterId, choiceId, threadId, actionId: rawActionId, locationType, npcId, prepSelection, rivalPresent, focusMode: rawFocusMode, focusModifier: rawFocusModifier, resolutionOutcomeOverride, conflictOutcome, turnTimeline, opponentIdentity } = rawBody;
     const actionId = rawActionId ? normalizeActionId(rawActionId) : undefined;
     const isCached = Boolean(rawBody.isCached);
     const validPrepSelection = prepSelection ?? null;
@@ -889,6 +911,124 @@ export async function POST(request: Request) {
         powerProgression: powerProgression?.powerId ?? 'none',
         conflictDriven: !!resolutionOutcomeOverride,
       });
+    }
+
+    // --- Telemetry: fail-soft write to EncounterRun ---
+    // This runs after all game-critical updates. If it fails, we log and continue.
+    const resolveStartTime = Date.now();
+    try {
+      // Get NPC name if npcId provided
+      const telemetryNpc = npcId ? getNPCById(npcId) : null;
+
+      // Get rival info if present
+      let telemetryRival: { id: string; name: string } | null = null;
+      if (rivalPresent) {
+        const rival = await prisma.rival.findUnique({
+          where: { characterId: character.id },
+          select: { id: true, name: true },
+        });
+        if (rival) {
+          telemetryRival = { id: rival.id, name: rival.name };
+        }
+      }
+
+      await prisma.encounterRun.create({
+        data: {
+          // Core identifiers
+          characterId: character.id,
+          userId: session.user.id,
+          actionType: actionId ?? 'unknown',
+          encounterId: encounterId,
+          seedId: isUuidLike(encounterId) ? encounterId : null,
+
+          // Encounter context
+          encounterType: encounter.category,
+          difficultyTier: encounter.difficulty,
+          district: character.currentDistrict,
+          tags: encounter.narrativeTags,
+          factions: encounter.requiredFactions,
+
+          // NPC / Rival / Opponent
+          npcId: npcId ?? null,
+          npcName: telemetryNpc?.name ?? null,
+          rivalId: telemetryRival?.id ?? null,
+          rivalName: telemetryRival?.name ?? null,
+          opponentKind: opponentIdentity?.kind ?? null,
+          opponentName: opponentIdentity?.name ?? null,
+          opponentArchetype: opponentIdentity?.archetype ?? null,
+          opponentThreatTier: opponentIdentity?.threatTier ?? null,
+
+          // Prep + Focus
+          prepType: validPrepSelection?.type ?? null,
+          prepPowerId: validPrepSelection?.type === 'power' ? validPrepSelection.powerId : null,
+          focusMode: focusMode ?? null,
+          focusModifier: focusModifier > 0 ? focusModifier : null,
+
+          // Leverage tracking (compact JSON format)
+          leverageDbStart: {
+            c: character.leverageControl,
+            s: character.leverageStability,
+            p: character.leveragePosition,
+          },
+          leverageGained: {
+            c: leverageUpdate.gained.control,
+            s: leverageUpdate.gained.stability,
+            p: leverageUpdate.gained.position,
+          },
+          leverageSpent: {
+            c: leverageUpdate.spent.control,
+            s: leverageUpdate.spent.stability,
+            p: leverageUpdate.spent.position,
+          },
+          leverageFinal: {
+            c: leverageUpdate.finalLeverage.control,
+            s: leverageUpdate.finalLeverage.stability,
+            p: leverageUpdate.finalLeverage.position,
+          },
+          actionCounterBefore: character.actionCounter,
+          actionCounterAfter: leverageUpdate.newActionCounter,
+          decayApplied: leverageUpdate.decayed,
+          decayRemovedType: leverageUpdate.decayedType ?? null,
+
+          // Turn timeline (JSON array)
+          turns: turnTimeline ?? Prisma.JsonNull,
+
+          // Outcome + rewards
+          conflictResult: conflictOutcome?.result ?? null,
+          turnsUsed: conflictOutcome?.turnsUsed ?? null,
+          finalResources: conflictOutcome?.final
+            ? {
+                player: {
+                  c: conflictOutcome.final.player.control,
+                  s: conflictOutcome.final.player.stability,
+                  p: conflictOutcome.final.player.position,
+                },
+                opponent: {
+                  c: conflictOutcome.final.opponent.control,
+                  s: conflictOutcome.final.opponent.stability,
+                  p: conflictOutcome.final.opponent.position,
+                },
+              }
+            : Prisma.JsonNull,
+          rewardSummary: {
+            xpGained,
+            hpLoss,
+            prepEnergyCost,
+            factionChangesCount: Object.keys(allReputationChanges).length,
+          },
+          isConflictDriven: !!resolutionOutcomeOverride,
+
+          // Performance
+          resolveMs: Date.now() - resolveStartTime,
+        },
+      });
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Telemetry] EncounterRun written successfully');
+      }
+    } catch (telemetryError) {
+      // Fail-soft: log the error but don't break the game
+      console.error('[Telemetry] Failed to write EncounterRun:', telemetryError);
     }
 
     return NextResponse.json({

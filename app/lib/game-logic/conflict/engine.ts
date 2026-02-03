@@ -321,6 +321,14 @@ export function executeTurn(state: ConflictState, playerMoveId: MoveId): Conflic
     playerCounterTriggered,
     opponentCounterTriggered,
     playerMoveBonus: playerMoveBonus?.entries.length ? playerMoveBonus : undefined,
+    // Telemetry: capture resources before this turn and leverage spent
+    resourcesBefore: {
+      player: { ...state.player.resources },
+      opponent: { ...state.opponent.resources },
+    },
+    leverageSpentThisTurn: armed
+      ? { leverageType: armed.leverageType, effectType: armed.effect.type }
+      : undefined,
   };
 
   const ended = !!playerCollapse || !!opponentCollapse || state.turn >= state.maxTurns;

@@ -602,6 +602,26 @@ export default function GamePage() {
       },
     };
 
+    // Build turn timeline for telemetry (compact format)
+    const turnTimeline = result.conflictLog.map((entry) => ({
+      turnIndex: entry.turn,
+      playerMove: entry.playerMove,
+      opponentMove: entry.opponentMove,
+      leverageSpent: entry.leverageSpentThisTurn
+        ? { type: entry.leverageSpentThisTurn.leverageType, effect: entry.leverageSpentThisTurn.effectType }
+        : null,
+      resourcesBefore: entry.resourcesBefore
+        ? {
+            player: { c: entry.resourcesBefore.player.control, s: entry.resourcesBefore.player.stability, p: entry.resourcesBefore.player.position },
+            opponent: { c: entry.resourcesBefore.opponent.control, s: entry.resourcesBefore.opponent.stability, p: entry.resourcesBefore.opponent.position },
+          }
+        : null,
+      resourcesAfter: {
+        player: { c: entry.playerSnapshot.control, s: entry.playerSnapshot.stability, p: entry.playerSnapshot.position },
+        opponent: { c: entry.opponentSnapshot.control, s: entry.opponentSnapshot.stability, p: entry.opponentSnapshot.position },
+      },
+    }));
+
     if (process.env.NODE_ENV === 'development') {
       console.log('[Conflict→Resolve] Conflict result:', result.outcome);
       console.log('[Conflict→Resolve] Mapped to resolutionOutcomeOverride:', resolutionOutcomeOverride);
@@ -631,6 +651,14 @@ export default function GamePage() {
           resolutionOutcomeOverride,
           conflictOutcome,
           leverageSpent,
+          turnTimeline,
+          // Opponent identity for telemetry
+          opponentIdentity: conflictState.opponentIdentity ? {
+            kind: conflictState.opponentIdentity.kind,
+            name: conflictState.opponentIdentity.name,
+            archetype: conflictState.opponentIdentity.archetype,
+            threatTier: conflictState.opponentIdentity.threatTier,
+          } : undefined,
         }),
       });
 

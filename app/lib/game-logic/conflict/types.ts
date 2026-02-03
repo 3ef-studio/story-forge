@@ -79,6 +79,16 @@ export interface ConflictLogEntry {
   playerCounterTriggered: boolean;
   opponentCounterTriggered: boolean;
   playerMoveBonus?: BonusBreakdown;
+  /** Resources at the START of this turn (for telemetry) */
+  resourcesBefore?: {
+    player: ConflictResources;
+    opponent: ConflictResources;
+  };
+  /** Leverage spent this turn (for telemetry) */
+  leverageSpentThisTurn?: {
+    leverageType: 'control' | 'stability' | 'position';
+    effectType: string;
+  };
 }
 
 export interface AIContext {
