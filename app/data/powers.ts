@@ -451,7 +451,12 @@ export const powers: Power[] = [
       attributeRequirement: { attributeId: 'willpower', minValue: 16 }
     },
     damageOverTime: true,
-    areaEffect: true
+    areaEffect: true,
+    mechanics: {
+      startingResourceBonus: { resource: 'control', delta: 1 },
+      moveBonus: { move: 'pressure', resource: 'position', delta: -1, target: 'opponent' },
+      encounterTypeAffinity: ['combat'],
+    },
   },
 
   // === UTILITY CATEGORY ===
