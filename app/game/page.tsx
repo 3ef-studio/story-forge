@@ -269,7 +269,7 @@ export default function GamePage() {
 
   const fetchCharacter = useCallback(async () => {
     try {
-      const response = await fetch('/api/character/get');
+      const response = await fetch('/api/character/get', { cache: 'no-store' });
       if (response.status === 404) {
         router.push('/character-creation');
         return;
@@ -667,6 +667,19 @@ export default function GamePage() {
       if (data.leverage) {
         setLeverage(data.leverage);
       }
+
+      // Update character stats immediately from resolve response for character pane display
+      setCharacter(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          currentHp: Math.max(0, prev.currentHp + (data.outcome.hpChange ?? 0)),
+          currentEnergy: Math.max(0, prev.currentEnergy + (data.outcome.energyChange ?? 0)),
+          currentXp: prev.currentXp + (data.outcome.xpGained ?? 0),
+          level: data.leveledUp ? data.newLevel : prev.level,
+          leverage: data.leverage ?? prev.leverage,
+        };
+      });
 
       setGameState('outcome');
 
