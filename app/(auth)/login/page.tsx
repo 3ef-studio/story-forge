@@ -19,25 +19,46 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    // Basic client-side validation
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      setError('Please enter your email address.');
+      return;
+    }
+    if (!password) {
+      setError('Please enter your password.');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
       const result = await signIn('credentials', {
-        email,
+        email: trimmedEmail.toLowerCase(),
         password,
         redirect: false,
       });
 
       if (result?.error) {
-        setError('Invalid email or password');
+        // Generic error for security (don't reveal if email exists)
+        setError('Couldn\'t sign in. Check your email and password.');
+        setIsLoading(false);
+        return;
+      }
+
+      if (result?.status === 429) {
+        setError('Too many attempts. Please wait a minute and try again.');
         setIsLoading(false);
         return;
       }
 
       router.push('/game');
       router.refresh();
-    } catch {
-      setError('An error occurred. Please try again.');
+    } catch (err) {
+      // Network or unexpected error
+      console.error('Login error:', err);
+      setError('Connection error. Please check your internet and try again.');
       setIsLoading(false);
     }
   };

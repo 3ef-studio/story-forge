@@ -21,15 +21,37 @@ export default function SignupPage() {
     e.preventDefault();
     setError('');
 
+    // Basic client-side validation
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      setError('Please enter your email address.');
+      return;
+    }
+
+    if (!password) {
+      setError('Please enter a password.');
+      return;
+    }
+
     // Validation
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      setError('Passwords do not match.');
       return;
     }
 
     if (password.length < 8) {
-      setError('Password must be at least 8 characters');
+      setError('Password must be at least 8 characters.');
       return;
+    }
+
+    // Warn about trailing/leading whitespace in password (common mobile issue)
+    if (password !== password.trim()) {
+      const hasLeading = password.startsWith(' ') || password.startsWith('\t');
+      const hasTrailing = password.endsWith(' ') || password.endsWith('\t');
+      if (hasLeading || hasTrailing) {
+        // Don't block, but warn - this might be accidental from autofill
+        console.warn('[Signup] Password has edge whitespace - may be autofill issue');
+      }
     }
 
     setIsLoading(true);
@@ -39,34 +61,52 @@ export default function SignupPage() {
       const response = await fetch('/api/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({
+          email: trimmedEmail.toLowerCase(),
+          password,
+        }),
       });
 
       const data = await response.json();
 
+      if (response.status === 429) {
+        setError('Too many attempts. Please wait a minute and try again.');
+        setIsLoading(false);
+        return;
+      }
+
       if (!response.ok) {
-        setError(data.error || 'Failed to create account');
+        // Map server errors to user-friendly messages
+        if (data.error?.includes('already exists')) {
+          setError('An account with this email already exists. Try signing in instead.');
+        } else if (data.error?.includes('valid email')) {
+          setError('Please enter a valid email address.');
+        } else {
+          setError(data.error || 'Couldn\'t create account. Please try again.');
+        }
         setIsLoading(false);
         return;
       }
 
       // Sign in after successful signup
       const result = await signIn('credentials', {
-        email,
+        email: trimmedEmail.toLowerCase(),
         password,
         redirect: false,
       });
 
       if (result?.error) {
-        setError('Account created but failed to sign in. Please try logging in.');
+        setError('Account created! Please sign in to continue.');
         setIsLoading(false);
         return;
       }
 
       router.push('/character-creation');
       router.refresh();
-    } catch {
-      setError('An error occurred. Please try again.');
+    } catch (err) {
+      // Network or unexpected error
+      console.error('Signup error:', err);
+      setError('Connection error. Please check your internet and try again.');
       setIsLoading(false);
     }
   };
