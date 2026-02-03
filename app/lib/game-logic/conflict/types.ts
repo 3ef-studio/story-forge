@@ -1,5 +1,6 @@
 import type { OpponentIdentity } from './opponent-identity';
 import type { LeverageState, LeverageSpend } from '@/app/lib/game-logic/leverage';
+import type { GambitResult } from '@/app/lib/game-logic/combat/types';
 
 /** Resource triple used by both player and opponent */
 export interface ConflictResources {
@@ -111,6 +112,7 @@ export interface ConflictInit {
   playerBuild?: PlayerBuildSnapshot;
   opponentIdentity?: OpponentIdentity;
   leverage?: LeverageState;
+  gambitResult?: GambitResult;
 }
 
 export type ConflictOutcome = 'player_victory' | 'opponent_victory' | 'stalemate';
@@ -149,4 +151,6 @@ export interface ConflictState {
   leverage?: LeverageState;
   /** Armed leverage effect for the current turn (applied before move, cleared after) */
   armedLeverage?: LeverageSpend;
+  /** Gambit result from choice selection (applied to starting resources) */
+  gambitResult?: GambitResult;
 }

@@ -25,8 +25,8 @@ import type { DistrictId } from '@/app/data/districts';
 import type { EncounterTemplate } from '@/app/data/encounter-templates';
 import { getLocationBackground } from '@/app/lib/game-logic/location-backgrounds';
 import { LogOut, User, HelpCircle, Menu, X, Sparkles, Trophy, ArrowUp, Users } from 'lucide-react';
-import { previewEncounterResolution, inferApproachFromText } from '@/app/lib/game-logic/combat/resolve-encounter';
-import type { ResolutionPreview, PrepSelection } from '@/app/lib/game-logic/combat/types';
+import { previewEncounterResolution, inferApproachFromText, resolveGambit, inferGambitIntent } from '@/app/lib/game-logic/combat/resolve-encounter';
+import type { ResolutionPreview, PrepSelection, GambitResult } from '@/app/lib/game-logic/combat/types';
 import { ConflictPane } from '@/app/components/game/ConflictPane';
 import { initConflict, executeTurn, evaluateOutcome } from '@/app/lib/game-logic/conflict/engine';
 import type { ConflictState, ConflictResult, MoveId } from '@/app/lib/game-logic/conflict/types';
@@ -403,6 +403,7 @@ export default function GamePage() {
               repByFaction: character.factions,
               encounterTags: encounter.narrativeTags,
               involvedFactions: encounter.requiredFactions,
+              choiceText: choice.text, // For gambit intent inference
             });
           }
 
@@ -536,6 +537,18 @@ export default function GamePage() {
 
     setLeverage(conflictLeverage);
 
+    // Roll gambit outcome based on choice
+    const choice = encounterChoices.find(c => c.id === choiceId);
+    let gambitResult: GambitResult | undefined;
+    if (choice?.preview?.gambit) {
+      const intent = inferGambitIntent(choice.text);
+      const riskTier = choice.preview.riskTier;
+      gambitResult = resolveGambit(intent, riskTier);
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[Gambit] Rolled ${gambitResult.outcomeTier} (${gambitResult.roll}) for ${intent} choice`);
+      }
+    }
+
     // Initialize conflict
     const conflict = initConflict({
       encounterCategory: currentEncounter.category,
@@ -545,6 +558,7 @@ export default function GamePage() {
       opponentLabel: opponentIdentity.name,
       opponentIdentity,
       leverage: conflictLeverage,
+      gambitResult,
       playerBuild: character ? {
         level: character.level,
         attributes: character.attributes,
@@ -658,6 +672,13 @@ export default function GamePage() {
             name: conflictState.opponentIdentity.name,
             archetype: conflictState.opponentIdentity.archetype,
             threatTier: conflictState.opponentIdentity.threatTier,
+          } : undefined,
+          // Gambit result for telemetry
+          gambitResult: conflictState.gambitResult ? {
+            intent: conflictState.gambitResult.intent,
+            roll: conflictState.gambitResult.roll,
+            outcomeTier: conflictState.gambitResult.outcomeTier,
+            effects: conflictState.gambitResult.effects,
           } : undefined,
         }),
       });

@@ -217,12 +217,13 @@ export function EncounterDisplay({
                         </span>
                       )}
                     </div>
-                    {/* Preview chips for available choices - no percent, optional leverage hint */}
+                    {/* Preview chips for available choices - no percent, optional leverage hint, gambit consequences */}
                     {choice.available && choice.preview && (
                       <ChoicePreviewChips
                         riskTier={choice.preview.riskTier}
                         hintText={leverageHint}
                         showPercent={false}
+                        gambit={choice.preview.gambit}
                       />
                     )}
                     {!choice.available && choice.reason && (

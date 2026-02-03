@@ -301,6 +301,14 @@ type OpponentIdentityPayload = {
   threatTier: number;
 };
 
+/** Gambit result payload for telemetry */
+type GambitResultPayload = {
+  intent: string;   // 'control' | 'stability' | 'position'
+  roll: number;     // 1-100
+  outcomeTier: string; // 'clean' | 'complication' | 'backfire'
+  effects: Array<{ target: string; resource: string; delta: number }>;
+};
+
 type ResolveActionBody = {
   encounterId: string;
   choiceId: string;
@@ -319,6 +327,7 @@ type ResolveActionBody = {
   // Telemetry fields
   turnTimeline?: TurnTimelineEntry[];
   opponentIdentity?: OpponentIdentityPayload;
+  gambitResult?: GambitResultPayload;
 };
 
 function isUuidLike(value: string): boolean {
@@ -379,7 +388,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { encounterId, choiceId, threadId, actionId: rawActionId, locationType, npcId, prepSelection, rivalPresent, focusMode: rawFocusMode, focusModifier: rawFocusModifier, resolutionOutcomeOverride, conflictOutcome, turnTimeline, opponentIdentity } = rawBody;
+    const { encounterId, choiceId, threadId, actionId: rawActionId, locationType, npcId, prepSelection, rivalPresent, focusMode: rawFocusMode, focusModifier: rawFocusModifier, resolutionOutcomeOverride, conflictOutcome, turnTimeline, opponentIdentity, gambitResult } = rawBody;
     const actionId = rawActionId ? normalizeActionId(rawActionId) : undefined;
     const isCached = Boolean(rawBody.isCached);
     const validPrepSelection = prepSelection ?? null;
@@ -963,6 +972,12 @@ export async function POST(request: Request) {
           prepPowerId: validPrepSelection?.type === 'power' ? validPrepSelection.powerId : null,
           focusMode: focusMode ?? null,
           focusModifier: focusModifier > 0 ? focusModifier : null,
+
+          // Gambit (choice consequence roll)
+          gambitIntent: gambitResult?.intent ?? null,
+          gambitOutcome: gambitResult?.outcomeTier ?? null,
+          gambitRoll: gambitResult?.roll ?? null,
+          gambitEffects: gambitResult?.effects ?? Prisma.JsonNull,
 
           // Leverage tracking (compact JSON format)
           leverageDbStart: {

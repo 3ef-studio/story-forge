@@ -120,6 +120,22 @@ export function initConflict(init: ConflictInit): ConflictState {
     logOpponentIdentity(init.opponentIdentity);
   }
 
+  // Apply gambit effects to starting resources
+  if (init.gambitResult) {
+    for (const effect of init.gambitResult.effects) {
+      if (effect.target === 'player') {
+        playerResources = applyEffect(playerResources, { [effect.resource]: effect.delta });
+      } else {
+        opponentResources = applyEffect(opponentResources, { [effect.resource]: effect.delta });
+      }
+    }
+    playerResources = clampResources(playerResources);
+    opponentResources = clampResources(opponentResources);
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[Gambit] Applied ${init.gambitResult.outcomeTier} outcome:`, init.gambitResult.effects);
+    }
+  }
+
   return {
     player: {
       resources: playerResources,
@@ -142,6 +158,7 @@ export function initConflict(init: ConflictInit): ConflictState {
     initBreakdown,
     opponentIdentity: init.opponentIdentity,
     leverage: init.leverage,
+    gambitResult: init.gambitResult,
   };
 }
 

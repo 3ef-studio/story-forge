@@ -18,6 +18,12 @@ import type {
   ResolutionPreview,
   RiskTier,
   PrepSelection,
+  GambitIntent,
+  GambitPreview,
+  GambitProbabilities,
+  GambitEffect,
+  GambitResult,
+  GambitOutcomeTier,
 } from './types';
 import { calculatePowerBonus, type CharacterPower } from '../power-progression';
 
@@ -67,6 +73,135 @@ export const APPROACH_ATTRIBUTES: Record<Approach, [string, string]> = {
   tactical: ['intelligence', 'perception'],
   diplomatic: ['charisma', 'willpower'],
 };
+
+// =============================================================================
+// GAMBIT SYSTEM: Intent detection and outcome generation
+// =============================================================================
+
+// Keywords for detecting gambit intent from choice text
+const GAMBIT_INTENT_KEYWORDS: Record<GambitIntent, string[]> = {
+  control: [
+    'force', 'dominate', 'overpower', 'seize', 'take', 'attack', 'strike',
+    'charge', 'confront', 'demand', 'impose', 'assert', 'overwhelm', 'crush',
+  ],
+  stability: [
+    'defend', 'protect', 'hold', 'steady', 'resist', 'endure', 'brace',
+    'fortify', 'secure', 'maintain', 'sustain', 'anchor', 'guard', 'shield',
+  ],
+  position: [
+    'flank', 'outmaneuver', 'reposition', 'circle', 'sneak', 'slip', 'evade',
+    'dodge', 'feint', 'divert', 'distract', 'infiltrate', 'scout', 'assess',
+  ],
+};
+
+// Counter resources for each intent (used in complication/backfire)
+const INTENT_COUNTER_RESOURCE: Record<GambitIntent, GambitIntent> = {
+  control: 'stability',   // aggressive control → opponent stabilizes
+  stability: 'position',  // defensive posture → opponent repositions
+  position: 'control',    // maneuvering → opponent seizes control
+};
+
+// Probabilities by risk tier
+const GAMBIT_PROBABILITIES: Record<RiskTier, GambitProbabilities> = {
+  great: { clean: 60, complication: 30, backfire: 10 },
+  good: { clean: 50, complication: 35, backfire: 15 },
+  risky: { clean: 30, complication: 45, backfire: 25 },
+  dangerous: { clean: 15, complication: 40, backfire: 45 },
+};
+
+/**
+ * Infer gambit intent from choice text using keyword matching.
+ * Falls back to 'control' if no keywords match.
+ */
+export function inferGambitIntent(choiceText: string): GambitIntent {
+  const lower = choiceText.toLowerCase();
+
+  // Count keyword matches for each intent
+  const scores: Record<GambitIntent, number> = { control: 0, stability: 0, position: 0 };
+
+  for (const [intent, keywords] of Object.entries(GAMBIT_INTENT_KEYWORDS) as [GambitIntent, string[]][]) {
+    for (const keyword of keywords) {
+      if (lower.includes(keyword)) {
+        scores[intent]++;
+      }
+    }
+  }
+
+  // Find intent with highest score
+  let maxIntent: GambitIntent = 'control';
+  let maxScore = 0;
+
+  for (const [intent, score] of Object.entries(scores) as [GambitIntent, number][]) {
+    if (score > maxScore) {
+      maxScore = score;
+      maxIntent = intent;
+    }
+  }
+
+  return maxIntent;
+}
+
+/**
+ * Build gambit preview for a choice.
+ * Shows probabilities and potential effects for each outcome tier.
+ */
+export function buildGambitPreview(intent: GambitIntent, riskTier: RiskTier): GambitPreview {
+  const probabilities = GAMBIT_PROBABILITIES[riskTier];
+  const counterResource = INTENT_COUNTER_RESOURCE[intent];
+
+  return {
+    intent,
+    probabilities,
+    outcomes: {
+      clean: [
+        { target: 'player', resource: intent, delta: 1 },
+      ],
+      complication: [
+        { target: 'player', resource: intent, delta: 1 },
+        { target: 'opponent', resource: counterResource, delta: 1 },
+      ],
+      backfire: [
+        { target: 'opponent', resource: counterResource, delta: 1 },
+      ],
+    },
+  };
+}
+
+/**
+ * Roll gambit outcome based on probabilities.
+ * Returns the resolved gambit with effects to apply.
+ */
+export function resolveGambit(
+  intent: GambitIntent,
+  riskTier: RiskTier,
+  rng: () => number = Math.random
+): GambitResult {
+  const probabilities = GAMBIT_PROBABILITIES[riskTier];
+  const counterResource = INTENT_COUNTER_RESOURCE[intent];
+
+  // Roll 1-100
+  const roll = Math.floor(rng() * 100) + 1;
+
+  // Determine outcome tier
+  let outcomeTier: GambitOutcomeTier;
+  let effects: GambitEffect[];
+
+  if (roll <= probabilities.clean) {
+    outcomeTier = 'clean';
+    effects = [{ target: 'player', resource: intent, delta: 1 }];
+  } else if (roll <= probabilities.clean + probabilities.complication) {
+    outcomeTier = 'complication';
+    effects = [
+      { target: 'player', resource: intent, delta: 1 },
+      { target: 'opponent', resource: counterResource, delta: 1 },
+    ];
+  } else {
+    outcomeTier = 'backfire';
+    effects = [{ target: 'opponent', resource: counterResource, delta: 1 }];
+  }
+
+  return { intent, roll, outcomeTier, effects };
+}
 
 // Clamp a number between min and max
 function clamp(value: number, min: number, max: number): number {
@@ -340,6 +475,13 @@ export function previewEncounterResolution(input: ResolutionInput): ResolutionPr
     });
   }
 
+  // Build gambit preview if choice text is provided
+  let gambit: GambitPreview | undefined;
+  if (input.choiceText) {
+    const intent = inferGambitIntent(input.choiceText);
+    gambit = buildGambitPreview(intent, riskTier);
+  }
+
   return {
     target: math.target,
     baseTarget: math.baseTarget,
@@ -349,6 +491,7 @@ export function previewEncounterResolution(input: ResolutionInput): ResolutionPr
     displayChips,
     matchedPowers: math.powerResult.matchedPowers,
     attributePair: APPROACH_ATTRIBUTES[input.approach],
+    gambit,
   };
 }
 

@@ -297,6 +297,12 @@ model EncounterRun {
   focusMode             String?   @map("focus_mode") // "power" | "awareness" | "aggression" | "defense"
   focusModifier         Int?      @map("focus_modifier")
 
+  // Gambit (choice consequence roll)
+  gambitIntent          String?   @map("gambit_intent") // "control" | "stability" | "position"
+  gambitOutcome         String?   @map("gambit_outcome") // "clean" | "complication" | "backfire"
+  gambitRoll            Int?      @map("gambit_roll") // 1-100
+  gambitEffects         Json?     @map("gambit_effects") // [{target,resource,delta}]
+
   // Leverage tracking (JSON for compactness: {c,s,p})
   leverageDbStart       Json?     @map("leverage_db_start")
   leverageGained        Json?     @map("leverage_gained")

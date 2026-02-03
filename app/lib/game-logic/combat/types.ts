@@ -34,6 +34,7 @@ export type ResolutionInput = {
   repByFaction: Record<string, number>;  // Faction reputation map
   encounterTags?: string[];              // Encounter seed tags (may include faction ids)
   involvedFactions?: string[];           // Explicitly involved factions
+  choiceText?: string;                   // Choice text for gambit intent inference
 };
 
 // Input for the resolver function (with optional RNG)
@@ -67,6 +68,7 @@ export type ResolutionPreview = {
   displayChips: DisplayChip[];     // Formatted chips for UI
   matchedPowers: string[];         // Powers that contributed to synergy
   attributePair: [string, string]; // The two attributes used for this approach
+  gambit?: GambitPreview;          // Gambit consequences preview (optional)
 };
 
 // =============================================================================
@@ -97,4 +99,47 @@ export type CombatBreakdown = {
   prepBonus: number;
   powerBonus: number;
   totalTarget: number;
+};
+
+// =============================================================================
+// GAMBIT TYPES (Choice consequences system)
+// =============================================================================
+
+/** Gambit outcome tier - what happened when the choice was resolved */
+export type GambitOutcomeTier = 'clean' | 'complication' | 'backfire';
+
+/** Gambit intent - which resource the choice targets (derived from choice text) */
+export type GambitIntent = 'control' | 'stability' | 'position';
+
+/** A single gambit effect (resource delta) */
+export type GambitEffect = {
+  target: 'player' | 'opponent';
+  resource: GambitIntent;
+  delta: number; // +1 or -1
+};
+
+/** Probability distribution for gambit outcomes */
+export type GambitProbabilities = {
+  clean: number;       // 0-100
+  complication: number; // 0-100
+  backfire: number;    // 0-100
+};
+
+/** Preview of gambit consequences shown in UI before choice selection */
+export type GambitPreview = {
+  intent: GambitIntent;
+  probabilities: GambitProbabilities;
+  outcomes: {
+    clean: GambitEffect[];
+    complication: GambitEffect[];
+    backfire: GambitEffect[];
+  };
+};
+
+/** Resolved gambit result (after rolling) */
+export type GambitResult = {
+  intent: GambitIntent;
+  roll: number;        // 1-100
+  outcomeTier: GambitOutcomeTier;
+  effects: GambitEffect[];
 };
