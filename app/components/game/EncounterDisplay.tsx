@@ -133,7 +133,7 @@ export function EncounterDisplay({
               <AnimatedChoiceCard
                 key={choice.id}
                 delay={0.05 * index}
-                className={`w-full text-left h-auto py-4 px-4 rounded-xl min-h-[56px] border transition-colors ${
+                className={`w-full text-left h-auto py-4 px-4 rounded-xl min-h-14 border transition-colors ${
                   choice.available
                     ? 'bg-white/10 border-white/15 hover:bg-white/15 hover:border-blue-400/40 active:bg-white/20'
                     : 'bg-white/5 border-white/5 opacity-50 cursor-not-allowed'
@@ -184,7 +184,7 @@ export function EncounterDisplay({
           {/* Retreat Option */}
           <div className="pt-3 border-t border-white/10 mt-4">
             <button
-              className="w-full text-left h-auto py-3.5 px-4 text-white/60 hover:bg-white/10 hover:text-white/80 rounded-xl min-h-[48px] transition-colors"
+              className="w-full text-left h-auto py-3.5 px-4 text-white/60 hover:bg-white/10 hover:text-white/80 rounded-xl min-h-12 transition-colors"
               onClick={() => handleChoiceClick('retreat')}
               disabled={isResolving}
             >

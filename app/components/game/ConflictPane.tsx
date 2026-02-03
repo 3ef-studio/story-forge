@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { AnimatedCard } from '@/app/components/ui/AnimatedCard';
 import {
   CONFLICT_MOVES,
@@ -9,10 +9,19 @@ import {
   getPlayerMoves,
 } from '@/app/lib/game-logic/conflict/engine';
 import type { ConflictState, MoveId } from '@/app/lib/game-logic/conflict/types';
+import {
+  type LeverageState,
+  type LeverageSpend,
+  type LeverageType,
+  LEVERAGE_EFFECTS,
+  LEVERAGE_EFFECT_LABELS,
+} from '@/app/lib/game-logic/leverage';
 
 interface ConflictPaneProps {
   state: ConflictState;
+  leverage: LeverageState;
   onPlayerMove: (move: MoveId) => void;
+  onLeverageSpend: (spend: LeverageSpend) => void;
   onContinue: () => void;
 }
 
@@ -26,6 +35,12 @@ const RESOURCE_LABELS: Record<string, string> = {
   control: 'Control',
   stability: 'Stability',
   position: 'Position',
+};
+
+const LEVERAGE_COLORS: Record<LeverageType, string> = {
+  control: 'bg-blue-500/30 border-blue-500/40 text-blue-300',
+  stability: 'bg-green-500/30 border-green-500/40 text-green-300',
+  position: 'bg-amber-500/30 border-amber-500/40 text-amber-300',
 };
 
 function ResourceBar({ label, value, maxValue, colorClass }: {
@@ -52,10 +67,13 @@ function ResourceBar({ label, value, maxValue, colorClass }: {
   );
 }
 
-export function ConflictPane({ state, onPlayerMove, onContinue }: ConflictPaneProps) {
+export function ConflictPane({ state, leverage, onPlayerMove, onLeverageSpend, onContinue }: ConflictPaneProps) {
   const logRef = useRef<HTMLDivElement>(null);
+  const [spendingType, setSpendingType] = useState<LeverageType | null>(null);
   const availableMoves = getPlayerMoves(state);
   const result = state.ended ? evaluateOutcome(state) : null;
+  const hasAnyLeverage = leverage.control + leverage.stability + leverage.position > 0;
+  const hasArmedLeverage = !!state.armedLeverage;
 
   // Auto-scroll log
   useEffect(() => {
@@ -63,6 +81,11 @@ export function ConflictPane({ state, onPlayerMove, onContinue }: ConflictPanePr
       logRef.current.scrollTop = logRef.current.scrollHeight;
     }
   }, [state.log.length]);
+
+  // Reset spending panel on new turn
+  useEffect(() => {
+    setSpendingType(null);
+  }, [state.turn]);
 
   const outcomeColor = result
     ? result.outcome === 'player_victory'
@@ -87,6 +110,11 @@ export function ConflictPane({ state, onPlayerMove, onContinue }: ConflictPanePr
         ? 'Defeat'
         : 'Stalemate'
     : '';
+
+  const handleSpendEffect = (spend: LeverageSpend) => {
+    onLeverageSpend(spend);
+    setSpendingType(null);
+  };
 
   return (
     <AnimatedCard variant="panel" className="panel-glass border border-white/15 rounded-2xl overflow-hidden">
@@ -125,7 +153,7 @@ export function ConflictPane({ state, onPlayerMove, onContinue }: ConflictPanePr
                   key={key}
                   label={RESOURCE_LABELS[key]}
                   value={state.player.resources[key]}
-                  maxValue={5}
+                  maxValue={Math.max(5, state.player.resources[key])}
                   colorClass={RESOURCE_COLORS[key]}
                 />
               ))}
@@ -153,6 +181,61 @@ export function ConflictPane({ state, onPlayerMove, onContinue }: ConflictPanePr
           </div>
         </div>
       </div>
+
+      {/* Leverage Display + Spend UI (before move selection, only when not ended) */}
+      {!state.ended && (
+        <div className="px-4 pt-3 pb-2 border-b border-white/10">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs font-semibold text-white/60 uppercase tracking-wide">Leverage</span>
+            {hasArmedLeverage && (
+              <span className="text-xs px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                Armed: {state.armedLeverage!.effect.type === 'boost_self' ? '+1 self' : state.armedLeverage!.effect.type === 'drain_opponent' ? '-1 opp' : state.armedLeverage!.effect.type}
+              </span>
+            )}
+            {!hasAnyLeverage && !hasArmedLeverage && (
+              <span className="text-xs text-white/30">Earn via Prep &amp; Focus</span>
+            )}
+          </div>
+          {/* Leverage counters */}
+          <div className="flex gap-2 mb-2">
+            {(['control', 'stability', 'position'] as const).map((type) => (
+              <button
+                key={type}
+                disabled={leverage[type] <= 0 || hasArmedLeverage}
+                onClick={() => setSpendingType(spendingType === type ? null : type)}
+                className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-xs transition-all ${
+                  leverage[type] > 0 && !hasArmedLeverage
+                    ? `${LEVERAGE_COLORS[type]} cursor-pointer hover:brightness-125`
+                    : 'bg-white/5 border-white/10 text-white/30 cursor-not-allowed'
+                } ${spendingType === type ? 'ring-1 ring-white/40' : ''}`}
+              >
+                <span className="capitalize font-medium">{type}</span>
+                <span className="font-bold">{leverage[type]}</span>
+              </button>
+            ))}
+          </div>
+          {/* Effect selection (when a leverage type is selected) */}
+          {spendingType && !hasArmedLeverage && (
+            <div className="flex flex-wrap gap-1.5 mb-1">
+              {LEVERAGE_EFFECTS[spendingType].map((effect, i) => (
+                <button
+                  key={i}
+                  onClick={() => handleSpendEffect({ leverageType: spendingType, effect })}
+                  className="text-xs px-2 py-1 rounded-lg bg-white/10 border border-white/15 text-white/80 hover:bg-white/15 hover:border-white/25 transition-all"
+                >
+                  {LEVERAGE_EFFECT_LABELS[effect.type]}
+                </button>
+              ))}
+              <button
+                onClick={() => setSpendingType(null)}
+                className="text-xs px-2 py-1 rounded-lg bg-white/5 border border-white/10 text-white/40 hover:text-white/60 transition-all"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Conflict Log */}
       {state.log.length > 0 && (

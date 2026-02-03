@@ -41,6 +41,8 @@ model Character {
   currentDistrict             String               @default("downtown") @map("current_district")
   lastEnergyReset             DateTime             @default(now()) @map("last_energy_reset")
   lastEnergyRegenAt           DateTime?            @map("last_energy_regen_at")
+  leverage                    Json                 @default("{\"control\":0,\"stability\":0,\"position\":0}")
+  actionCounter               Int                  @default(0) @map("action_counter")
   createdAt                   DateTime             @default(now()) @map("created_at")
   updatedAt                   DateTime             @updatedAt @map("updated_at")
 

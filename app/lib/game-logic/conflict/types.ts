@@ -1,4 +1,5 @@
 import type { OpponentIdentity } from './opponent-identity';
+import type { LeverageState, LeverageSpend } from '@/app/lib/game-logic/leverage';
 
 /** Resource triple used by both player and opponent */
 export interface ConflictResources {
@@ -99,6 +100,7 @@ export interface ConflictInit {
   opponentLabel: string;
   playerBuild?: PlayerBuildSnapshot;
   opponentIdentity?: OpponentIdentity;
+  leverage?: LeverageState;
 }
 
 export type ConflictOutcome = 'player_victory' | 'opponent_victory' | 'stalemate';
@@ -134,4 +136,7 @@ export interface ConflictState {
   playerBuild?: PlayerBuildSnapshot;
   initBreakdown?: BonusBreakdown;
   opponentIdentity?: OpponentIdentity;
+  leverage?: LeverageState;
+  /** Armed leverage effect for the current turn (applied before move, cleared after) */
+  armedLeverage?: LeverageSpend;
 }

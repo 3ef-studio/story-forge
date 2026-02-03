@@ -33,6 +33,7 @@ import {
 } from '@/app/data/districts';
 import { generateRivalForCharacter } from '@/app/lib/game-logic/rival-generator';
 import { RIVAL_FLAVOR, type RivalIntensity } from '@/app/data/rivals';
+import { applyDecay, type LeverageState } from '@/app/lib/game-logic/leverage';
 
 export async function POST(request: Request) {
   try {
@@ -430,6 +431,14 @@ export async function POST(request: Request) {
       leveledUp = true;
     }
 
+    // Compute leverage decay for non-encounter actions (encounter actions decay in resolve)
+    const currentLeverage = (character.leverage as unknown as LeverageState) ?? { control: 0, stability: 0, position: 0 };
+    const newActionCounter = encounter ? character.actionCounter : character.actionCounter + 1;
+    const decayResult = encounter ? { leverage: currentLeverage, decayed: false } : applyDecay(currentLeverage, newActionCounter);
+    if (!encounter && process.env.NODE_ENV === 'development') {
+      console.log(`[Leverage] Action counter: ${character.actionCounter} → ${newActionCounter}`, decayResult.decayed ? `(decayed ${decayResult.decayedType})` : '');
+    }
+
     // Update character in transaction
     const result = await prisma.$transaction(async (tx) => {
       // Update character stats including XP
@@ -446,6 +455,8 @@ export async function POST(request: Request) {
           ...(leveledUp ? { lastEnergyRegenAt: new Date() } : {}),
           money: character.money + action.baseMoneyReward,
           pendingLevelUpAttributePick: leveledUp ? true : undefined,
+          // Increment action counter + apply decay (only for non-encounter actions)
+          ...(!encounter ? { actionCounter: newActionCounter, leverage: decayResult.leverage as unknown as Record<string, number> } : {}),
         },
       });
 

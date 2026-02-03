@@ -36,6 +36,7 @@ import {
 import { getNPCById } from '@/app/data/npcs';
 import { getActionById, normalizeActionId } from '@/app/data/actions';
 import { computeEnergyRegen } from '@/app/lib/game-logic/energy-regen';
+import { applyDecay, type LeverageState } from '@/app/lib/game-logic/leverage';
 
 // Type for outcome result with optional fields
 type OutcomeResult = {
@@ -295,6 +296,7 @@ type ResolveActionBody = {
   focusModifier?: number;
   resolutionOutcomeOverride?: ResolutionOutcomeOverride;
   conflictOutcome?: ConflictOutcomePayload;
+  leverage?: LeverageState;
 };
 
 function isUuidLike(value: string): boolean {
@@ -680,6 +682,18 @@ export async function POST(request: Request) {
     // Calculate new energy after prep cost
     const newEnergy = Math.max(0, effectiveEnergy - prepEnergyCost);
 
+    // Increment action counter + apply leverage decay (encounter counts as 1 action)
+    const currentLeverage = (character.leverage as unknown as LeverageState) ?? { control: 0, stability: 0, position: 0 };
+    // If client sent updated leverage (from spending during conflict), use that
+    const clientLeverage = conflictOutcome
+      ? ((rawBody as Record<string, unknown>).leverage as LeverageState | undefined) ?? currentLeverage
+      : currentLeverage;
+    const resolveActionCounter = character.actionCounter + 1;
+    const resolveDecay = applyDecay(clientLeverage, resolveActionCounter);
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[Leverage] Resolve action counter: ${character.actionCounter} → ${resolveActionCounter}`, resolveDecay.decayed ? `(decayed ${resolveDecay.decayedType})` : '');
+    }
+
     // Update character in transaction
     await prisma.$transaction(async (tx) => {
       await tx.character.update({
@@ -693,6 +707,8 @@ export async function POST(request: Request) {
           maxEnergy: leveledUp ? character.maxEnergy + 5 : character.maxEnergy,
           ...(leveledUp ? { lastEnergyRegenAt: new Date() } : {}),
           pendingLevelUpAttributePick: leveledUp ? true : undefined,
+          actionCounter: resolveActionCounter,
+          leverage: resolveDecay.leverage as unknown as Record<string, number>,
         },
       });
 

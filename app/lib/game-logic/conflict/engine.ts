@@ -17,6 +17,7 @@ import {
   logBonusBreakdown,
 } from './build-bonuses';
 import { logOpponentIdentity } from './opponent-identity';
+import { clampResourceWithOvercap, LEVERAGE_OVERCAP_MAX } from '@/app/lib/game-logic/leverage';
 
 // Re-export for UI convenience
 export { CONFLICT_MOVES, isMoveAvailable } from './moves';
@@ -26,6 +27,19 @@ const MIN_RESOURCE = 0;
 
 function clampResource(v: number): number {
   return Math.max(MIN_RESOURCE, Math.min(MAX_RESOURCE, v));
+}
+
+/** Clamp with leverage overcap — resources can go up to 7 when leverage effects apply */
+function clampResourceOvercap(v: number): number {
+  return clampResourceWithOvercap(v);
+}
+
+function clampResourcesOvercap(r: ConflictResources): ConflictResources {
+  return {
+    control: clampResourceOvercap(r.control),
+    stability: clampResourceOvercap(r.stability),
+    position: clampResourceOvercap(r.position),
+  };
 }
 
 function clampResources(r: ConflictResources): ConflictResources {
@@ -127,6 +141,7 @@ export function initConflict(init: ConflictInit): ConflictState {
     playerBuild: init.playerBuild,
     initBreakdown,
     opponentIdentity: init.opponentIdentity,
+    leverage: init.leverage,
   };
 }
 
@@ -136,7 +151,20 @@ export function executeTurn(state: ConflictState, playerMoveId: MoveId): Conflic
 
   const playerMove = CONFLICT_MOVES[playerMoveId];
   if (!playerMove) return state;
-  if (!isMoveAvailable(playerMoveId, state.player.resources)) return state;
+
+  // Check move availability — leverage armed effects can modify requirements
+  const armed = state.armedLeverage;
+  let effectiveResources = state.player.resources;
+  if (armed) {
+    if (armed.effect.type === 'ignore_requirement' && armed.effect.resource === 'control') {
+      // Override control requirement to 0 for this check
+      effectiveResources = { ...effectiveResources, control: Math.max(effectiveResources.control, 99) };
+    }
+    if (armed.effect.type === 'virtual_boost' && armed.effect.resource === 'position') {
+      effectiveResources = { ...effectiveResources, position: effectiveResources.position + 1 };
+    }
+  }
+  if (!isMoveAvailable(playerMoveId, effectiveResources)) return state;
 
   // AI selects opponent move
   const opponentMoveId = selectOpponentMove(
@@ -222,8 +250,33 @@ export function executeTurn(state: ConflictState, playerMoveId: MoveId): Conflic
     }
   }
 
-  // Clamp resources
-  newPlayerRes = clampResources(newPlayerRes);
+  // Apply armed leverage effects (before clamping)
+  let leverageApplied = false;
+  const prevPlayerStability = newPlayerRes.stability;
+  if (armed) {
+    leverageApplied = true;
+    if (armed.effect.type === 'boost_self') {
+      newPlayerRes = applyEffect(newPlayerRes, { [armed.effect.resource]: 1 });
+    } else if (armed.effect.type === 'drain_opponent') {
+      newOpponentRes = applyEffect(newOpponentRes, { [armed.effect.resource]: -1 });
+    }
+    // prevent_loss: restore stability if it dropped this turn
+    if (armed.effect.type === 'prevent_loss' && armed.effect.resource === 'stability') {
+      if (newPlayerRes.stability < prevPlayerStability) {
+        newPlayerRes.stability = prevPlayerStability;
+      }
+    }
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[Leverage] Armed effect applied: ${armed.effect.type} (${armed.leverageType})`);
+    }
+  }
+
+  // Clamp resources — use overcap (max 7) when leverage boost was applied
+  if (leverageApplied) {
+    newPlayerRes = clampResourcesOvercap(newPlayerRes);
+  } else {
+    newPlayerRes = clampResources(newPlayerRes);
+  }
   newOpponentRes = clampResources(newOpponentRes);
 
   // Build effect descriptions
@@ -280,6 +333,7 @@ export function executeTurn(state: ConflictState, playerMoveId: MoveId): Conflic
     log: [...state.log, logEntry],
     collapseEvents: newCollapseEvents,
     ended,
+    armedLeverage: undefined, // Clear armed effect after turn
   };
 }
 
@@ -360,8 +414,18 @@ export function evaluateOutcome(state: ConflictState): ConflictResult {
   };
 }
 
-/** Get available player moves for the current state */
+/** Get available player moves for the current state (accounts for armed leverage) */
 export function getPlayerMoves(state: ConflictState): MoveId[] {
   if (state.ended) return [];
-  return getAvailableMoves(state.player.resources);
+  let resources = state.player.resources;
+  if (state.armedLeverage) {
+    const eff = state.armedLeverage.effect;
+    if (eff.type === 'ignore_requirement' && eff.resource === 'control') {
+      resources = { ...resources, control: Math.max(resources.control, 99) };
+    }
+    if (eff.type === 'virtual_boost' && eff.resource === 'position') {
+      resources = { ...resources, position: resources.position + 1 };
+    }
+  }
+  return getAvailableMoves(resources);
 }

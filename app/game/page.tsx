@@ -33,6 +33,17 @@ import type { ConflictState, ConflictResult, MoveId } from '@/app/lib/game-logic
 import { getNPCById } from '@/app/data/npcs';
 import { resolveOpponentIdentity, logOpponentIdentity } from '@/app/lib/game-logic/conflict/opponent-identity';
 import type { RivalPersonality } from '@/app/data/rivals';
+import {
+  type LeverageState,
+  type LeverageSpend,
+  emptyLeverage,
+  addLeverage,
+  leverageFromPrep,
+  leverageFromFocus,
+  spendLeverage,
+  logLeverageGrant,
+  logLeverageSpend,
+} from '@/app/lib/game-logic/leverage';
 
 type GameState = 'idle' | 'executing' | 'encounter' | 'conflict' | 'resolving' | 'outcome';
 
@@ -78,6 +89,8 @@ interface CharacterData {
     summary: string;
     expiresIn: number;
   } | null;
+  leverage?: LeverageState;
+  actionCounter?: number;
 }
 
 interface OutcomeResult {
@@ -153,6 +166,9 @@ export default function GamePage() {
   const [conflictResult, setConflictResult] = useState<ConflictResult | null>(null);
   const [pendingChoiceId, setPendingChoiceId] = useState<string | null>(null);
   const [pendingPrepSelection, setPendingPrepSelection] = useState<PrepSelection | null>(null);
+
+  // Leverage state — synced from character on load, mutated during conflict, persisted on resolve
+  const [leverage, setLeverage] = useState<LeverageState>(emptyLeverage());
 
   // Mobile tab state
   const [mobileTab, setMobileTab] = useState<MobileTab>('scene');
@@ -261,6 +277,10 @@ export default function GamePage() {
       }
       const data = await response.json();
       setCharacter(data.character);
+      // Sync leverage from server
+      if (data.character.leverage) {
+        setLeverage(data.character.leverage);
+      }
 
       // Check for pending level-up attribute pick
       if (data.character.pendingLevelUpAttributePick) {
@@ -492,6 +512,26 @@ export default function GamePage() {
     });
     logOpponentIdentity(opponentIdentity);
 
+    // Generate leverage from prep selection + focus result (once per encounter choice)
+    let conflictLeverage = { ...leverage };
+
+    if (prepSelection) {
+      const prepGrant = leverageFromPrep(prepSelection);
+      conflictLeverage = addLeverage(conflictLeverage, prepGrant.type);
+      logLeverageGrant(prepGrant.type, prepGrant.source, conflictLeverage);
+    }
+
+    if (focusResult.mode && focusResult.modifier > 0) {
+      const prepPowerId = prepSelection?.type === 'power' ? prepSelection.powerId : undefined;
+      const focusGrant = leverageFromFocus(focusResult.mode, focusResult.modifier, prepPowerId);
+      if (focusGrant) {
+        conflictLeverage = addLeverage(conflictLeverage, focusGrant.type);
+        logLeverageGrant(focusGrant.type, focusGrant.source, conflictLeverage);
+      }
+    }
+
+    setLeverage(conflictLeverage);
+
     // Initialize conflict
     const conflict = initConflict({
       encounterCategory: currentEncounter.category,
@@ -500,6 +540,7 @@ export default function GamePage() {
       playerLabel: character?.name || 'You',
       opponentLabel: opponentIdentity.name,
       opponentIdentity,
+      leverage: conflictLeverage,
       playerBuild: character ? {
         level: character.level,
         attributes: character.attributes,
@@ -515,6 +556,17 @@ export default function GamePage() {
     if (!conflictState || conflictState.ended) return;
     const newState = executeTurn(conflictState, moveId);
     setConflictState(newState);
+  };
+
+  const handleLeverageSpend = (spend: LeverageSpend) => {
+    if (!conflictState || conflictState.ended) return;
+    const newLeverage = spendLeverage(leverage, spend.leverageType);
+    if (!newLeverage) return;
+
+    logLeverageSpend(spend.leverageType, spend.effect, newLeverage);
+    setLeverage(newLeverage);
+    // Arm the effect on the conflict state — will be applied in executeTurn
+    setConflictState({ ...conflictState, armedLeverage: spend, leverage: newLeverage });
   };
 
   const handleConflictContinue = async () => {
@@ -569,6 +621,7 @@ export default function GamePage() {
           focusModifier: focusResult.modifier,
           resolutionOutcomeOverride,
           conflictOutcome,
+          leverage,
         }),
       });
 
@@ -838,7 +891,9 @@ export default function GamePage() {
       return (
         <ConflictPane
           state={conflictState}
+          leverage={leverage}
           onPlayerMove={handleConflictMove}
+          onLeverageSpend={handleLeverageSpend}
           onContinue={handleConflictContinue}
         />
       );
