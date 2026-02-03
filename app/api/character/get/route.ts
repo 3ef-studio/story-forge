@@ -170,7 +170,11 @@ export async function GET() {
         })),
         activeThread,
         rival: rivalData,
-        leverage: character.leverage as { control: number; stability: number; position: number },
+        leverage: {
+          control: character.leverageControl,
+          stability: character.leverageStability,
+          position: character.leveragePosition,
+        },
         actionCounter: character.actionCounter,
       },
     });

@@ -24,6 +24,7 @@ interface CharacterSheetProps {
     money: number;
     nextEnergyRegenAt?: string;
     energyRegenTickAmount?: number;
+    leverage?: { control: number; stability: number; position: number };
     attributes: Record<string, number>;
     powers: Array<{ powerId: string; level: number; xp: number }>;
     factions: Record<string, number>;
@@ -196,6 +197,30 @@ export function CharacterSheet({ character }: CharacterSheetProps) {
             </span>
             <span className="font-bold text-green-400 text-base">${character.money}</span>
           </div>
+
+          {/* Leverage */}
+          {character.leverage && (character.leverage.control > 0 || character.leverage.stability > 0 || character.leverage.position > 0) && (
+            <div className="flex items-center justify-between text-xs pt-2 px-1 border-t border-white/10 mt-2">
+              <span className="text-white/50 font-medium">Leverage</span>
+              <div className="flex gap-2">
+                {character.leverage.control > 0 && (
+                  <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                    Ctrl {character.leverage.control}
+                  </span>
+                )}
+                {character.leverage.stability > 0 && (
+                  <span className="px-1.5 py-0.5 rounded bg-green-500/20 text-green-300 border border-green-500/30">
+                    Stab {character.leverage.stability}
+                  </span>
+                )}
+                {character.leverage.position > 0 && (
+                  <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                    Pos {character.leverage.position}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

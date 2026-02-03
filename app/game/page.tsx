@@ -167,8 +167,10 @@ export default function GamePage() {
   const [pendingChoiceId, setPendingChoiceId] = useState<string | null>(null);
   const [pendingPrepSelection, setPendingPrepSelection] = useState<PrepSelection | null>(null);
 
-  // Leverage state — synced from character on load, mutated during conflict, persisted on resolve
+  // Leverage state — synced from character on load / resolve response, display-only during conflict
   const [leverage, setLeverage] = useState<LeverageState>(emptyLeverage());
+  // Tracks how much leverage was spent during the current conflict (reset per encounter)
+  const [leverageSpent, setLeverageSpent] = useState<LeverageState>(emptyLeverage());
 
   // Mobile tab state
   const [mobileTab, setMobileTab] = useState<MobileTab>('scene');
@@ -512,7 +514,9 @@ export default function GamePage() {
     });
     logOpponentIdentity(opponentIdentity);
 
-    // Generate leverage from prep selection + focus result (once per encounter choice)
+    // Generate leverage preview for conflict UI (server is authoritative, this is display-only)
+    // Reset spent tracker for new encounter
+    setLeverageSpent(emptyLeverage());
     let conflictLeverage = { ...leverage };
 
     if (prepSelection) {
@@ -565,6 +569,11 @@ export default function GamePage() {
 
     logLeverageSpend(spend.leverageType, spend.effect, newLeverage);
     setLeverage(newLeverage);
+    // Track cumulative spent for this encounter (server needs this)
+    setLeverageSpent(prev => ({
+      ...prev,
+      [spend.leverageType]: prev[spend.leverageType] + 1,
+    }));
     // Arm the effect on the conflict state — will be applied in executeTurn
     setConflictState({ ...conflictState, armedLeverage: spend, leverage: newLeverage });
   };
@@ -621,7 +630,7 @@ export default function GamePage() {
           focusModifier: focusResult.modifier,
           resolutionOutcomeOverride,
           conflictOutcome,
-          leverage,
+          leverageSpent,
         }),
       });
 
@@ -652,6 +661,11 @@ export default function GamePage() {
       // Set power progression if available
       if (data.powerProgression) {
         setCurrentPowerProgression(data.powerProgression);
+      }
+
+      // Sync leverage from server-authoritative response
+      if (data.leverage) {
+        setLeverage(data.leverage);
       }
 
       setGameState('outcome');
@@ -717,6 +731,7 @@ export default function GamePage() {
     setConflictResult(null);
     setPendingChoiceId(null);
     setPendingPrepSelection(null);
+    setLeverageSpent(emptyLeverage());
     setGameState('idle');
     await fetchCharacter();
   };

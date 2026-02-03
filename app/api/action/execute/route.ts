@@ -432,11 +432,21 @@ export async function POST(request: Request) {
     }
 
     // Compute leverage decay for non-encounter actions (encounter actions decay in resolve)
-    const currentLeverage = (character.leverage as unknown as LeverageState) ?? { control: 0, stability: 0, position: 0 };
+    const currentLeverage: LeverageState = {
+      control: character.leverageControl,
+      stability: character.leverageStability,
+      position: character.leveragePosition,
+    };
     const newActionCounter = encounter ? character.actionCounter : character.actionCounter + 1;
     const decayResult = encounter ? { leverage: currentLeverage, decayed: false } : applyDecay(currentLeverage, newActionCounter);
     if (!encounter && process.env.NODE_ENV === 'development') {
-      console.log(`[Leverage] Action counter: ${character.actionCounter} → ${newActionCounter}`, decayResult.decayed ? `(decayed ${decayResult.decayedType})` : '');
+      console.log(
+        `[Leverage Execute] char=${character.id} | ` +
+        `counter=${character.actionCounter}→${newActionCounter} | ` +
+        `db={c:${currentLeverage.control},s:${currentLeverage.stability},p:${currentLeverage.position}} | ` +
+        `decay=${decayResult.decayed ? `yes(-1 ${decayResult.decayedType})` : 'no'} | ` +
+        `final={c:${decayResult.leverage.control},s:${decayResult.leverage.stability},p:${decayResult.leverage.position}}`
+      );
     }
 
     // Update character in transaction
@@ -456,7 +466,12 @@ export async function POST(request: Request) {
           money: character.money + action.baseMoneyReward,
           pendingLevelUpAttributePick: leveledUp ? true : undefined,
           // Increment action counter + apply decay (only for non-encounter actions)
-          ...(!encounter ? { actionCounter: newActionCounter, leverage: decayResult.leverage as unknown as Record<string, number> } : {}),
+          ...(!encounter ? {
+            actionCounter: newActionCounter,
+            leverageControl: decayResult.leverage.control,
+            leverageStability: decayResult.leverage.stability,
+            leveragePosition: decayResult.leverage.position,
+          } : {}),
         },
       });
 

@@ -36,7 +36,7 @@ import {
 import { getNPCById } from '@/app/data/npcs';
 import { getActionById, normalizeActionId } from '@/app/data/actions';
 import { computeEnergyRegen } from '@/app/lib/game-logic/energy-regen';
-import { applyDecay, type LeverageState } from '@/app/lib/game-logic/leverage';
+import { computeLeverageUpdate, type LeverageState } from '@/app/lib/game-logic/leverage';
 
 // Type for outcome result with optional fields
 type OutcomeResult = {
@@ -296,7 +296,7 @@ type ResolveActionBody = {
   focusModifier?: number;
   resolutionOutcomeOverride?: ResolutionOutcomeOverride;
   conflictOutcome?: ConflictOutcomePayload;
-  leverage?: LeverageState;
+  leverageSpent?: LeverageState;
 };
 
 function isUuidLike(value: string): boolean {
@@ -682,16 +682,37 @@ export async function POST(request: Request) {
     // Calculate new energy after prep cost
     const newEnergy = Math.max(0, effectiveEnergy - prepEnergyCost);
 
-    // Increment action counter + apply leverage decay (encounter counts as 1 action)
-    const currentLeverage = (character.leverage as unknown as LeverageState) ?? { control: 0, stability: 0, position: 0 };
-    // If client sent updated leverage (from spending during conflict), use that
-    const clientLeverage = conflictOutcome
-      ? ((rawBody as Record<string, unknown>).leverage as LeverageState | undefined) ?? currentLeverage
-      : currentLeverage;
-    const resolveActionCounter = character.actionCounter + 1;
-    const resolveDecay = applyDecay(clientLeverage, resolveActionCounter);
+    // --- Leverage: server-authoritative computation ---
+    // Server reads DB state, computes gains from prep+focus, subtracts client-reported spends,
+    // clamps, increments actionCounter, and applies decay. Client never sends totals.
+    const leverageSpent: LeverageState = (rawBody as Record<string, unknown>).leverageSpent as LeverageState | undefined
+      ?? { control: 0, stability: 0, position: 0 };
+    const prepPowerId = validPrepSelection?.type === 'power' ? validPrepSelection.powerId : undefined;
+    const leverageUpdate = computeLeverageUpdate({
+      dbLeverage: {
+        control: character.leverageControl,
+        stability: character.leverageStability,
+        position: character.leveragePosition,
+      },
+      dbActionCounter: character.actionCounter,
+      prepSelection: validPrepSelection,
+      focusMode: focusMode,
+      focusModifier: focusModifier,
+      prepPowerId,
+      leverageSpent,
+    });
+
     if (process.env.NODE_ENV === 'development') {
-      console.log(`[Leverage] Resolve action counter: ${character.actionCounter} → ${resolveActionCounter}`, resolveDecay.decayed ? `(decayed ${resolveDecay.decayedType})` : '');
+      console.log(
+        `[Leverage Resolve] char=${character.id} | ` +
+        `counter=${character.actionCounter}→${leverageUpdate.newActionCounter} | ` +
+        `db={c:${character.leverageControl},s:${character.leverageStability},p:${character.leveragePosition}} | ` +
+        `gained={c:${leverageUpdate.gained.control},s:${leverageUpdate.gained.stability},p:${leverageUpdate.gained.position}} | ` +
+        `spent={c:${leverageUpdate.spent.control},s:${leverageUpdate.spent.stability},p:${leverageUpdate.spent.position}} | ` +
+        `preDecay={c:${leverageUpdate.candidatePreDecay.control},s:${leverageUpdate.candidatePreDecay.stability},p:${leverageUpdate.candidatePreDecay.position}} | ` +
+        `decay=${leverageUpdate.decayed ? `yes(-1 ${leverageUpdate.decayedType})` : 'no'} | ` +
+        `final={c:${leverageUpdate.finalLeverage.control},s:${leverageUpdate.finalLeverage.stability},p:${leverageUpdate.finalLeverage.position}}`
+      );
     }
 
     // Update character in transaction
@@ -707,8 +728,10 @@ export async function POST(request: Request) {
           maxEnergy: leveledUp ? character.maxEnergy + 5 : character.maxEnergy,
           ...(leveledUp ? { lastEnergyRegenAt: new Date() } : {}),
           pendingLevelUpAttributePick: leveledUp ? true : undefined,
-          actionCounter: resolveActionCounter,
-          leverage: resolveDecay.leverage as unknown as Record<string, number>,
+          actionCounter: leverageUpdate.newActionCounter,
+          leverageControl: leverageUpdate.finalLeverage.control,
+          leverageStability: leverageUpdate.finalLeverage.stability,
+          leveragePosition: leverageUpdate.finalLeverage.position,
         },
       });
 
@@ -899,6 +922,7 @@ export async function POST(request: Request) {
         completed: completedGoals,
         xpAwarded: goalXp,
       },
+      leverage: leverageUpdate.finalLeverage,
       powerProgression: powerProgression ? {
         powerId: powerProgression.powerId,
         powerName: powerProgression.powerName,

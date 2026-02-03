@@ -221,6 +221,90 @@ export function applyDecay(
   return { leverage: updated, decayed: true, decayedType: maxType };
 }
 
+// --- Server-side authoritative leverage computation ---
+
+export type FocusModeInput = 'power' | 'awareness' | 'aggression' | 'defense';
+
+export interface LeverageDeltas {
+  gained: LeverageState;
+  spent: LeverageState;
+}
+
+/**
+ * Compute the full leverage update for an action resolution.
+ *
+ * This is the AUTHORITATIVE computation — the server reads DB state,
+ * applies gained/spent deltas, clamps, increments actionCounter, and applies decay.
+ *
+ * Formula: candidate = clamp(dbCurrent + gained - spent), then decay if actionCounter % 3 === 0
+ *
+ * Clamping rule (stable, deterministic):
+ *   1. Per-type: min(value, 2), floor at 0
+ *   2. Total: if sum > 3, trim from lowest priority (position first, then stability, then control)
+ */
+export function computeLeverageUpdate(input: {
+  dbLeverage: LeverageState;
+  dbActionCounter: number;
+  prepSelection: PrepSelection | null | undefined;
+  focusMode: FocusModeInput | null | undefined;
+  focusModifier: number;
+  prepPowerId: string | undefined;
+  leverageSpent: LeverageState;
+}): {
+  gained: LeverageState;
+  spent: LeverageState;
+  candidatePreDecay: LeverageState;
+  newActionCounter: number;
+  decayed: boolean;
+  decayedType?: LeverageType;
+  finalLeverage: LeverageState;
+} {
+  // Step 1: Compute gains from prep + focus
+  const gained = emptyLeverage();
+
+  if (input.prepSelection) {
+    const prepGrant = leverageFromPrep(input.prepSelection);
+    gained[prepGrant.type] += 1;
+  }
+
+  if (input.focusMode && input.focusModifier > 0) {
+    const focusGrant = leverageFromFocus(
+      input.focusMode,
+      input.focusModifier,
+      input.prepPowerId,
+    );
+    if (focusGrant) {
+      gained[focusGrant.type] += 1;
+    }
+  }
+
+  // Step 2: candidate = dbCurrent + gained - spent (floor at 0 per type)
+  const raw: LeverageState = {
+    control: Math.max(0, input.dbLeverage.control + gained.control - input.leverageSpent.control),
+    stability: Math.max(0, input.dbLeverage.stability + gained.stability - input.leverageSpent.stability),
+    position: Math.max(0, input.dbLeverage.position + gained.position - input.leverageSpent.position),
+  };
+
+  // Step 3: Clamp to per-type max (2) and total max (3)
+  const candidatePreDecay = clampLeverage(raw);
+
+  // Step 4: Increment action counter (1 per resolved action/encounter)
+  const newActionCounter = input.dbActionCounter + 1;
+
+  // Step 5: Apply decay if actionCounter % 3 === 0
+  const decayResult = applyDecay(candidatePreDecay, newActionCounter);
+
+  return {
+    gained,
+    spent: input.leverageSpent,
+    candidatePreDecay,
+    newActionCounter,
+    decayed: decayResult.decayed,
+    decayedType: decayResult.decayedType,
+    finalLeverage: decayResult.leverage,
+  };
+}
+
 // --- Dev logging ---
 
 export function logLeverageGrant(type: LeverageType, source: string, newState: LeverageState): void {
