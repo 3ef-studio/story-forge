@@ -38,6 +38,17 @@ import { getNPCById } from '@/app/data/npcs';
 import { getActionById, normalizeActionId } from '@/app/data/actions';
 import { computeEnergyRegen } from '@/app/lib/game-logic/energy-regen';
 import { computeLeverageUpdate, type LeverageState } from '@/app/lib/game-logic/leverage';
+import {
+  generateFollowUps,
+  decrementFollowUpTTLs,
+  mergeFollowUps,
+  parsePendingFollowUps,
+  type FollowUpContext,
+  type FollowUpAction,
+  type ConflictResult as FollowUpConflictResult,
+  type GambitOutcome as FollowUpGambitOutcome,
+  type IntentHint,
+} from '@/app/lib/game-logic/follow-up-actions';
 
 // Type for outcome result with optional fields
 type OutcomeResult = {
@@ -1046,6 +1057,60 @@ export async function POST(request: Request) {
       console.error('[Telemetry] Failed to write EncounterRun:', telemetryError);
     }
 
+    // --- Follow-Up Actions: generate and persist after all other updates ---
+    let mergedFollowUps: FollowUpAction[] = [];
+    try {
+      // Load existing follow-ups from character
+      const existingFollowUps = parsePendingFollowUps(character.pendingFollowUps);
+
+      // Decrement TTLs (removes expired ones)
+      const decrementedFollowUps = decrementFollowUpTTLs(existingFollowUps);
+
+      // Build context for follow-up generation
+      const followUpContext: FollowUpContext = {
+        encounterId,
+        encounterType: encounter.category,
+        encounterDifficulty: encounter.difficulty,
+        encounterTags: encounter.narrativeTags,
+        factions: encounter.requiredFactions ?? [],
+        district: character.currentDistrict,
+        actionId: actionId ?? undefined,
+        outcomeType: isSuccess ? 'success' : isPartial ? 'partial' : 'failure',
+        conflictResult: conflictOutcome?.result as FollowUpConflictResult | undefined,
+        gambitOutcome: gambitResult?.outcomeTier as FollowUpGambitOutcome | undefined,
+        npcId: npcId ?? undefined,
+        npcName: npcId ? getNPCById(npcId)?.name : undefined,
+        rivalPresent: rivalPresent ?? false,
+        leverageState: leverageUpdate.finalLeverage,
+        usedPowers: usedPowerIds,
+        baseActionIntent: actionId ? (getActionById(actionId)?.moralIntent ?? undefined) : undefined,
+      };
+
+      // Generate new follow-ups (max 3)
+      const newFollowUps = generateFollowUps(followUpContext, { max: 3 });
+
+      // Merge with existing (max 5 total)
+      mergedFollowUps = mergeFollowUps(decrementedFollowUps, newFollowUps, { maxTotal: 5 });
+
+      // Persist back to character
+      await prisma.character.update({
+        where: { id: character.id },
+        data: {
+          pendingFollowUps: mergedFollowUps.length > 0 ? JSON.parse(JSON.stringify(mergedFollowUps)) : Prisma.DbNull,
+        },
+      });
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[FollowUps] Generated:', newFollowUps.length, 'Merged total:', mergedFollowUps.length);
+        if (newFollowUps.length > 0) {
+          console.log('[FollowUps] New:', newFollowUps.map(f => f.name).join(', '));
+        }
+      }
+    } catch (followUpError) {
+      // Fail-soft: log the error but don't break the game
+      console.error('[FollowUps] Failed to generate/persist follow-ups:', followUpError);
+    }
+
     return NextResponse.json({
       success: isSuccess,
       partial: isPartial,
@@ -1091,6 +1156,7 @@ export async function POST(request: Request) {
         powerBonusApplied: powerProgression.powerBonus,
         xpToNextLevel: powerProgression.xpToNextLevel,
       } : undefined,
+      followUps: mergedFollowUps.length > 0 ? mergedFollowUps : undefined,
     });
   } catch (error) {
     console.error('Encounter resolution error:', error);

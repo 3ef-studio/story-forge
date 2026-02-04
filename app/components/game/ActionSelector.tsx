@@ -5,8 +5,9 @@ import { Badge } from '@/app/components/ui/badge';
 import { actions, type Action, type ActionCategory, getAvailableActions, normalizeActionId } from '@/app/data/actions';
 import { isActionAvailableInDistrict, isActionGlobal, type DistrictId } from '@/app/data/districts';
 import { DistrictSelector } from '@/app/components/game/DistrictSelector';
-import { AlertCircle, Circle, Clock, Dumbbell, MapPinOff, Shield, Skull, Star, Users, Zap } from 'lucide-react';
+import { AlertCircle, Circle, Clock, Dumbbell, MapPinOff, Shield, Skull, Star, Users, Zap, Sparkles, Timer } from 'lucide-react';
 import type { GoalRecord } from '@/app/components/game/ActiveGoalsPanel';
+import type { FollowUpAction } from '@/app/lib/game-logic/follow-up-actions';
 
 interface ActionSelectorProps {
   playerLevel: number;
@@ -16,6 +17,8 @@ interface ActionSelectorProps {
   // actionId -> ISO date string (or any Date-parsable string)
   cooldowns: Record<string, string>;
   onSelectAction: (action: Action) => void;
+  onSelectFollowUp?: (followUp: FollowUpAction) => void;
+  followUps?: FollowUpAction[];
   disabled?: boolean;
   activeGoals?: GoalRecord[];
   currentDistrict?: DistrictId;
@@ -56,6 +59,14 @@ function doesActionAdvanceGoal(
   return false;
 }
 
+// Risk tier styling for follow-ups
+const RISK_TIER_STYLES: Record<string, { bg: string; text: string; label: string }> = {
+  great: { bg: 'bg-green-500/20', text: 'text-green-300', label: 'Great' },
+  good: { bg: 'bg-blue-500/20', text: 'text-blue-300', label: 'Good' },
+  risky: { bg: 'bg-yellow-500/20', text: 'text-yellow-300', label: 'Risky' },
+  dangerous: { bg: 'bg-red-500/20', text: 'text-red-300', label: 'Dangerous' },
+};
+
 export function ActionSelector({
   playerLevel,
   playerAttributes,
@@ -63,6 +74,8 @@ export function ActionSelector({
   playerEnergy,
   cooldowns,
   onSelectAction,
+  onSelectFollowUp,
+  followUps = [],
   disabled = false,
   activeGoals = [],
   currentDistrict,
@@ -143,6 +156,103 @@ export function ActionSelector({
   };
 
   const categories: (ActionCategory | 'all')[] = ['all', 'heroic', 'criminal', 'neutral', 'training', 'social'];
+
+  // Render follow-ups section
+  const followUpsSection = followUps.length > 0 && onSelectFollowUp ? (
+    <div className="mb-4">
+      <div className="flex items-center gap-2 mb-2">
+        <Sparkles className="h-4 w-4 text-purple-400" />
+        <h4 className="text-sm font-semibold text-purple-300">Opportunities</h4>
+        <span className="text-xs text-white/40">({followUps.length})</span>
+      </div>
+      <div className={`grid grid-cols-1 ${compact ? 'gap-2.5' : 'gap-2'}`}>
+        {followUps.map((followUp) => {
+          const riskStyle = RISK_TIER_STYLES[followUp.riskTier] || RISK_TIER_STYLES.risky;
+          const energyCost = followUp.riskTier === 'dangerous' ? 8 :
+                             followUp.riskTier === 'risky' ? 5 :
+                             followUp.riskTier === 'good' ? 3 : 2;
+          const hasEnergy = playerEnergy >= energyCost;
+
+          if (compact) {
+            return (
+              <button
+                key={followUp.id}
+                onClick={() => onSelectFollowUp(followUp)}
+                disabled={disabled || !hasEnergy}
+                className={`group text-left px-4 py-3.5 rounded-xl border transition-colors min-h-14 ${
+                  !hasEnergy
+                    ? 'bg-white/5 border-white/10 opacity-50 cursor-not-allowed'
+                    : 'bg-purple-500/10 border-purple-500/30 active:bg-purple-500/20'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="p-1.5 rounded-lg bg-purple-500 text-white shrink-0">
+                    <Sparkles className="h-4 w-4" />
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-semibold text-sm text-white/90 truncate">
+                        {followUp.name}
+                      </span>
+                    </div>
+                    <p className="text-xs text-white/50 mt-0.5 line-clamp-1">{followUp.description}</p>
+                  </div>
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${riskStyle.bg} ${riskStyle.text}`}>
+                      {riskStyle.label}
+                    </span>
+                    <span className="text-[10px] text-white/40 flex items-center gap-0.5">
+                      <Timer className="h-2.5 w-2.5" />
+                      {followUp.expiresInActions} actions
+                    </span>
+                  </div>
+                </div>
+              </button>
+            );
+          }
+
+          // Full desktop view
+          return (
+            <button
+              key={followUp.id}
+              onClick={() => onSelectFollowUp(followUp)}
+              disabled={disabled || !hasEnergy}
+              className={`group text-left p-4 rounded-xl border transition-all duration-200 ${
+                !hasEnergy
+                  ? 'bg-white/5 border-white/10 opacity-60 cursor-not-allowed'
+                  : 'bg-purple-500/10 border-purple-500/30 hover:border-purple-400/50 hover:bg-purple-500/15 hover:-translate-y-0.5 cursor-pointer active:translate-y-0'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1.5 rounded-lg bg-purple-500 text-white shadow-sm group-hover:scale-110 transition-transform">
+                      <Sparkles className="h-4 w-4" />
+                    </span>
+                    <span className="font-semibold text-sm text-white/90 group-hover:text-purple-300 transition-colors">
+                      {followUp.name}
+                    </span>
+                  </div>
+                  <p className="text-xs text-white/50 mt-1.5 line-clamp-2 leading-relaxed">
+                    {followUp.description}
+                  </p>
+                </div>
+                <div className="flex flex-col items-end gap-1.5">
+                  <Badge className={`text-xs font-medium ${riskStyle.bg} ${riskStyle.text} border-0`}>
+                    {riskStyle.label}
+                  </Badge>
+                  <span className="text-xs text-white/40 flex items-center gap-1">
+                    <Timer className="h-3 w-3" />
+                    {followUp.expiresInActions} actions
+                  </span>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  ) : null;
 
   const content = (
     <div className={`grid grid-cols-1 ${compact ? 'gap-2.5' : 'gap-2'}`}>
@@ -318,6 +428,7 @@ export function ActionSelector({
             </button>
           ))}
         </div>
+        {followUpsSection}
         {content}
       </div>
     );
@@ -354,6 +465,7 @@ export function ActionSelector({
       </div>
 
       <div className="px-4 pb-4">
+        {followUpsSection}
         {content}
       </div>
     </div>

@@ -10,6 +10,7 @@ import { getActiveThreadForDisplay } from '@/app/lib/game-logic/thread-manager';
 import { computeEnergyRegen } from '@/app/lib/game-logic/energy-regen';
 import { generateRivalForCharacter } from '@/app/lib/game-logic/rival-generator';
 import { PERSONALITY_LABELS, PERSONALITY_DESCRIPTIONS, type RivalPersonality } from '@/app/data/rivals';
+import { parsePendingFollowUps } from '@/app/lib/game-logic/follow-up-actions';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -176,6 +177,7 @@ export async function GET() {
           position: character.leveragePosition,
         },
         actionCounter: character.actionCounter,
+        followUps: parsePendingFollowUps(character.pendingFollowUps),
       },
     });
   } catch (error) {

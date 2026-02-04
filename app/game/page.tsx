@@ -44,6 +44,7 @@ import {
   logLeverageGrant,
   logLeverageSpend,
 } from '@/app/lib/game-logic/leverage';
+import type { FollowUpAction } from '@/app/lib/game-logic/follow-up-actions';
 
 type GameState = 'idle' | 'executing' | 'encounter' | 'conflict' | 'resolving' | 'outcome';
 
@@ -91,6 +92,7 @@ interface CharacterData {
   } | null;
   leverage?: LeverageState;
   actionCounter?: number;
+  followUps?: FollowUpAction[];
 }
 
 interface OutcomeResult {
@@ -320,6 +322,167 @@ export default function GamePage() {
 
     return () => clearInterval(interval);
   }, [gameState]);
+
+  // Handle follow-up action selection
+  const handleSelectFollowUp = async (followUp: FollowUpAction) => {
+    if (!character || gameState !== 'idle') return;
+
+    setGameState('executing');
+    setError(null);
+    setLoadingStep(0);
+    setFocusResult({ mode: null, modifier: 0 });
+    setMobileTab('scene');
+
+    try {
+      // Follow-up actions use their ID directly - the execute route handles fup_* IDs
+      const response = await fetch('/api/action/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actionId: followUp.id }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || 'Failed to execute follow-up');
+        setGameState('idle');
+        return;
+      }
+
+      // Update character energy and HP
+      setCharacter((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          currentEnergy: data.newEnergy,
+          currentHp: data.newHp ?? prev.currentHp,
+          money: prev.money + (data.moneyGained || 0),
+          // Clear the consumed follow-up from local state
+          followUps: prev.followUps?.filter(f => f.id !== followUp.id),
+        };
+      });
+
+      if (data.encounterTriggered && data.encounter) {
+        const encounter = data.encounter as EncounterTemplate & { threadId?: string; threadTitle?: string };
+        setCurrentEncounter(encounter);
+        setIsCachedEncounter(data.isCachedEncounter || false);
+        setRivalPresence(data.rivalPresence ?? null);
+        setCurrentActionContext({
+          actionId: followUp.origin.actionId ?? 'followup',
+          locationType: followUp.executeHints.locationTypes?.[0],
+        });
+
+        const choices = encounter.choices.map((choice) => {
+          let available = true;
+          let reason: string | undefined;
+
+          if (choice.requiredPowers?.length) {
+            const hasPower = choice.requiredPowers.some((p) =>
+              character.powers.some((cp) => cp.powerId === p)
+            );
+            if (!hasPower) {
+              available = false;
+              reason = 'Requires specific power';
+            }
+          }
+
+          if (choice.requiredAttributes?.length && available) {
+            const unmet = choice.requiredAttributes.find(
+              (req) => (character.attributes[req.attributeId] || 0) < req.minValue
+            );
+            if (unmet) {
+              available = false;
+              reason = `Requires ${unmet.attributeId} ${unmet.minValue}`;
+            }
+          }
+
+          let preview: ResolutionPreview | undefined;
+          if (available) {
+            const approach = inferApproachFromText(choice.text);
+            preview = previewEncounterResolution({
+              difficulty: encounter.difficulty,
+              approach,
+              attributes: character.attributes,
+              powerIds: character.powers.map((p) => p.powerId),
+              repByFaction: character.factions,
+              encounterTags: encounter.narrativeTags,
+              involvedFactions: encounter.requiredFactions,
+              choiceText: choice.text,
+            });
+          }
+
+          return {
+            id: choice.id,
+            text: choice.text,
+            available,
+            reason,
+            requiredPowers: choice.requiredPowers,
+            preview,
+          };
+        });
+
+        setEncounterChoices(choices);
+        setGameState('encounter');
+      } else {
+        const outcomeDescription = `You pursued ${followUp.name}. ${
+          Object.keys(data.attributeGrowth).length > 0
+            ? 'You feel yourself growing stronger.'
+            : ''
+        }`;
+
+        setCurrentOutcome({
+          success: true,
+          description: outcomeDescription,
+          xpGained: data.xpGained || 0,
+          moneyGained: data.moneyGained,
+          factionChanges: Object.entries(data.reputationChanges).map(([factionId, change]) => ({
+            factionId,
+            change: change as number,
+          })),
+          attributeGrowth: Object.entries(data.attributeGrowth).map(([attributeId, amount]) => ({
+            attributeId,
+            amount: amount as number,
+          })),
+        });
+        setGameState('outcome');
+
+        setCharacter((prev) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            currentXp: data.newXp,
+            level: data.leveledUp ? data.newLevel : prev.level,
+            maxHp: data.leveledUp ? prev.maxHp + 10 : prev.maxHp,
+            maxEnergy: data.leveledUp ? prev.maxEnergy + 5 : prev.maxEnergy,
+          };
+        });
+
+        if (data.leveledUp) {
+          setLevelUpModal(data.newLevel);
+        }
+      }
+
+      if (data.goals) {
+        setActiveGoals(data.goals.active || []);
+        if (data.goals.completed?.length > 0) {
+          setCompletedGoals(data.goals.completed);
+          data.goals.completed.forEach((goal: GoalRecord) => {
+            addToast({
+              type: 'success',
+              title: 'Goal Completed!',
+              message: `${goal.title} (+${goal.xpReward} XP)`,
+              duration: 4000,
+            });
+          });
+          setTimeout(() => setCompletedGoals([]), 5000);
+        }
+      }
+    } catch (err) {
+      console.error('Follow-up execution error:', err);
+      setError('An error occurred');
+      setGameState('idle');
+    }
+  };
 
   const handleSelectAction = async (action: Action) => {
     if (!character || gameState !== 'idle') return;
@@ -1135,6 +1298,8 @@ export default function GamePage() {
                 playerEnergy={character.currentEnergy}
                 cooldowns={character.cooldowns}
                 onSelectAction={handleSelectAction}
+                onSelectFollowUp={handleSelectFollowUp}
+                followUps={character.followUps}
                 disabled={gameState !== 'idle'}
                 activeGoals={activeGoals}
                 currentDistrict={character.currentDistrict}
@@ -1232,6 +1397,8 @@ export default function GamePage() {
                 playerEnergy={character.currentEnergy}
                 cooldowns={character.cooldowns}
                 onSelectAction={handleSelectAction}
+                onSelectFollowUp={handleSelectFollowUp}
+                followUps={character.followUps}
                 disabled={gameState !== 'idle'}
                 activeGoals={activeGoals}
                 currentDistrict={character.currentDistrict}

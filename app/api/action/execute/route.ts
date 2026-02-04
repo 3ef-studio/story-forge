@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { auth } from '@/app/lib/auth';
 import { prisma } from '@/app/lib/db';
-import { getActionById, applyActionEffects, getCooldownExpiry, rollForEncounter, selectEncounterType, getEncounterDifficulty, normalizeActionId } from '@/app/data/actions';
+import { getActionById, applyActionEffects, getCooldownExpiry, rollForEncounter, selectEncounterType, getEncounterDifficulty, normalizeActionId, type Action } from '@/app/data/actions';
 import { calculateReputationImpact, getFactionById } from '@/app/data/factions';
 import { getAvailableEncounters, selectRandomEncounter, type EncounterTemplate } from '@/app/data/encounter-templates';
 import { findCachedSeed, cacheSeed } from '@/app/lib/ai/encounter-cache';
@@ -34,6 +35,11 @@ import {
 import { generateRivalForCharacter } from '@/app/lib/game-logic/rival-generator';
 import { RIVAL_FLAVOR, type RivalIntensity } from '@/app/data/rivals';
 import { applyDecay, type LeverageState } from '@/app/lib/game-logic/leverage';
+import {
+  isFollowUpActionId,
+  parsePendingFollowUps,
+  buildEphemeralActionFromFollowUp,
+} from '@/app/lib/game-logic/follow-up-actions';
 
 export async function POST(request: Request) {
   try {
@@ -47,17 +53,9 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const actionId = normalizeActionId(body.actionId);
+    const rawActionId = body.actionId as string;
 
-    const action = getActionById(actionId);
-    if (!action) {
-      return NextResponse.json(
-        { error: 'Invalid action' },
-        { status: 400 }
-      );
-    }
-
-    // Get character with all data
+    // Get character with all data first (needed for follow-up lookups)
     const character = await prisma.character.findUnique({
       where: { userId: session.user.id },
       include: {
@@ -72,6 +70,46 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: 'Character not found' },
         { status: 404 }
+      );
+    }
+
+    // Handle follow-up action IDs (fup_*) or regular action IDs
+    let action: Action | null = null;
+    let isFollowUp = false;
+    let usedFollowUpId: string | null = null;
+    let actionId: string;
+
+    if (isFollowUpActionId(rawActionId)) {
+      // Load follow-up from character's pendingFollowUps
+      const pendingFollowUps = parsePendingFollowUps(character.pendingFollowUps);
+      const followUp = pendingFollowUps.find(f => f.id === rawActionId);
+
+      if (!followUp) {
+        return NextResponse.json(
+          { error: 'Follow-up action not found or expired' },
+          { status: 400 }
+        );
+      }
+
+      // Build ephemeral action from follow-up
+      action = buildEphemeralActionFromFollowUp(followUp);
+      isFollowUp = true;
+      usedFollowUpId = rawActionId;
+      actionId = followUp.origin.actionId ?? 'followup';
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Execute] Follow-up action:', followUp.name, '| Base action:', actionId);
+      }
+    } else {
+      // Standard action lookup
+      actionId = normalizeActionId(rawActionId);
+      action = getActionById(actionId) ?? null;
+    }
+
+    if (!action) {
+      return NextResponse.json(
+        { error: 'Invalid action' },
+        { status: 400 }
       );
     }
 
@@ -660,6 +698,28 @@ export async function POST(request: Request) {
 
     // Get updated active goals
     const activeGoals = await getActiveGoals(character.id);
+
+    // Remove used follow-up from pendingFollowUps if this was a follow-up action
+    if (isFollowUp && usedFollowUpId) {
+      try {
+        const pendingFollowUps = parsePendingFollowUps(character.pendingFollowUps);
+        const remainingFollowUps = pendingFollowUps.filter(f => f.id !== usedFollowUpId);
+
+        await prisma.character.update({
+          where: { id: character.id },
+          data: {
+            pendingFollowUps: remainingFollowUps.length > 0 ? JSON.parse(JSON.stringify(remainingFollowUps)) : Prisma.DbNull,
+          },
+        });
+
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[Execute] Follow-up consumed:', usedFollowUpId, '| Remaining:', remainingFollowUps.length);
+        }
+      } catch (followUpError) {
+        // Fail-soft: log the error but don't break the game
+        console.error('[Execute] Failed to remove used follow-up:', followUpError);
+      }
+    }
 
     // City Update Logic: Check if we should emit a city update
     let cityUpdate: CityUpdate | null = null;

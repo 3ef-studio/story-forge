@@ -45,6 +45,7 @@ model Character {
   leverageStability           Int                  @default(0) @map("leverage_stability")
   leveragePosition            Int                  @default(0) @map("leverage_position")
   actionCounter               Int                  @default(0) @map("action_counter")
+  pendingFollowUps            Json?                @map("pending_follow_ups") // FollowUpAction[]
   createdAt                   DateTime             @default(now()) @map("created_at")
   updatedAt                   DateTime             @updatedAt @map("updated_at")
 
