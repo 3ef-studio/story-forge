@@ -9,6 +9,7 @@ import {
   getPlayerMoves,
 } from '@/app/lib/game-logic/conflict/engine';
 import type { ConflictState, MoveId } from '@/app/lib/game-logic/conflict/types';
+import type { GambitResult, GambitEffect } from '@/app/lib/game-logic/combat/types';
 import {
   type LeverageState,
   type LeverageSpend,
@@ -43,6 +44,23 @@ const LEVERAGE_COLORS: Record<LeverageType, string> = {
   position: 'bg-amber-500/30 border-amber-500/40 text-amber-300',
 };
 
+// Gambit outcome styling
+const GAMBIT_OUTCOME_STYLES = {
+  clean: { bg: 'bg-green-500/20', border: 'border-green-500/40', text: 'text-green-300', label: 'Clean' },
+  complication: { bg: 'bg-yellow-500/20', border: 'border-yellow-500/40', text: 'text-yellow-300', label: 'Complication' },
+  backfire: { bg: 'bg-red-500/20', border: 'border-red-500/40', text: 'text-red-300', label: 'Backfire' },
+} as const;
+
+/** Format gambit effects for display */
+function formatGambitEffects(effects: GambitEffect[]): string {
+  return effects.map((e) => {
+    const targetLabel = e.target === 'player' ? 'You' : 'Enemy';
+    const sign = e.delta > 0 ? '+' : '';
+    const resource = e.resource.charAt(0).toUpperCase() + e.resource.slice(1);
+    return `${targetLabel} ${sign}${e.delta} ${resource}`;
+  }).join(', ');
+}
+
 function ResourceBar({ label, value, maxValue, colorClass }: {
   label: string;
   value: number;
@@ -70,10 +88,12 @@ function ResourceBar({ label, value, maxValue, colorClass }: {
 export function ConflictPane({ state, leverage, onPlayerMove, onLeverageSpend, onContinue }: ConflictPaneProps) {
   const logRef = useRef<HTMLDivElement>(null);
   const [spendingType, setSpendingType] = useState<LeverageType | null>(null);
+  const [gambitBannerDismissed, setGambitBannerDismissed] = useState(false);
   const availableMoves = getPlayerMoves(state);
   const result = state.ended ? evaluateOutcome(state) : null;
   const hasAnyLeverage = leverage.control + leverage.stability + leverage.position > 0;
   const hasArmedLeverage = !!state.armedLeverage;
+  const gambit = state.gambitResult;
 
   // Auto-scroll log
   useEffect(() => {
@@ -140,6 +160,28 @@ export function ConflictPane({ state, leverage, onPlayerMove, onLeverageSpend, o
           <span className="text-sm text-white/50">vs {state.opponent.label}</span>
         </div>
       </div>
+
+      {/* Gambit Outcome Banner */}
+      {gambit && !gambitBannerDismissed && (
+        <div className={`px-4 py-3 border-b ${GAMBIT_OUTCOME_STYLES[gambit.outcomeTier].border} ${GAMBIT_OUTCOME_STYLES[gambit.outcomeTier].bg}`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className={`text-sm font-bold ${GAMBIT_OUTCOME_STYLES[gambit.outcomeTier].text}`}>
+                Gambit: {GAMBIT_OUTCOME_STYLES[gambit.outcomeTier].label}
+              </span>
+              <span className="text-xs text-white/70">
+                {formatGambitEffects(gambit.effects)}
+              </span>
+            </div>
+            <button
+              onClick={() => setGambitBannerDismissed(true)}
+              className="text-white/40 hover:text-white/60 text-xs px-2 py-0.5 rounded hover:bg-white/10 transition-colors"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Resource Display */}
       <div className="p-4 border-b border-white/10">
@@ -238,9 +280,20 @@ export function ConflictPane({ state, leverage, onPlayerMove, onLeverageSpend, o
       )}
 
       {/* Conflict Log */}
-      {state.log.length > 0 && (
+      {(state.log.length > 0 || gambit) && (
         <div ref={logRef} className="max-h-48 overflow-y-auto border-b border-white/10">
           <div className="p-3 space-y-2">
+            {/* Gambit entry (Turn 0) */}
+            {gambit && (
+              <div className="text-xs space-y-0.5">
+                <div className={`font-medium ${GAMBIT_OUTCOME_STYLES[gambit.outcomeTier].text}`}>
+                  Gambit: {GAMBIT_OUTCOME_STYLES[gambit.outcomeTier].label}
+                </div>
+                <div className="text-white/60">
+                  {formatGambitEffects(gambit.effects)}
+                </div>
+              </div>
+            )}
             {state.log.map((entry) => (
               <div key={entry.turn} className="text-xs space-y-0.5">
                 <div className="text-white/50 font-medium">Turn {entry.turn}</div>
