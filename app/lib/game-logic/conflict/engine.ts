@@ -7,7 +7,10 @@ import type {
   MoveId,
   ConflictOutcome,
   BonusBreakdown,
+  OpponentLeverageState,
+  OpponentLeverageSpendLog,
 } from './types';
+import type { OpponentArchetype } from './opponent-identity';
 import { CONFLICT_MOVES, isMoveAvailable, getAvailableMoves } from './moves';
 import { resolveProfile, selectOpponentMove } from './ai';
 import {
@@ -87,6 +90,170 @@ function describeEffect(effect: Partial<ConflictResources>, prefix: string): str
   return parts.join(', ');
 }
 
+// --- Opponent Leverage System ---
+
+/**
+ * Compute total opponent leverage points from heat and difficulty.
+ * heatBonus = clamp(floor(heat/2), 0, 3)
+ * baseFromDifficulty = clamp(floor(difficulty/3), 0, 3)
+ * Return clamp(base + heatBonus, 0, 5)
+ */
+function computeEnemyLeverageTotal(heat: number, difficulty: number): number {
+  const heatBonus = Math.max(0, Math.min(3, Math.floor(heat / 2)));
+  const baseFromDifficulty = Math.max(0, Math.min(3, Math.floor(difficulty / 3)));
+  return Math.max(0, Math.min(5, baseFromDifficulty + heatBonus));
+}
+
+/**
+ * Distribute leverage points across resources based on archetype priority.
+ * Max 2 per resource, round-robin distribution.
+ */
+function distributeEnemyLeverage(total: number, archetype: OpponentArchetype): OpponentLeverageState {
+  const priorities: Record<OpponentArchetype, Array<keyof OpponentLeverageState>> = {
+    brute: ['position', 'control', 'stability'],
+    controller: ['control', 'stability', 'position'],
+    infiltrator: ['position', 'control', 'stability'],
+    schemer: ['control', 'position', 'stability'],
+    enforcer: ['stability', 'control', 'position'],
+    wildcard: ['position', 'stability', 'control'],
+  };
+
+  const priority = priorities[archetype] || priorities.brute;
+  const state: OpponentLeverageState = { control: 0, stability: 0, position: 0 };
+  let remaining = total;
+
+  // Round-robin with max 2 per resource
+  while (remaining > 0) {
+    let distributed = false;
+    for (const resource of priority) {
+      if (remaining > 0 && state[resource] < 2) {
+        state[resource]++;
+        remaining--;
+        distributed = true;
+      }
+    }
+    if (!distributed) break; // All resources at max
+  }
+
+  return state;
+}
+
+/**
+ * Get heat-based starting bonus for opponent resources.
+ * Bonus = clamp(floor(heat/3), 0, 2)
+ * Applied to a resource based on archetype.
+ */
+function getHeatStartingBonus(heat: number, archetype: OpponentArchetype): Partial<ConflictResources> {
+  const bonus = Math.max(0, Math.min(2, Math.floor(heat / 3)));
+  if (bonus === 0) return {};
+
+  // Resource to boost by archetype
+  const resourceByArchetype: Record<OpponentArchetype, keyof ConflictResources> = {
+    brute: 'position',
+    controller: 'stability',
+    infiltrator: 'position',
+    schemer: 'control',
+    enforcer: 'stability',
+    wildcard: 'position',
+  };
+
+  const resource = resourceByArchetype[archetype] || 'position';
+  return { [resource]: bonus };
+}
+
+/**
+ * Decide if opponent should spend leverage this turn based on archetype heuristics.
+ * Returns null if no spend, or the resource and effect to use.
+ */
+function maybeSpendOpponentLeverage(
+  opponentLeverage: OpponentLeverageState,
+  archetype: OpponentArchetype,
+  turn: number,
+  playerResources: ConflictResources,
+  opponentResources: ConflictResources
+): { resource: keyof OpponentLeverageState; effect: 'boost_self' | 'drain_player' } | null {
+  const totalLeverage = opponentLeverage.control + opponentLeverage.stability + opponentLeverage.position;
+  if (totalLeverage <= 0) return null;
+
+  // Helper to get first available resource from priority list
+  const getAvailableResource = (priority: Array<keyof OpponentLeverageState>): keyof OpponentLeverageState | null => {
+    for (const r of priority) {
+      if (opponentLeverage[r] > 0) return r;
+    }
+    return null;
+  };
+
+  const playerTotal = playerResources.control + playerResources.stability + playerResources.position;
+  const opponentTotal = opponentResources.control + opponentResources.stability + opponentResources.position;
+  const playerAhead = playerTotal > opponentTotal;
+  const playerNearWin = playerTotal >= 12 || (playerResources.control >= 4 && playerResources.stability >= 4);
+
+  switch (archetype) {
+    case 'brute': {
+      // Turn 1-2, prefer position > control, boost_self
+      if (turn <= 2) {
+        const resource = getAvailableResource(['position', 'control', 'stability']);
+        if (resource) return { resource, effect: 'boost_self' };
+      }
+      break;
+    }
+    case 'controller': {
+      // Player ahead OR opponent low stability, prefer control (drain) > stability
+      if (playerAhead || opponentResources.stability <= 2) {
+        const resource = getAvailableResource(['control', 'stability', 'position']);
+        if (resource) return { resource, effect: resource === 'control' ? 'drain_player' : 'boost_self' };
+      }
+      break;
+    }
+    case 'infiltrator': {
+      // Position disadvantage, prefer position, boost_self
+      if (opponentResources.position < playerResources.position) {
+        const resource = getAvailableResource(['position', 'control', 'stability']);
+        if (resource) return { resource, effect: 'boost_self' };
+      }
+      break;
+    }
+    case 'schemer': {
+      // Player near win, counter strongest with drain
+      if (playerNearWin) {
+        // Find player's strongest resource
+        const strongest: keyof OpponentLeverageState =
+          playerResources.control >= playerResources.stability && playerResources.control >= playerResources.position ? 'control' :
+          playerResources.stability >= playerResources.position ? 'stability' : 'position';
+        if (opponentLeverage[strongest] > 0) {
+          return { resource: strongest, effect: 'drain_player' };
+        }
+        const resource = getAvailableResource(['control', 'position', 'stability']);
+        if (resource) return { resource, effect: 'drain_player' };
+      }
+      break;
+    }
+    case 'enforcer': {
+      // Low stability OR player near win, prefer stability > control, boost_self
+      if (opponentResources.stability <= 1 || playerNearWin) {
+        const resource = getAvailableResource(['stability', 'control', 'position']);
+        if (resource) return { resource, effect: 'boost_self' };
+      }
+      break;
+    }
+    case 'wildcard': {
+      // 50% chance (deterministic based on turn), random resource, random effect
+      if (turn % 2 === 1) {
+        const resources: Array<keyof OpponentLeverageState> = ['control', 'stability', 'position'];
+        const availableResources = resources.filter(r => opponentLeverage[r] > 0);
+        if (availableResources.length > 0) {
+          const resource = availableResources[turn % availableResources.length];
+          const effect = turn % 3 === 0 ? 'drain_player' : 'boost_self';
+          return { resource, effect };
+        }
+      }
+      break;
+    }
+  }
+
+  return null;
+}
+
 /** Create a fresh conflict state from initialization parameters */
 export function initConflict(init: ConflictInit): ConflictState {
   const profile = resolveProfile(init.npcTags, init.encounterCategory);
@@ -118,6 +285,24 @@ export function initConflict(init: ConflictInit): ConflictState {
     const bonus = init.opponentIdentity.mechanics.startingResourceBonus;
     opponentResources = clampResources(applyEffect(opponentResources, bonus));
     logOpponentIdentity(init.opponentIdentity);
+  }
+
+  // Apply heat starting bonus to opponent resources
+  const heat = init.heat ?? 0;
+  const archetype = init.opponentIdentity?.archetype ?? 'brute';
+  const heatStartingBonus = getHeatStartingBonus(heat, archetype);
+  if (Object.keys(heatStartingBonus).length > 0) {
+    opponentResources = clampResources(applyEffect(opponentResources, heatStartingBonus));
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[Heat→Start] Applied heat bonus (heat=${heat}):`, heatStartingBonus);
+    }
+  }
+
+  // Compute opponent leverage pool (derived from heat + difficulty)
+  const leverageTotal = computeEnemyLeverageTotal(heat, init.encounterDifficulty);
+  const opponentLeverage = distributeEnemyLeverage(leverageTotal, archetype);
+  if (process.env.NODE_ENV === 'development' && leverageTotal > 0) {
+    console.log(`[Enemy Leverage] Init: total=${leverageTotal} archetype=${archetype} pool=`, opponentLeverage);
   }
 
   // Apply gambit effects to starting resources
@@ -159,6 +344,9 @@ export function initConflict(init: ConflictInit): ConflictState {
     opponentIdentity: init.opponentIdentity,
     leverage: init.leverage,
     gambitResult: init.gambitResult,
+    heatAtStart: heat,
+    opponentLeverage,
+    opponentLeverageLog: [],
   };
 }
 
@@ -196,6 +384,17 @@ export function executeTurn(state: ConflictState, playerMoveId: MoveId): Conflic
     state.opponentProfile,
   );
   const opponentMove = CONFLICT_MOVES[opponentMoveId];
+
+  // Check if opponent spends leverage this turn
+  const archetype = state.opponentIdentity?.archetype ?? 'brute';
+  const currentOpponentLeverage = state.opponentLeverage ?? { control: 0, stability: 0, position: 0 };
+  const enemyLeverageSpend = maybeSpendOpponentLeverage(
+    currentOpponentLeverage,
+    archetype,
+    state.turn,
+    state.player.resources,
+    state.opponent.resources
+  );
 
   // --- Resolve simultaneously ---
   // Start with base effects
@@ -288,6 +487,24 @@ export function executeTurn(state: ConflictState, playerMoveId: MoveId): Conflic
     }
   }
 
+  // Apply enemy leverage spend (before clamping)
+  let newOpponentLeverage = { ...currentOpponentLeverage };
+  if (enemyLeverageSpend) {
+    // Decrement the spent resource from the pool
+    newOpponentLeverage[enemyLeverageSpend.resource] = Math.max(0, newOpponentLeverage[enemyLeverageSpend.resource] - 1);
+
+    // Apply the effect
+    if (enemyLeverageSpend.effect === 'boost_self') {
+      newOpponentRes = applyEffect(newOpponentRes, { [enemyLeverageSpend.resource]: 1 });
+    } else if (enemyLeverageSpend.effect === 'drain_player') {
+      newPlayerRes = applyEffect(newPlayerRes, { [enemyLeverageSpend.resource]: -1 });
+    }
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[Enemy Leverage] Spent: ${enemyLeverageSpend.resource} → ${enemyLeverageSpend.effect} (${archetype})`);
+    }
+  }
+
   // Clamp resources — use overcap (max 7) when leverage boost was applied
   if (leverageApplied) {
     newPlayerRes = clampResourcesOvercap(newPlayerRes);
@@ -346,9 +563,23 @@ export function executeTurn(state: ConflictState, playerMoveId: MoveId): Conflic
     leverageSpentThisTurn: armed
       ? { leverageType: armed.leverageType, effectType: armed.effect.type }
       : undefined,
+    enemyLeverageSpentThisTurn: enemyLeverageSpend
+      ? { resource: enemyLeverageSpend.resource, effect: enemyLeverageSpend.effect }
+      : undefined,
   };
 
   const ended = !!playerCollapse || !!opponentCollapse || state.turn >= state.maxTurns;
+
+  // Update opponent leverage log if spent
+  const newOpponentLeverageLog = [...(state.opponentLeverageLog ?? [])];
+  if (enemyLeverageSpend) {
+    newOpponentLeverageLog.push({
+      turn: state.turn,
+      resource: enemyLeverageSpend.resource,
+      effect: enemyLeverageSpend.effect,
+      archetype,
+    });
+  }
 
   return {
     ...state,
@@ -359,6 +590,8 @@ export function executeTurn(state: ConflictState, playerMoveId: MoveId): Conflic
     collapseEvents: newCollapseEvents,
     ended,
     armedLeverage: undefined, // Clear armed effect after turn
+    opponentLeverage: newOpponentLeverage,
+    opponentLeverageLog: newOpponentLeverageLog,
   };
 }
 

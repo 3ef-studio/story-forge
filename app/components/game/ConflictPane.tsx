@@ -145,6 +145,16 @@ export function ConflictPane({ state, leverage, onPlayerMove, onLeverageSpend, o
           <span className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-white/70">
             Turn {Math.min(state.turn, state.maxTurns)}/{state.maxTurns}
           </span>
+          {/* Heat badge */}
+          {state.heatAtStart !== undefined && state.heatAtStart > 0 && (
+            <span className={`text-xs px-1.5 py-0.5 rounded ${
+              state.heatAtStart >= 3
+                ? 'bg-red-500/20 text-red-300 border border-red-500/30'
+                : 'bg-orange-500/20 text-orange-300 border border-orange-500/30'
+            }`}>
+              Heat {state.heatAtStart}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {state.opponentIdentity && (
@@ -156,6 +166,26 @@ export function ConflictPane({ state, leverage, onPlayerMove, onLeverageSpend, o
                 Threat {state.opponentIdentity.threatTier}
               </span>
             </>
+          )}
+          {/* Enemy Leverage badges */}
+          {state.opponentLeverage && (state.opponentLeverage.control > 0 || state.opponentLeverage.stability > 0 || state.opponentLeverage.position > 0) && (
+            <div className="flex gap-1">
+              {state.opponentLeverage.control > 0 && (
+                <span className="text-xs px-1 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                  C{state.opponentLeverage.control}
+                </span>
+              )}
+              {state.opponentLeverage.stability > 0 && (
+                <span className="text-xs px-1 py-0.5 rounded bg-green-500/20 text-green-300 border border-green-500/30">
+                  S{state.opponentLeverage.stability}
+                </span>
+              )}
+              {state.opponentLeverage.position > 0 && (
+                <span className="text-xs px-1 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  P{state.opponentLeverage.position}
+                </span>
+              )}
+            </div>
           )}
           <span className="text-sm text-white/50">vs {state.opponent.label}</span>
         </div>
@@ -313,6 +343,13 @@ export function ConflictPane({ state, leverage, onPlayerMove, onLeverageSpend, o
                     )}
                   </div>
                 </div>
+                {/* Enemy leverage spend event */}
+                {entry.enemyLeverageSpentThisTurn && (
+                  <div className="text-purple-300 italic">
+                    Enemy spent +1 {entry.enemyLeverageSpentThisTurn.resource}{' '}
+                    ({entry.enemyLeverageSpentThisTurn.effect === 'boost_self' ? 'boost' : 'drain'})
+                  </div>
+                )}
               </div>
             ))}
           </div>

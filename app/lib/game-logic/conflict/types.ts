@@ -1,6 +1,21 @@
-import type { OpponentIdentity } from './opponent-identity';
+import type { OpponentIdentity, OpponentArchetype } from './opponent-identity';
 import type { LeverageState, LeverageSpend } from '@/app/lib/game-logic/leverage';
 import type { GambitResult } from '@/app/lib/game-logic/combat/types';
+
+/** Opponent leverage pool (derived from heat + difficulty) */
+export interface OpponentLeverageState {
+  control: number;
+  stability: number;
+  position: number;
+}
+
+/** Log entry for opponent leverage spend events */
+export interface OpponentLeverageSpendLog {
+  turn: number;
+  resource: keyof OpponentLeverageState;
+  effect: 'boost_self' | 'drain_player';
+  archetype: OpponentArchetype;
+}
 
 /** Resource triple used by both player and opponent */
 export interface ConflictResources {
@@ -90,6 +105,11 @@ export interface ConflictLogEntry {
     leverageType: 'control' | 'stability' | 'position';
     effectType: string;
   };
+  /** Enemy leverage spent this turn (opponent leverage system) */
+  enemyLeverageSpentThisTurn?: {
+    resource: keyof OpponentLeverageState;
+    effect: 'boost_self' | 'drain_player';
+  };
 }
 
 export interface AIContext {
@@ -113,6 +133,8 @@ export interface ConflictInit {
   opponentIdentity?: OpponentIdentity;
   leverage?: LeverageState;
   gambitResult?: GambitResult;
+  /** Player's current heat level (affects opponent starting resources and leverage) */
+  heat?: number;
 }
 
 export type ConflictOutcome = 'player_victory' | 'opponent_victory' | 'stalemate';
@@ -153,4 +175,10 @@ export interface ConflictState {
   armedLeverage?: LeverageSpend;
   /** Gambit result from choice selection (applied to starting resources) */
   gambitResult?: GambitResult;
+  /** Heat level at the start of the conflict */
+  heatAtStart?: number;
+  /** Opponent's leverage pool (spent during conflict turns) */
+  opponentLeverage?: OpponentLeverageState;
+  /** Log of opponent leverage spend events */
+  opponentLeverageLog?: OpponentLeverageSpendLog[];
 }

@@ -25,6 +25,7 @@ interface CharacterSheetProps {
     nextEnergyRegenAt?: string;
     energyRegenTickAmount?: number;
     leverage?: { control: number; stability: number; position: number };
+    heat?: number;
     attributes: Record<string, number>;
     powers: Array<{ powerId: string; level: number; xp: number }>;
     factions: Record<string, number>;
@@ -219,6 +220,20 @@ export function CharacterSheet({ character }: CharacterSheetProps) {
                   </span>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Heat */}
+          {character.heat !== undefined && character.heat > 0 && (
+            <div className="flex items-center justify-between text-xs pt-2 px-1 border-t border-white/10 mt-2">
+              <span className="text-white/50 font-medium">Heat</span>
+              <span className={`px-2 py-0.5 rounded font-medium ${
+                character.heat >= 3
+                  ? 'bg-red-500/20 text-red-300 border border-red-500/30'
+                  : 'bg-orange-500/20 text-orange-300 border border-orange-500/30'
+              }`}>
+                {character.heat}
+              </span>
             </div>
           )}
         </div>

@@ -91,6 +91,7 @@ interface CharacterData {
     expiresIn: number;
   } | null;
   leverage?: LeverageState;
+  heat?: number;
   actionCounter?: number;
   followUps?: FollowUpAction[];
 }
@@ -742,6 +743,7 @@ export default function GamePage() {
       opponentIdentity,
       leverage: conflictLeverage,
       gambitResult,
+      heat: character?.heat ?? 0,
       playerBuild: character ? {
         level: character.level,
         attributes: character.attributes,

@@ -326,3 +326,72 @@ export function logActionCounterIncrement(counter: number): void {
   if (process.env.NODE_ENV !== 'development') return;
   console.log(`[Leverage] Action counter incremented to ${counter}`);
 }
+
+// --- Heat System ---
+
+/**
+ * Check if an action ID is a follow-up action (starts with "fup_")
+ */
+export function isFollowUpActionId(actionId: string | undefined): boolean {
+  return !!actionId && actionId.startsWith('fup_');
+}
+
+export interface HeatUpdateResult {
+  previousHeat: number;
+  newHeat: number;
+  delta: number;
+  reason: 'followUp' | 'rest' | 'decay' | 'none';
+}
+
+/**
+ * Compute the heat update for an action resolution.
+ *
+ * Heat rules:
+ * - Follow-up action (id starts with "fup_"): +1 heat
+ * - Rest action ("rest_recover"): -1 heat
+ * - Every 3 actions (actionCounter % 3 === 0): -1 heat (if not already decayed from rest)
+ * - Clamp to min 0
+ */
+export function computeHeatUpdate(input: {
+  currentHeat: number;
+  actionId: string | undefined;
+  newActionCounter: number;
+}): HeatUpdateResult {
+  const { currentHeat, actionId, newActionCounter } = input;
+  let newHeat = currentHeat;
+  let reason: HeatUpdateResult['reason'] = 'none';
+
+  // Follow-up action: +1 heat
+  if (isFollowUpActionId(actionId)) {
+    newHeat = currentHeat + 1;
+    reason = 'followUp';
+  }
+  // Rest action: -1 heat
+  else if (actionId === 'rest_recover') {
+    newHeat = Math.max(0, currentHeat - 1);
+    reason = currentHeat > 0 ? 'rest' : 'none';
+  }
+  // Decay every 3 actions (only if not already modified by rest)
+  else if (newActionCounter % 3 === 0 && currentHeat > 0) {
+    newHeat = currentHeat - 1;
+    reason = 'decay';
+  }
+
+  return {
+    previousHeat: currentHeat,
+    newHeat: Math.max(0, newHeat),
+    delta: newHeat - currentHeat,
+    reason,
+  };
+}
+
+export function logHeatUpdate(
+  characterId: string,
+  result: HeatUpdateResult
+): void {
+  if (process.env.NODE_ENV !== 'development') return;
+  if (result.reason === 'none') return;
+  console.log(
+    `[Heat] char=${characterId} ${result.previousHeat}→${result.newHeat} reason=${result.reason}`
+  );
+}

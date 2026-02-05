@@ -37,7 +37,7 @@ import {
 import { getNPCById } from '@/app/data/npcs';
 import { getActionById, normalizeActionId } from '@/app/data/actions';
 import { computeEnergyRegen } from '@/app/lib/game-logic/energy-regen';
-import { computeLeverageUpdate, type LeverageState } from '@/app/lib/game-logic/leverage';
+import { computeLeverageUpdate, computeHeatUpdate, logHeatUpdate, isFollowUpActionId, type LeverageState } from '@/app/lib/game-logic/leverage';
 import {
   generateFollowUps,
   decrementFollowUpTTLs,
@@ -760,6 +760,15 @@ export async function POST(request: Request) {
       );
     }
 
+    // --- Heat: server-authoritative computation ---
+    // Heat increases on follow-up actions, decreases on rest and every 3 actions
+    const heatUpdate = computeHeatUpdate({
+      currentHeat: character.heat ?? 0,
+      actionId: actionId,
+      newActionCounter: leverageUpdate.newActionCounter,
+    });
+    logHeatUpdate(character.id, heatUpdate);
+
     // Update character in transaction
     await prisma.$transaction(async (tx) => {
       await tx.character.update({
@@ -774,6 +783,7 @@ export async function POST(request: Request) {
           ...(leveledUp ? { lastEnergyRegenAt: new Date() } : {}),
           pendingLevelUpAttributePick: leveledUp ? true : undefined,
           actionCounter: leverageUpdate.newActionCounter,
+          heat: heatUpdate.newHeat,
           leverageControl: leverageUpdate.finalLeverage.control,
           leverageStability: leverageUpdate.finalLeverage.stability,
           leveragePosition: leverageUpdate.finalLeverage.position,
@@ -1172,6 +1182,7 @@ export async function POST(request: Request) {
         xpAwarded: goalXp,
       },
       leverage: leverageUpdate.finalLeverage,
+      heat: heatUpdate.newHeat,
       powerProgression: powerProgression ? {
         powerId: powerProgression.powerId,
         powerName: powerProgression.powerName,

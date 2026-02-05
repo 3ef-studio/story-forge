@@ -176,6 +176,7 @@ export async function GET() {
           stability: character.leverageStability,
           position: character.leveragePosition,
         },
+        heat: character.heat ?? 0,
         actionCounter: character.actionCounter,
         followUps: parsePendingFollowUps(character.pendingFollowUps),
       },
