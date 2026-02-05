@@ -25,7 +25,7 @@ import type { DistrictId } from '@/app/data/districts';
 import type { EncounterTemplate } from '@/app/data/encounter-templates';
 import { getLocationBackground } from '@/app/lib/game-logic/location-backgrounds';
 import { LogOut, User, HelpCircle, Menu, X, Sparkles, Trophy, ArrowUp, Users } from 'lucide-react';
-import { previewEncounterResolution, inferApproachFromText, resolveGambit, inferGambitIntent } from '@/app/lib/game-logic/combat/resolve-encounter';
+import { previewEncounterResolution, inferApproachFromText, resolveGambitFromPreview, assignDistinctGambits } from '@/app/lib/game-logic/combat/resolve-encounter';
 import type { ResolutionPreview, PrepSelection, GambitResult } from '@/app/lib/game-logic/combat/types';
 import { ConflictPane } from '@/app/components/game/ConflictPane';
 import { initConflict, executeTurn, evaluateOutcome } from '@/app/lib/game-logic/conflict/engine';
@@ -421,6 +421,17 @@ export default function GamePage() {
           };
         });
 
+        // Assign mechanically distinct gambits across available choices
+        const availableChoices = choices.filter(c => c.available && c.preview);
+        if (availableChoices.length > 1) {
+          const distinctGambits = assignDistinctGambits(
+            availableChoices.map(c => ({ text: c.text, riskTier: c.preview!.riskTier }))
+          );
+          availableChoices.forEach((c, i) => {
+            c.preview!.gambit = distinctGambits[i];
+          });
+        }
+
         setEncounterChoices(choices);
         setGameState('encounter');
       } else {
@@ -554,7 +565,7 @@ export default function GamePage() {
             }
           }
 
-          // Calculate preview for available choices
+          // Calculate preview for available choices (gambit assigned below via dedup)
           let preview: ResolutionPreview | undefined;
           if (available) {
             const approach = inferApproachFromText(choice.text);
@@ -566,7 +577,7 @@ export default function GamePage() {
               repByFaction: character.factions,
               encounterTags: encounter.narrativeTags,
               involvedFactions: encounter.requiredFactions,
-              choiceText: choice.text, // For gambit intent inference
+              choiceText: choice.text,
             });
           }
 
@@ -579,6 +590,17 @@ export default function GamePage() {
             preview,
           };
         });
+
+        // Assign mechanically distinct gambits across available choices
+        const availableChoices = choices.filter(c => c.available && c.preview);
+        if (availableChoices.length > 1) {
+          const distinctGambits = assignDistinctGambits(
+            availableChoices.map(c => ({ text: c.text, riskTier: c.preview!.riskTier }))
+          );
+          availableChoices.forEach((c, i) => {
+            c.preview!.gambit = distinctGambits[i];
+          });
+        }
 
         setEncounterChoices(choices);
         setGameState('encounter');
@@ -700,15 +722,13 @@ export default function GamePage() {
 
     setLeverage(conflictLeverage);
 
-    // Roll gambit outcome based on choice
+    // Roll gambit outcome using the preview (preserves distinct shape assignment)
     const choice = encounterChoices.find(c => c.id === choiceId);
     let gambitResult: GambitResult | undefined;
     if (choice?.preview?.gambit) {
-      const intent = inferGambitIntent(choice.text);
-      const riskTier = choice.preview.riskTier;
-      gambitResult = resolveGambit(intent, riskTier);
+      gambitResult = resolveGambitFromPreview(choice.preview.gambit);
       if (process.env.NODE_ENV === 'development') {
-        console.log(`[Gambit] Rolled ${gambitResult.outcomeTier} (${gambitResult.roll}) for ${intent} choice`);
+        console.log(`[Gambit] Rolled ${gambitResult.outcomeTier} (${gambitResult.roll}) for ${gambitResult.intent} choice`);
       }
     }
 

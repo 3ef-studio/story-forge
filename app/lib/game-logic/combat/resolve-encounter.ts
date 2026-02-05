@@ -101,6 +101,172 @@ const INTENT_COUNTER_RESOURCE: Record<GambitIntent, GambitIntent> = {
   position: 'control',    // maneuvering → opponent seizes control
 };
 
+// =============================================================================
+// GAMBIT SHAPE LIBRARY: Mechanically distinct gambit templates
+// =============================================================================
+
+type GambitShape = {
+  id: string;
+  intent: GambitIntent;
+  clean: GambitEffect[];
+  complication: GambitEffect[];
+  backfire: GambitEffect[];
+};
+
+/**
+ * Library of mechanically distinct gambit shapes.
+ * Ordered so standard intent-counter shapes come first (matching existing behavior),
+ * followed by opponent-facing / alternative shapes for variety.
+ */
+const GAMBIT_SHAPES: GambitShape[] = [
+  // Standard intent-counter shapes (match existing buildGambitPreview behavior)
+  {
+    id: 'push',
+    intent: 'control',
+    clean: [{ target: 'player', resource: 'control', delta: 1 }],
+    complication: [
+      { target: 'player', resource: 'control', delta: 1 },
+      { target: 'opponent', resource: 'stability', delta: 1 },
+    ],
+    backfire: [{ target: 'opponent', resource: 'stability', delta: 1 }],
+  },
+  {
+    id: 'fortify',
+    intent: 'stability',
+    clean: [{ target: 'player', resource: 'stability', delta: 1 }],
+    complication: [
+      { target: 'player', resource: 'stability', delta: 1 },
+      { target: 'opponent', resource: 'position', delta: 1 },
+    ],
+    backfire: [{ target: 'opponent', resource: 'position', delta: 1 }],
+  },
+  {
+    id: 'reposition',
+    intent: 'position',
+    clean: [{ target: 'player', resource: 'position', delta: 1 }],
+    complication: [
+      { target: 'player', resource: 'position', delta: 1 },
+      { target: 'opponent', resource: 'control', delta: 1 },
+    ],
+    backfire: [{ target: 'opponent', resource: 'control', delta: 1 }],
+  },
+  // Opponent-facing shapes (for the 4th+ distinct choice)
+  {
+    id: 'pressure',
+    intent: 'control',
+    clean: [{ target: 'opponent', resource: 'stability', delta: -1 }],
+    complication: [
+      { target: 'opponent', resource: 'stability', delta: -1 },
+      { target: 'player', resource: 'stability', delta: -1 },
+    ],
+    backfire: [{ target: 'player', resource: 'stability', delta: -1 }],
+  },
+  {
+    id: 'undermine',
+    intent: 'position',
+    clean: [{ target: 'opponent', resource: 'control', delta: -1 }],
+    complication: [
+      { target: 'opponent', resource: 'control', delta: -1 },
+      { target: 'player', resource: 'position', delta: -1 },
+    ],
+    backfire: [{ target: 'player', resource: 'position', delta: -1 }],
+  },
+];
+
+/**
+ * Compute a canonical signature for a gambit preview based on resource deltas.
+ * Two gambits with the same signature are mechanically identical.
+ */
+export function computeGambitSignature(preview: GambitPreview): string {
+  const sortEffects = (effects: GambitEffect[]) =>
+    [...effects]
+      .sort((a, b) => {
+        if (a.target !== b.target) return a.target.localeCompare(b.target);
+        if (a.resource !== b.resource) return a.resource.localeCompare(b.resource);
+        return a.delta - b.delta;
+      })
+      .map(e => `${e.target}:${e.resource}:${e.delta}`)
+      .join(',');
+
+  return `${sortEffects(preview.outcomes.clean)}||${sortEffects(preview.outcomes.backfire)}`;
+}
+
+/**
+ * Build a GambitPreview from a shape definition and risk tier.
+ */
+function buildGambitFromShape(shape: GambitShape, riskTier: RiskTier): GambitPreview {
+  return {
+    intent: shape.intent,
+    probabilities: GAMBIT_PROBABILITIES[riskTier],
+    outcomes: {
+      clean: shape.clean.map(e => ({ ...e })),
+      complication: shape.complication.map(e => ({ ...e })),
+      backfire: shape.backfire.map(e => ({ ...e })),
+    },
+  };
+}
+
+/**
+ * Assign mechanically distinct gambit previews to a set of choices.
+ * Each choice gets a unique (clean, backfire) signature.
+ *
+ * Algorithm:
+ * 1. For each choice, first try the naturally inferred intent.
+ * 2. If that signature is already used, iterate through the shape library
+ *    to find the first unused shape.
+ * 3. Returns an array of GambitPreviews parallel to the input choices.
+ */
+export function assignDistinctGambits(
+  choices: { text: string; riskTier: RiskTier }[]
+): GambitPreview[] {
+  const usedSignatures = new Set<string>();
+  const results: GambitPreview[] = [];
+
+  for (const { text, riskTier } of choices) {
+    // First try: use the naturally inferred intent (preserves existing behavior when possible)
+    const intent = inferGambitIntent(text);
+    const naturalPreview = buildGambitPreview(intent, riskTier);
+    const naturalSig = computeGambitSignature(naturalPreview);
+
+    if (!usedSignatures.has(naturalSig)) {
+      usedSignatures.add(naturalSig);
+      results.push(naturalPreview);
+      continue;
+    }
+
+    // Fallback: find an unused shape from the library
+    let found = false;
+    for (const shape of GAMBIT_SHAPES) {
+      const shapePreview = buildGambitFromShape(shape, riskTier);
+      const shapeSig = computeGambitSignature(shapePreview);
+      if (!usedSignatures.has(shapeSig)) {
+        usedSignatures.add(shapeSig);
+        results.push(shapePreview);
+        found = true;
+        break;
+      }
+    }
+
+    if (!found) {
+      // All shapes exhausted — use natural preview as last resort
+      results.push(naturalPreview);
+    }
+  }
+
+  if (process.env.NODE_ENV === 'development') {
+    console.log(
+      '[Gambit Dedup] Assigned signatures:',
+      results.map((r, i) => ({
+        choice: i,
+        intent: r.intent,
+        sig: computeGambitSignature(r),
+      }))
+    );
+  }
+
+  return results;
+}
+
 // Probabilities by risk tier
 const GAMBIT_PROBABILITIES: Record<RiskTier, GambitProbabilities> = {
   great: { clean: 60, complication: 30, backfire: 10 },
@@ -198,6 +364,34 @@ export function resolveGambit(
   } else {
     outcomeTier = 'backfire';
     effects = [{ target: 'opponent', resource: counterResource, delta: 1 }];
+  }
+
+  return { intent, roll, outcomeTier, effects };
+}
+
+/**
+ * Resolve a gambit using the preview's own outcomes (for shape-aware resolution).
+ * This ensures the resolved effects match what was shown in the preview UI.
+ */
+export function resolveGambitFromPreview(
+  preview: GambitPreview,
+  rng: () => number = Math.random
+): GambitResult {
+  const { probabilities, outcomes, intent } = preview;
+  const roll = Math.floor(rng() * 100) + 1;
+
+  let outcomeTier: GambitOutcomeTier;
+  let effects: GambitEffect[];
+
+  if (roll <= probabilities.clean) {
+    outcomeTier = 'clean';
+    effects = outcomes.clean.map(e => ({ ...e }));
+  } else if (roll <= probabilities.clean + probabilities.complication) {
+    outcomeTier = 'complication';
+    effects = outcomes.complication.map(e => ({ ...e }));
+  } else {
+    outcomeTier = 'backfire';
+    effects = outcomes.backfire.map(e => ({ ...e }));
   }
 
   return { intent, roll, outcomeTier, effects };

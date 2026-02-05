@@ -1,6 +1,6 @@
 'use client';
 
-import type { RiskTier, GambitPreview, GambitIntent } from '@/app/lib/game-logic/combat/types';
+import type { RiskTier, GambitPreview, GambitEffect } from '@/app/lib/game-logic/combat/types';
 
 interface ChoicePreviewChipsProps {
   riskTier: RiskTier;
@@ -28,9 +28,17 @@ const OUTCOME_STYLES = {
   backfire: { bg: 'bg-red-500/20', text: 'text-red-300', label: 'Backfire' },
 } as const;
 
-/** Format resource name for display */
-function formatResource(resource: GambitIntent): string {
-  return resource.charAt(0).toUpperCase() + resource.slice(1);
+/** Format a single gambit effect for display */
+function formatEffect(effect: GambitEffect): string {
+  const prefix = effect.target === 'opponent' ? 'Opp ' : '';
+  const sign = effect.delta > 0 ? '+' : '';
+  const resource = effect.resource.charAt(0).toUpperCase() + effect.resource.slice(1);
+  return `${prefix}${sign}${effect.delta} ${resource}`;
+}
+
+/** Format a list of gambit effects for display */
+function formatEffects(effects: GambitEffect[]): string {
+  return effects.map(formatEffect).join(', ');
 }
 
 export function ChoicePreviewChips({
@@ -71,11 +79,11 @@ export function ChoicePreviewChips({
         <div className="flex flex-wrap items-center gap-1 text-xs">
           {/* Clean outcome */}
           <span className={`inline-flex items-center px-1.5 py-0.5 rounded ${OUTCOME_STYLES.clean.bg} ${OUTCOME_STYLES.clean.text}`}>
-            {OUTCOME_STYLES.clean.label}: +1 {formatResource(gambit.intent)}
+            {OUTCOME_STYLES.clean.label}: {formatEffects(gambit.outcomes.clean)}
           </span>
           {/* Backfire outcome */}
           <span className={`inline-flex items-center px-1.5 py-0.5 rounded ${OUTCOME_STYLES.backfire.bg} ${OUTCOME_STYLES.backfire.text}`}>
-            {OUTCOME_STYLES.backfire.label}: Opp +1 {formatResource(gambit.outcomes.backfire[0]?.resource ?? gambit.intent)}
+            {OUTCOME_STYLES.backfire.label}: {formatEffects(gambit.outcomes.backfire)}
           </span>
         </div>
       )}
