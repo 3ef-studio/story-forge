@@ -38,7 +38,10 @@ import { applyDecay, type LeverageState } from '@/app/lib/game-logic/leverage';
 import {
   isFollowUpActionId,
   parsePendingFollowUps,
+  parseFollowUpHistory,
+  addHistoryEntries,
   buildEphemeralActionFromFollowUp,
+  type FollowUpAction,
 } from '@/app/lib/game-logic/follow-up-actions';
 
 export async function POST(request: Request) {
@@ -152,7 +155,11 @@ export async function POST(request: Request) {
     }
 
     // Check energy (handle rest action which restores energy)
-    const energyCost = action.energyCost;
+    let energyCost = action.energyCost;
+    if (!energyCost && energyCost !== 0) {
+      console.warn(`[execute] action "${action.id}" has no energyCost, defaulting to 6`);
+      energyCost = 6;
+    }
     if (energyCost > 0 && currentEnergy < energyCost) {
       return NextResponse.json(
         { error: 'Not enough energy' },
@@ -699,21 +706,33 @@ export async function POST(request: Request) {
     // Get updated active goals
     const activeGoals = await getActiveGoals(character.id);
 
-    // Remove used follow-up from pendingFollowUps if this was a follow-up action
+    // Remove used follow-up from pendingFollowUps and record in history
     if (isFollowUp && usedFollowUpId) {
       try {
         const pendingFollowUps = parsePendingFollowUps(character.pendingFollowUps);
+        const usedFollowUp: FollowUpAction | undefined = pendingFollowUps.find(f => f.id === usedFollowUpId);
         const remainingFollowUps = pendingFollowUps.filter(f => f.id !== usedFollowUpId);
+
+        // Update history: mark as executed so it stays on cooldown
+        let history = parseFollowUpHistory(character.followUpHistory);
+        if (usedFollowUp?.followUpKey) {
+          history = addHistoryEntries(history, [{
+            followUpKey: usedFollowUp.followUpKey,
+            actionCounter: character.actionCounter ?? 0,
+            status: 'executed',
+          }]);
+        }
 
         await prisma.character.update({
           where: { id: character.id },
           data: {
             pendingFollowUps: remainingFollowUps.length > 0 ? JSON.parse(JSON.stringify(remainingFollowUps)) : Prisma.DbNull,
+            followUpHistory: JSON.parse(JSON.stringify(history)),
           },
         });
 
         if (process.env.NODE_ENV === 'development') {
-          console.log('[Execute] Follow-up consumed:', usedFollowUpId, '| Remaining:', remainingFollowUps.length);
+          console.log('[Execute] Follow-up consumed:', usedFollowUpId, '| Key:', usedFollowUp?.followUpKey, '| Remaining:', remainingFollowUps.length);
         }
       } catch (followUpError) {
         // Fail-soft: log the error but don't break the game

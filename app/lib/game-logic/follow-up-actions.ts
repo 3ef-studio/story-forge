@@ -15,6 +15,9 @@ export type RewardBias = 'xp' | 'rep' | 'money' | 'item' | 'leverage';
 export type ConflictResult = 'victory' | 'defeat' | 'partial';
 export type GambitOutcome = 'clean' | 'complication' | 'backfire';
 
+// Categories for diversity selection
+export type FollowUpCategory = 'investigate' | 'chase' | 'cleanup' | 'pressure' | 'recover' | 'consolidate';
+
 export interface FollowUpAction {
   id: string;                       // stable deterministic id (for dedupe)
   name: string;                     // display title
@@ -23,6 +26,14 @@ export interface FollowUpAction {
   riskTier: RiskTier;
   intentHint: IntentHint;
   rewardBias?: RewardBias;
+
+  // Keys for deduplication and cooldown
+  templateKey: string;              // template ID
+  subjectKey: string;               // derived from npc/rival/faction/district
+  followUpKey: string;              // templateKey + '::' + subjectKey
+
+  // Category for diversity selection
+  category: FollowUpCategory;
 
   // Execution hints (must allow building an Action shaped object)
   executeHints: {
@@ -47,9 +58,25 @@ export interface FollowUpAction {
   uiTags?: string[];
 }
 
+// History tracking for cooldowns
+export interface FollowUpHistoryEntry {
+  followUpKey: string;
+  actionCounter: number;            // when this was generated/executed/expired
+  status: 'generated' | 'executed' | 'expired';
+}
+
+export interface FollowUpHistory {
+  entries: FollowUpHistoryEntry[];
+}
+
 export interface FollowUpContext {
+  // Character context (for jitter)
+  characterId?: string;
+  actionCounter?: number;           // current action counter for history
+
   // Encounter context
   encounterId?: string;
+  seedId?: string;
   encounterType?: string;
   encounterDifficulty?: number;
   encounterTags?: string[];
@@ -65,12 +92,21 @@ export interface FollowUpContext {
   // NPCs/Rival
   npcId?: string;
   npcName?: string;
+  rivalId?: string;
   rivalPresent?: boolean;
 
   // Post-resolve state
   leverageState?: { control: number; stability: number; position: number };
   usedPowers?: string[];
   baseActionIntent?: string;
+}
+
+// Options for generating follow-ups
+export interface GenerateFollowUpsOptions {
+  max?: number;
+  history?: FollowUpHistory;
+  cooldownActions?: number;         // default 3
+  pendingFollowUps?: FollowUpAction[]; // existing pending for dedupe
 }
 
 // =============================================================================
@@ -83,6 +119,7 @@ interface FollowUpTemplate {
   description: string;
   riskTier: RiskTier;
   intentHint: IntentHint;
+  category: FollowUpCategory;       // for diversity selection
   rewardBias?: RewardBias;
   ttl: number;
   executeHints: FollowUpAction['executeHints'];
@@ -110,6 +147,7 @@ const FOLLOW_UP_TEMPLATES: FollowUpTemplate[] = [
     description: 'Capitalize on your recent success to push further.',
     riskTier: 'risky',
     intentHint: 'control',
+    category: 'pressure',
     rewardBias: 'xp',
     ttl: 3,
     executeHints: {
@@ -131,6 +169,7 @@ const FOLLOW_UP_TEMPLATES: FollowUpTemplate[] = [
     description: 'Your opponent left themselves vulnerable. Strike now.',
     riskTier: 'good',
     intentHint: 'position',
+    category: 'chase',
     rewardBias: 'rep',
     ttl: 2,
     executeHints: {
@@ -152,6 +191,7 @@ const FOLLOW_UP_TEMPLATES: FollowUpTemplate[] = [
     description: 'Lock down the area and gather evidence before it disappears.',
     riskTier: 'good',
     intentHint: 'stability',
+    category: 'investigate',
     rewardBias: 'leverage',
     ttl: 2,
     executeHints: {
@@ -174,6 +214,7 @@ const FOLLOW_UP_TEMPLATES: FollowUpTemplate[] = [
     description: 'Fall back, tend to wounds, and plan your next move.',
     riskTier: 'good',
     intentHint: 'stability',
+    category: 'recover',
     rewardBias: 'leverage',
     ttl: 3,
     executeHints: {
@@ -194,6 +235,7 @@ const FOLLOW_UP_TEMPLATES: FollowUpTemplate[] = [
     description: 'Limit the damage from your recent setback before it spreads.',
     riskTier: 'risky',
     intentHint: 'stability',
+    category: 'cleanup',
     rewardBias: 'rep',
     ttl: 2,
     executeHints: {
@@ -214,6 +256,7 @@ const FOLLOW_UP_TEMPLATES: FollowUpTemplate[] = [
     description: 'You lost ground. Time to rebuild your leverage.',
     riskTier: 'good',
     intentHint: 'position',
+    category: 'recover',
     rewardBias: 'leverage',
     ttl: 4,
     executeHints: {
@@ -236,6 +279,7 @@ const FOLLOW_UP_TEMPLATES: FollowUpTemplate[] = [
     description: 'Address the loose end your recent action created.',
     riskTier: 'risky',
     intentHint: 'control',
+    category: 'cleanup',
     rewardBias: 'xp',
     ttl: 3,
     executeHints: {
@@ -255,6 +299,7 @@ const FOLLOW_UP_TEMPLATES: FollowUpTemplate[] = [
     description: 'A new thread emerged. Follow it before it goes cold.',
     riskTier: 'risky',
     intentHint: 'position',
+    category: 'chase',
     rewardBias: 'xp',
     ttl: 2,
     executeHints: {
@@ -276,6 +321,7 @@ const FOLLOW_UP_TEMPLATES: FollowUpTemplate[] = [
     description: 'Your recent contact knows more than they revealed.',
     riskTier: 'risky',
     intentHint: 'control',
+    category: 'pressure',
     rewardBias: 'leverage',
     ttl: 3,
     executeHints: {
@@ -295,6 +341,7 @@ const FOLLOW_UP_TEMPLATES: FollowUpTemplate[] = [
     description: 'Your rival was involved. Learn what they\'re planning.',
     riskTier: 'dangerous',
     intentHint: 'position',
+    category: 'investigate',
     rewardBias: 'xp',
     ttl: 4,
     executeHints: {
@@ -317,6 +364,7 @@ const FOLLOW_UP_TEMPLATES: FollowUpTemplate[] = [
     description: 'Follow the money and resources to their source.',
     riskTier: 'risky',
     intentHint: 'position',
+    category: 'investigate',
     rewardBias: 'money',
     ttl: 3,
     executeHints: {
@@ -339,6 +387,7 @@ const FOLLOW_UP_TEMPLATES: FollowUpTemplate[] = [
     description: 'Authorities are closing in. Time to lay low.',
     riskTier: 'good',
     intentHint: 'stability',
+    category: 'recover',
     rewardBias: 'leverage',
     ttl: 2,
     executeHints: {
@@ -362,6 +411,7 @@ const FOLLOW_UP_TEMPLATES: FollowUpTemplate[] = [
     description: 'Your accumulated control lets you force a decisive confrontation.',
     riskTier: 'dangerous',
     intentHint: 'control',
+    category: 'pressure',
     rewardBias: 'xp',
     ttl: 2,
     executeHints: {
@@ -382,6 +432,7 @@ const FOLLOW_UP_TEMPLATES: FollowUpTemplate[] = [
     description: 'Lock in your tactical advantage before it slips away.',
     riskTier: 'good',
     intentHint: 'position',
+    category: 'consolidate',
     rewardBias: 'leverage',
     ttl: 3,
     executeHints: {
@@ -399,21 +450,109 @@ const FOLLOW_UP_TEMPLATES: FollowUpTemplate[] = [
 ];
 
 // =============================================================================
-// HELPER FUNCTIONS
+// HELPER FUNCTIONS — Keys, Hashing, History
 // =============================================================================
 
+const DEFAULT_COOLDOWN_ACTIONS = 3;
+const MAX_HISTORY_ENTRIES = 30;
+
 /**
- * Generate a deterministic ID for a follow-up based on context
+ * Derive a subject key from context (npc > rival > faction > district)
+ */
+function deriveSubjectKey(ctx: FollowUpContext, template: FollowUpTemplate): string {
+  if (template.conditions.requiresNpc && ctx.npcId) return `npc:${ctx.npcId}`;
+  if (template.conditions.requiresRival && ctx.rivalId) return `rival:${ctx.rivalId}`;
+  if (ctx.factions?.length) return `fac:${ctx.factions[0]}`;
+  if (ctx.district) return `dst:${ctx.district}`;
+  return 'generic';
+}
+
+/**
+ * Build the canonical followUpKey for dedup + cooldown
+ */
+function buildFollowUpKey(templateId: string, subjectKey: string): string {
+  return `${templateId}::${subjectKey}`;
+}
+
+/**
+ * Generate a stable deterministic ID for a follow-up
  */
 function generateFollowUpId(templateId: string, ctx: FollowUpContext): string {
   const base = `fup_${templateId}_${ctx.encounterId ?? ctx.actionId ?? 'unknown'}`;
-  // Add a simple hash based on difficulty and result for uniqueness
   const hash = ((ctx.encounterDifficulty ?? 0) * 7 + (ctx.conflictResult === 'victory' ? 1 : ctx.conflictResult === 'defeat' ? 2 : 3)) % 1000;
   return `${base}_${hash}`;
 }
 
 /**
- * Score a template against the current context
+ * Deterministic score jitter derived from characterId + seedId + encounterId.
+ * Returns a value in [-15, +15] that varies per encounter but is stable per run.
+ */
+function deterministicJitter(templateId: string, ctx: FollowUpContext): number {
+  const seed = `${ctx.characterId ?? ''}|${ctx.seedId ?? ''}|${ctx.encounterId ?? ''}|${templateId}`;
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) {
+    h = ((h << 5) - h + seed.charCodeAt(i)) | 0;
+  }
+  // Map to [-15, +15]
+  return ((Math.abs(h) % 31) - 15);
+}
+
+// =============================================================================
+// HISTORY MANAGEMENT
+// =============================================================================
+
+/**
+ * Safely parse follow-up history from JSON
+ */
+export function parseFollowUpHistory(json: unknown): FollowUpHistory {
+  if (!json || typeof json !== 'object') return { entries: [] };
+  const obj = json as Record<string, unknown>;
+  if (!Array.isArray(obj.entries)) return { entries: [] };
+  return {
+    entries: obj.entries.filter((e): e is FollowUpHistoryEntry =>
+      typeof e === 'object' && e !== null &&
+      typeof (e as FollowUpHistoryEntry).followUpKey === 'string' &&
+      typeof (e as FollowUpHistoryEntry).actionCounter === 'number' &&
+      typeof (e as FollowUpHistoryEntry).status === 'string'
+    ),
+  };
+}
+
+/**
+ * Check if a followUpKey is on cooldown (appeared within last N actions)
+ */
+function isOnCooldown(
+  key: string,
+  history: FollowUpHistory,
+  currentActionCounter: number,
+  cooldownActions: number,
+): boolean {
+  return history.entries.some(e =>
+    e.followUpKey === key && (currentActionCounter - e.actionCounter) < cooldownActions
+  );
+}
+
+/**
+ * Record new entries in history. Trims to MAX_HISTORY_ENTRIES.
+ */
+export function addHistoryEntries(
+  history: FollowUpHistory,
+  entries: FollowUpHistoryEntry[],
+): FollowUpHistory {
+  const combined = [...history.entries, ...entries];
+  // Keep only the most recent entries
+  const trimmed = combined.length > MAX_HISTORY_ENTRIES
+    ? combined.slice(combined.length - MAX_HISTORY_ENTRIES)
+    : combined;
+  return { entries: trimmed };
+}
+
+// =============================================================================
+// SCORING
+// =============================================================================
+
+/**
+ * Score a template against the current context (base score, no jitter)
  */
 function scoreTemplate(template: FollowUpTemplate, ctx: FollowUpContext): number {
   let score = template.score;
@@ -422,20 +561,20 @@ function scoreTemplate(template: FollowUpTemplate, ctx: FollowUpContext): number
   // Check conflict result condition
   if (conditions.conflictResults) {
     if (!ctx.conflictResult || !conditions.conflictResults.includes(ctx.conflictResult)) {
-      return 0; // Disqualified
+      return 0;
     }
-    score += 20; // Bonus for matching
+    score += 20;
   }
 
   // Check gambit outcome condition
   if (conditions.gambitOutcomes) {
     if (!ctx.gambitOutcome || !conditions.gambitOutcomes.includes(ctx.gambitOutcome)) {
-      return 0; // Disqualified
+      return 0;
     }
     score += 15;
   }
 
-  // Check action category condition (using baseActionIntent as proxy)
+  // Check action category condition
   if (conditions.actionCategories) {
     if (!ctx.baseActionIntent || !conditions.actionCategories.includes(ctx.baseActionIntent)) {
       return 0;
@@ -444,80 +583,163 @@ function scoreTemplate(template: FollowUpTemplate, ctx: FollowUpContext): number
   }
 
   // Check NPC requirement
-  if (conditions.requiresNpc && !ctx.npcId) {
-    return 0;
-  }
-  if (conditions.requiresNpc && ctx.npcId) {
-    score += 25; // Strong bonus for NPC-focused follow-ups when NPC present
-  }
+  if (conditions.requiresNpc && !ctx.npcId) return 0;
+  if (conditions.requiresNpc && ctx.npcId) score += 25;
 
   // Check rival requirement
-  if (conditions.requiresRival && !ctx.rivalPresent) {
-    return 0;
-  }
-  if (conditions.requiresRival && ctx.rivalPresent) {
-    score += 30; // Strong bonus for rival-focused follow-ups
-  }
+  if (conditions.requiresRival && !ctx.rivalPresent) return 0;
+  if (conditions.requiresRival && ctx.rivalPresent) score += 30;
 
   // Check faction requirement
   if (conditions.requiresFactions && conditions.requiresFactions.length > 0) {
     const hasMatchingFaction = ctx.factions?.some(f => conditions.requiresFactions!.includes(f));
-    if (!hasMatchingFaction) {
-      return 0;
-    }
+    if (!hasMatchingFaction) return 0;
     score += 15;
   }
 
   // Check difficulty range
-  if (conditions.minDifficulty && (ctx.encounterDifficulty ?? 0) < conditions.minDifficulty) {
-    return 0;
-  }
-  if (conditions.maxDifficulty && (ctx.encounterDifficulty ?? 10) > conditions.maxDifficulty) {
-    return 0;
-  }
+  if (conditions.minDifficulty && (ctx.encounterDifficulty ?? 0) < conditions.minDifficulty) return 0;
+  if (conditions.maxDifficulty && (ctx.encounterDifficulty ?? 10) > conditions.maxDifficulty) return 0;
 
   // Check leverage threshold
   if (conditions.leverageThreshold) {
     const leverageValue = ctx.leverageState?.[conditions.leverageThreshold.type] ?? 0;
-    if (leverageValue < conditions.leverageThreshold.min) {
-      return 0;
-    }
+    if (leverageValue < conditions.leverageThreshold.min) return 0;
     score += 20;
   }
 
   return score;
 }
 
+// =============================================================================
+// DIVERSITY SELECTION
+// =============================================================================
+
+interface ScoredCandidate {
+  template: FollowUpTemplate;
+  score: number;                    // base + jitter
+  subjectKey: string;
+  followUpKey: string;
+}
+
 /**
- * Generate follow-up actions based on encounter context
+ * Select up to `max` candidates with diversity constraints:
+ *  - prefer 1 control + 1 stability + 1 position if available
+ *  - prefer different categories (investigate/chase/cleanup/pressure/recover/consolidate)
+ *  - no duplicate followUpKeys
+ */
+function diversitySelect(candidates: ScoredCandidate[], max: number): ScoredCandidate[] {
+  if (candidates.length <= max) return candidates;
+
+  const selected: ScoredCandidate[] = [];
+  const usedKeys = new Set<string>();
+  const usedIntents = new Set<IntentHint>();
+  const usedCategories = new Set<FollowUpCategory>();
+
+  // Pass 1: pick one per intent (control, stability, position) — highest scored candidate
+  const intents: IntentHint[] = ['control', 'stability', 'position'];
+  for (const intent of intents) {
+    if (selected.length >= max) break;
+    const best = candidates.find(c =>
+      c.template.intentHint === intent &&
+      !usedKeys.has(c.followUpKey) &&
+      !usedCategories.has(c.template.category)
+    );
+    if (best) {
+      selected.push(best);
+      usedKeys.add(best.followUpKey);
+      usedIntents.add(intent);
+      usedCategories.add(best.template.category);
+    }
+  }
+
+  // Pass 2: fill remaining slots preferring unused categories
+  for (const c of candidates) {
+    if (selected.length >= max) break;
+    if (usedKeys.has(c.followUpKey)) continue;
+    // Prefer unused category
+    if (!usedCategories.has(c.template.category)) {
+      selected.push(c);
+      usedKeys.add(c.followUpKey);
+      usedIntents.add(c.template.intentHint);
+      usedCategories.add(c.template.category);
+    }
+  }
+
+  // Pass 3: fill any remaining slots with highest scoring regardless
+  for (const c of candidates) {
+    if (selected.length >= max) break;
+    if (usedKeys.has(c.followUpKey)) continue;
+    selected.push(c);
+    usedKeys.add(c.followUpKey);
+  }
+
+  return selected;
+}
+
+// =============================================================================
+// MAIN GENERATION
+// =============================================================================
+
+/**
+ * Generate follow-up actions based on encounter context.
+ * Applies cooldown, dedupe, jitter, and diversity selection.
  */
 export function generateFollowUps(
   ctx: FollowUpContext,
-  opts?: { max?: number }
+  opts?: GenerateFollowUpsOptions,
 ): FollowUpAction[] {
   const maxFollowUps = opts?.max ?? 3;
+  const history = opts?.history ?? { entries: [] };
+  const cooldownActions = opts?.cooldownActions ?? DEFAULT_COOLDOWN_ACTIONS;
+  const pendingFollowUps = opts?.pendingFollowUps ?? [];
+  const currentActionCounter = ctx.actionCounter ?? 0;
 
-  // Score all templates
-  const scoredTemplates = FOLLOW_UP_TEMPLATES
-    .map(template => ({
-      template,
-      score: scoreTemplate(template, ctx),
-    }))
-    .filter(({ score }) => score > 0)
-    .sort((a, b) => b.score - a.score);
+  // Build set of followUpKeys already in pending list (for dedupe)
+  const pendingKeys = new Set(pendingFollowUps.map(f => f.followUpKey).filter(Boolean));
 
-  // Take top N
-  const selected = scoredTemplates.slice(0, maxFollowUps);
+  // Score all templates, apply jitter, filter cooldowns
+  const candidates: ScoredCandidate[] = [];
+
+  for (const template of FOLLOW_UP_TEMPLATES) {
+    const baseScore = scoreTemplate(template, ctx);
+    if (baseScore <= 0) continue;
+
+    const subjectKey = deriveSubjectKey(ctx, template);
+    const followUpKey = buildFollowUpKey(template.id, subjectKey);
+
+    // Skip if already pending
+    if (pendingKeys.has(followUpKey)) continue;
+
+    // Skip if on cooldown
+    if (isOnCooldown(followUpKey, history, currentActionCounter, cooldownActions)) continue;
+
+    // Apply deterministic jitter
+    const jitter = deterministicJitter(template.id, ctx);
+    const finalScore = baseScore + jitter;
+
+    candidates.push({ template, score: finalScore, subjectKey, followUpKey });
+  }
+
+  // Sort by final score descending
+  candidates.sort((a, b) => b.score - a.score);
+
+  // Apply diversity selection
+  const selected = diversitySelect(candidates, maxFollowUps);
 
   // Convert to FollowUpAction
-  return selected.map(({ template }) => ({
+  return selected.map(({ template, subjectKey, followUpKey }) => ({
     id: generateFollowUpId(template.id, ctx),
     name: template.name,
     description: template.description,
     expiresInActions: template.ttl,
     riskTier: template.riskTier,
     intentHint: template.intentHint,
+    category: template.category,
     rewardBias: template.rewardBias,
+    templateKey: template.id,
+    subjectKey,
+    followUpKey,
     executeHints: {
       ...template.executeHints,
       likelyFactions: template.executeHints.likelyFactions ?? ctx.factions,
@@ -533,17 +755,36 @@ export function generateFollowUps(
   }));
 }
 
+// =============================================================================
+// TTL + MERGE
+// =============================================================================
+
 /**
- * Decrement TTLs and remove expired follow-ups
+ * Decrement TTLs and return { alive, expired } partitions.
+ * Expired entries can be recorded in history.
  */
-export function decrementFollowUpTTLs(existing: FollowUpAction[]): FollowUpAction[] {
-  return existing
-    .map(f => ({ ...f, expiresInActions: f.expiresInActions - 1 }))
-    .filter(f => f.expiresInActions > 0);
+export function decrementFollowUpTTLs(existing: FollowUpAction[]): {
+  alive: FollowUpAction[];
+  expired: FollowUpAction[];
+} {
+  const alive: FollowUpAction[] = [];
+  const expired: FollowUpAction[] = [];
+
+  for (const f of existing) {
+    const updated = { ...f, expiresInActions: f.expiresInActions - 1 };
+    if (updated.expiresInActions > 0) {
+      alive.push(updated);
+    } else {
+      expired.push(f);
+    }
+  }
+
+  return { alive, expired };
 }
 
 /**
- * Merge new follow-ups with existing, deduping by ID and limiting total count
+ * Merge new follow-ups with existing.
+ * Dedupes by followUpKey (prefers newer), then by id. Limits to maxTotal.
  */
 export function mergeFollowUps(
   existing: FollowUpAction[],
@@ -551,21 +792,23 @@ export function mergeFollowUps(
   opts?: { maxTotal?: number }
 ): FollowUpAction[] {
   const maxTotal = opts?.maxTotal ?? 5;
-  const byId = new Map<string, FollowUpAction>();
+  const byKey = new Map<string, FollowUpAction>();
 
-  // Existing first (preserve order)
+  // Existing first (preserve older entries)
   for (const f of existing) {
-    byId.set(f.id, f);
+    const key = f.followUpKey || f.id;
+    if (!byKey.has(key)) byKey.set(key, f);
   }
 
-  // Incoming overwrites if same ID (fresher)
+  // Incoming overwrites by followUpKey (fresher)
   for (const f of incoming) {
-    byId.set(f.id, f);
+    const key = f.followUpKey || f.id;
+    byKey.set(key, f);
   }
 
   // Sort by urgency (lower TTL first) then by risk tier (dangerous first)
   const riskOrder: Record<RiskTier, number> = { dangerous: 0, risky: 1, good: 2 };
-  const merged = Array.from(byId.values())
+  const merged = Array.from(byKey.values())
     .sort((a, b) => {
       if (a.expiresInActions !== b.expiresInActions) {
         return a.expiresInActions - b.expiresInActions;
@@ -575,6 +818,10 @@ export function mergeFollowUps(
 
   return merged.slice(0, maxTotal);
 }
+
+// =============================================================================
+// EPHEMERAL ACTION BUILDER
+// =============================================================================
 
 /**
  * Build an ephemeral Action object from a follow-up for execution
@@ -590,15 +837,12 @@ export function buildEphemeralActionFromFollowUp(
   const difficultyDelta = hints.difficultyDelta ?? 0;
   const targetDifficulty = Math.max(1, Math.min(10, baseDifficulty + difficultyDelta));
 
-  // Derive category and moral intent from base action or defaults
   const category: ActionCategory = (baseAction?.category as ActionCategory) ?? 'neutral';
   const moralIntent: MoralIntent = baseAction?.moralIntent ?? 'neutral';
 
-  // Energy cost based on risk tier
-  const energyCostByRisk: Record<RiskTier, number> = { good: 8, risky: 10, dangerous: 12 };
+  const energyCostByRisk: Record<RiskTier, number> = { good: 6, risky: 8, dangerous: 10 };
   const energyCost = energyCostByRisk[followUp.riskTier];
 
-  // Base rewards with deltas
   const baseXP = baseAction?.baseXPReward ?? 25;
   const baseMoney = baseAction?.baseMoneyReward ?? 0;
 
@@ -619,10 +863,13 @@ export function buildEphemeralActionFromFollowUp(
     locationTypes: hints.locationTypes ?? (districtLocationType ? [districtLocationType] : baseAction?.locationTypes ?? ['city_streets']),
     baseXPReward: Math.max(10, baseXP + (hints.baseXPRewardDelta ?? 0)),
     baseMoneyReward: Math.max(0, baseMoney + (hints.baseMoneyRewardDelta ?? 0)),
-    // No cooldown for follow-ups
     cooldownHours: undefined,
   };
 }
+
+// =============================================================================
+// UTILITIES
+// =============================================================================
 
 /**
  * Check if an action ID is a follow-up action
@@ -638,7 +885,6 @@ export function parsePendingFollowUps(json: unknown): FollowUpAction[] {
   if (!json) return [];
   if (!Array.isArray(json)) return [];
 
-  // Basic validation - ensure each item has required fields
   return json.filter((item): item is FollowUpAction => {
     return (
       typeof item === 'object' &&
