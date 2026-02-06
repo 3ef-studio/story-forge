@@ -338,6 +338,8 @@ type ResolveActionBody = {
   resolutionOutcomeOverride?: ResolutionOutcomeOverride;
   conflictOutcome?: ConflictOutcomePayload;
   leverageSpent?: LeverageState;
+  /** Whether the action was a follow-up action (for heat computation) */
+  isFollowUp?: boolean;
   // Telemetry fields
   turnTimeline?: TurnTimelineEntry[];
   opponentIdentity?: OpponentIdentityPayload;
@@ -402,7 +404,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const { encounterId, choiceId, threadId, actionId: rawActionId, locationType, npcId, prepSelection, rivalPresent, focusMode: rawFocusMode, focusModifier: rawFocusModifier, resolutionOutcomeOverride, conflictOutcome, turnTimeline, opponentIdentity, gambitResult } = rawBody;
+    const { encounterId, choiceId, threadId, actionId: rawActionId, locationType, npcId, prepSelection, rivalPresent, focusMode: rawFocusMode, focusModifier: rawFocusModifier, resolutionOutcomeOverride, conflictOutcome, turnTimeline, opponentIdentity, gambitResult, isFollowUp: rawIsFollowUp } = rawBody;
+    const isFollowUp = Boolean(rawIsFollowUp);
     const actionId = rawActionId ? normalizeActionId(rawActionId) : undefined;
     const isCached = Boolean(rawBody.isCached);
     const validPrepSelection = prepSelection ?? null;
@@ -762,11 +765,18 @@ export async function POST(request: Request) {
 
     // --- Heat: server-authoritative computation ---
     // Heat increases on follow-up actions, decreases on rest and every 3 actions
+    // Note: isFollowUp flag is passed from client since actionId in resolve is the origin action, not fup_*
+    const isRest = actionId === 'rest_recover' || actionId === 'rest';
     const heatUpdate = computeHeatUpdate({
       currentHeat: character.heat ?? 0,
       actionId: actionId,
       newActionCounter: leverageUpdate.newActionCounter,
+      isFollowUp,
+      isRest,
     });
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[Heat] actionId=${actionId} isFollowUp=${isFollowUp} isRest=${isRest} heat: ${heatUpdate.previousHeat}→${heatUpdate.newHeat}`);
+    }
     logHeatUpdate(character.id, heatUpdate);
 
     // Update character in transaction

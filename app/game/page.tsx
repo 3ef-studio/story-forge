@@ -146,7 +146,7 @@ export default function GamePage() {
   const [character, setCharacter] = useState<CharacterData | null>(null);
   const [gameState, setGameState] = useState<GameState>('idle');
   const [currentEncounter, setCurrentEncounter] = useState<(EncounterTemplate & { threadId?: string; threadTitle?: string; npcId?: string }) | null>(null);
-  const [currentActionContext, setCurrentActionContext] = useState<{ actionId: string; locationType?: string } | null>(null);
+  const [currentActionContext, setCurrentActionContext] = useState<{ actionId: string; locationType?: string; isFollowUp?: boolean } | null>(null);
   const [encounterChoices, setEncounterChoices] = useState<EncounterChoice[]>([]);
   const [currentOutcome, setCurrentOutcome] = useState<OutcomeResult | null>(null);
   const [currentResolution, setCurrentResolution] = useState<ResolutionData | null>(null);
@@ -371,6 +371,7 @@ export default function GamePage() {
         setCurrentActionContext({
           actionId: followUp.origin.actionId ?? 'followup',
           locationType: followUp.executeHints.locationTypes?.[0],
+          isFollowUp: true,
         });
 
         const choices = encounter.choices.map((choice) => {
@@ -842,6 +843,7 @@ export default function GamePage() {
           threadId: currentEncounter.threadId,
           actionId: currentActionContext?.actionId,
           locationType: currentActionContext?.locationType,
+          isFollowUp: currentActionContext?.isFollowUp ?? false,
           npcId: currentEncounter.npcId,
           prepSelection: pendingPrepSelection,
           rivalPresent: !!rivalPresence,

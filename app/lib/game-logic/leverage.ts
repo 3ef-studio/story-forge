@@ -347,27 +347,39 @@ export interface HeatUpdateResult {
  * Compute the heat update for an action resolution.
  *
  * Heat rules:
- * - Follow-up action (id starts with "fup_"): +1 heat
- * - Rest action ("rest_recover"): -1 heat
+ * - Follow-up action: +1 heat
+ * - Rest action: -1 heat
  * - Every 3 actions (actionCounter % 3 === 0): -1 heat (if not already decayed from rest)
  * - Clamp to min 0
+ *
+ * Note: isFollowUp and isRest can be passed explicitly for cases where actionId
+ * is not the original fup_* ID (e.g., resolve route receives origin action ID).
  */
 export function computeHeatUpdate(input: {
   currentHeat: number;
   actionId: string | undefined;
   newActionCounter: number;
+  /** Explicit flag for follow-up actions (overrides actionId check) */
+  isFollowUp?: boolean;
+  /** Explicit flag for rest actions (overrides actionId check) */
+  isRest?: boolean;
 }): HeatUpdateResult {
-  const { currentHeat, actionId, newActionCounter } = input;
+  const { currentHeat, actionId, newActionCounter, isFollowUp, isRest } = input;
   let newHeat = currentHeat;
   let reason: HeatUpdateResult['reason'] = 'none';
 
+  // Determine if follow-up (explicit flag takes precedence)
+  const isFollowUpAction = isFollowUp ?? isFollowUpActionId(actionId);
+  // Determine if rest (explicit flag takes precedence)
+  const isRestAction = isRest ?? (actionId === 'rest_recover' || actionId === 'rest');
+
   // Follow-up action: +1 heat
-  if (isFollowUpActionId(actionId)) {
+  if (isFollowUpAction) {
     newHeat = currentHeat + 1;
     reason = 'followUp';
   }
   // Rest action: -1 heat
-  else if (actionId === 'rest_recover') {
+  else if (isRestAction) {
     newHeat = Math.max(0, currentHeat - 1);
     reason = currentHeat > 0 ? 'rest' : 'none';
   }
