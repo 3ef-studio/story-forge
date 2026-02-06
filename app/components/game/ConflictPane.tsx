@@ -87,13 +87,20 @@ function ResourceBar({ label, value, maxValue, colorClass }: {
 
 export function ConflictPane({ state, leverage, onPlayerMove, onLeverageSpend, onContinue }: ConflictPaneProps) {
   const logRef = useRef<HTMLDivElement>(null);
-  const [spendingType, setSpendingType] = useState<LeverageType | null>(null);
+  //const [spendingType, setSpendingType] = useState<LeverageType | null>(null);
   const [gambitBannerDismissed, setGambitBannerDismissed] = useState(false);
   const availableMoves = getPlayerMoves(state);
   const result = state.ended ? evaluateOutcome(state) : null;
   const hasAnyLeverage = leverage.control + leverage.stability + leverage.position > 0;
   const hasArmedLeverage = !!state.armedLeverage;
   const gambit = state.gambitResult;
+  const [spendingSelection, setSpendingSelection] = useState<{
+    turn: number;
+    type: LeverageType | null;
+  }>({ turn: state.turn, type: null });
+
+  const spendingType =
+    spendingSelection.turn === state.turn ? spendingSelection.type : null;
 
   // Auto-scroll log
   useEffect(() => {
@@ -101,11 +108,6 @@ export function ConflictPane({ state, leverage, onPlayerMove, onLeverageSpend, o
       logRef.current.scrollTop = logRef.current.scrollHeight;
     }
   }, [state.log.length]);
-
-  // Reset spending panel on new turn
-  useEffect(() => {
-    setSpendingType(null);
-  }, [state.turn]);
 
   const outcomeColor = result
     ? result.outcome === 'player_victory'
@@ -133,7 +135,7 @@ export function ConflictPane({ state, leverage, onPlayerMove, onLeverageSpend, o
 
   const handleSpendEffect = (spend: LeverageSpend) => {
     onLeverageSpend(spend);
-    setSpendingType(null);
+    setSpendingSelection({ turn: state.turn, type: spendingType });
   };
 
   return (
@@ -274,7 +276,12 @@ export function ConflictPane({ state, leverage, onPlayerMove, onLeverageSpend, o
               <button
                 key={type}
                 disabled={leverage[type] <= 0 || hasArmedLeverage}
-                onClick={() => setSpendingType(spendingType === type ? null : type)}
+                onClick={() =>
+                  setSpendingSelection({
+                    turn: state.turn,
+                    type: spendingType === type ? null : type,
+                  })
+                }
                 className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-xs transition-all ${
                   leverage[type] > 0 && !hasArmedLeverage
                     ? `${LEVERAGE_COLORS[type]} cursor-pointer hover:brightness-125`
@@ -299,7 +306,7 @@ export function ConflictPane({ state, leverage, onPlayerMove, onLeverageSpend, o
                 </button>
               ))}
               <button
-                onClick={() => setSpendingType(null)}
+                onClick={() => setSpendingSelection({ turn: state.turn, type: null }  )}
                 className="text-xs px-2 py-1 rounded-lg bg-white/5 border border-white/10 text-white/40 hover:text-white/60 transition-all"
               >
                 Cancel
