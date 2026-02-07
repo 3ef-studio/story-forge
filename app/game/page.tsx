@@ -146,7 +146,7 @@ export default function GamePage() {
   const [character, setCharacter] = useState<CharacterData | null>(null);
   const [gameState, setGameState] = useState<GameState>('idle');
   const [currentEncounter, setCurrentEncounter] = useState<(EncounterTemplate & { threadId?: string; threadTitle?: string; npcId?: string }) | null>(null);
-  const [currentActionContext, setCurrentActionContext] = useState<{ actionId: string; locationType?: string; isFollowUp?: boolean } | null>(null);
+  const [currentActionContext, setCurrentActionContext] = useState<{ actionId: string; sourceActionId?: string; locationType?: string; isFollowUp?: boolean } | null>(null);
   const [encounterChoices, setEncounterChoices] = useState<EncounterChoice[]>([]);
   const [currentOutcome, setCurrentOutcome] = useState<OutcomeResult | null>(null);
   const [currentResolution, setCurrentResolution] = useState<ResolutionData | null>(null);
@@ -369,9 +369,10 @@ export default function GamePage() {
         setIsCachedEncounter(data.isCachedEncounter || false);
         setRivalPresence(data.rivalPresence ?? null);
         setCurrentActionContext({
-          actionId: followUp.origin.actionId ?? 'followup',
+          actionId: data.baseActionId ?? followUp.origin.actionId ?? 'followup',
+          sourceActionId: data.sourceActionId ?? followUp.id,
           locationType: followUp.executeHints.locationTypes?.[0],
-          isFollowUp: true,
+          isFollowUp: data.isFollowUp ?? true,
         });
 
         const choices = encounter.choices.map((choice) => {
@@ -539,8 +540,10 @@ export default function GamePage() {
         setIsCachedEncounter(data.isCachedEncounter || false);
         setRivalPresence(data.rivalPresence ?? null);
         setCurrentActionContext({
-          actionId: action.id,
+          actionId: data.baseActionId ?? action.id,
+          sourceActionId: data.sourceActionId ?? action.id,
           locationType: action.locationTypes?.[0],
+          isFollowUp: data.isFollowUp ?? false,
         });
 
         const choices = encounter.choices.map((choice) => {
@@ -842,8 +845,8 @@ export default function GamePage() {
           isCached: isCachedEncounter,
           threadId: currentEncounter.threadId,
           actionId: currentActionContext?.actionId,
+          sourceActionId: currentActionContext?.sourceActionId,
           locationType: currentActionContext?.locationType,
-          isFollowUp: currentActionContext?.isFollowUp ?? false,
           npcId: currentEncounter.npcId,
           prepSelection: pendingPrepSelection,
           rivalPresent: !!rivalPresence,

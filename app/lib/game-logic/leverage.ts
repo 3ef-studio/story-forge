@@ -343,55 +343,53 @@ export interface HeatUpdateResult {
   reason: 'followUp' | 'rest' | 'decay' | 'none';
 }
 
+const MAX_HEAT = 10;
+
 /**
  * Compute the heat update for an action resolution.
  *
  * Heat rules:
  * - Follow-up action: +1 heat
- * - Rest action: -1 heat
- * - Every 3 actions (actionCounter % 3 === 0): -1 heat (if not already decayed from rest)
- * - Clamp to min 0
+ * - Rest action: -2 heat
+ * - Normal action (non-follow-up, non-rest): -1 heat (decay per action)
+ * - Clamp to [0, MAX_HEAT]
  *
- * Note: isFollowUp and isRest can be passed explicitly for cases where actionId
- * is not the original fup_* ID (e.g., resolve route receives origin action ID).
+ * Detection uses the executed actionId directly:
+ * - isFollowUp: rawActionId.startsWith('fup_')
+ * - isRest: normalizeActionId(rawActionId) === 'rest_recover'
  */
 export function computeHeatUpdate(input: {
   currentHeat: number;
   actionId: string | undefined;
   newActionCounter: number;
-  /** Explicit flag for follow-up actions (overrides actionId check) */
+  /** Explicit flag for follow-up actions (from rawActionId check) */
   isFollowUp?: boolean;
-  /** Explicit flag for rest actions (overrides actionId check) */
+  /** Explicit flag for rest actions (from normalized actionId check) */
   isRest?: boolean;
 }): HeatUpdateResult {
-  const { currentHeat, actionId, newActionCounter, isFollowUp, isRest } = input;
+  const { currentHeat, isFollowUp, isRest } = input;
   let newHeat = currentHeat;
   let reason: HeatUpdateResult['reason'] = 'none';
 
-  // Determine if follow-up (explicit flag takes precedence)
-  const isFollowUpAction = isFollowUp ?? isFollowUpActionId(actionId);
-  // Determine if rest (explicit flag takes precedence)
-  const isRestAction = isRest ?? (actionId === 'rest_recover' || actionId === 'rest');
-
   // Follow-up action: +1 heat
-  if (isFollowUpAction) {
-    newHeat = currentHeat + 1;
+  if (isFollowUp) {
+    newHeat = Math.min(MAX_HEAT, currentHeat + 1);
     reason = 'followUp';
   }
-  // Rest action: -1 heat
-  else if (isRestAction) {
-    newHeat = Math.max(0, currentHeat - 1);
+  // Rest action: -2 heat
+  else if (isRest) {
+    newHeat = Math.max(0, currentHeat - 2);
     reason = currentHeat > 0 ? 'rest' : 'none';
   }
-  // Decay every 3 actions (only if not already modified by rest)
-  else if (newActionCounter % 3 === 0 && currentHeat > 0) {
-    newHeat = currentHeat - 1;
+  // Normal action (non-follow-up, non-rest): -1 heat decay
+  else if (currentHeat > 0) {
+    newHeat = Math.max(0, currentHeat - 1);
     reason = 'decay';
   }
 
   return {
     previousHeat: currentHeat,
-    newHeat: Math.max(0, newHeat),
+    newHeat,
     delta: newHeat - currentHeat,
     reason,
   };

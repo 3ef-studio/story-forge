@@ -329,6 +329,8 @@ type ResolveActionBody = {
   isCached?: boolean;
   threadId?: string;
   actionId?: string;
+  /** Original action ID from execute (may be fup_...) for heat detection */
+  sourceActionId?: string;
   locationType?: string;
   npcId?: string;
   prepSelection?: PrepSelection | null;
@@ -338,8 +340,6 @@ type ResolveActionBody = {
   resolutionOutcomeOverride?: ResolutionOutcomeOverride;
   conflictOutcome?: ConflictOutcomePayload;
   leverageSpent?: LeverageState;
-  /** Whether the action was a follow-up action (for heat computation) */
-  isFollowUp?: boolean;
   // Telemetry fields
   turnTimeline?: TurnTimelineEntry[];
   opponentIdentity?: OpponentIdentityPayload;
@@ -371,6 +371,7 @@ function isResolveActionBody(value: unknown): value is ResolveActionBody {
     (v.isCached === undefined || typeof v.isCached === 'boolean') &&
     (v.threadId === undefined || typeof v.threadId === 'string') &&
     (v.actionId === undefined || typeof v.actionId === 'string') &&
+    (v.sourceActionId === undefined || typeof v.sourceActionId === 'string') &&
     (v.locationType === undefined || typeof v.locationType === 'string') &&
     (v.npcId === undefined || typeof v.npcId === 'string') &&
     isValidPrepSelection(v.prepSelection) &&
@@ -404,8 +405,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const { encounterId, choiceId, threadId, actionId: rawActionId, locationType, npcId, prepSelection, rivalPresent, focusMode: rawFocusMode, focusModifier: rawFocusModifier, resolutionOutcomeOverride, conflictOutcome, turnTimeline, opponentIdentity, gambitResult, isFollowUp: rawIsFollowUp } = rawBody;
-    const isFollowUp = Boolean(rawIsFollowUp);
+    const { encounterId, choiceId, threadId, actionId: rawActionId, sourceActionId, locationType, npcId, prepSelection, rivalPresent, focusMode: rawFocusMode, focusModifier: rawFocusModifier, resolutionOutcomeOverride, conflictOutcome, turnTimeline, opponentIdentity, gambitResult } = rawBody;
+    // Use sourceActionId (the original action ID from execute, e.g., fup_xyz) for heat detection
+    // Fall back to rawActionId for backward compatibility
+    const effectiveActionId = sourceActionId ?? rawActionId;
     const actionId = rawActionId ? normalizeActionId(rawActionId) : undefined;
     const isCached = Boolean(rawBody.isCached);
     const validPrepSelection = prepSelection ?? null;
@@ -470,6 +473,15 @@ export async function POST(request: Request) {
     if (!character) {
       return NextResponse.json({ error: 'Character not found' }, { status: 404 });
     }
+
+    // Determine if this is a follow-up action by checking effectiveActionId:
+    // 1. effectiveActionId starts with 'fup_' prefix
+    // 2. OR effectiveActionId exists in character.pendingFollowUps
+    const pendingFollowUps = parsePendingFollowUps(character.pendingFollowUps);
+    const isFollowUp = !!effectiveActionId && (
+      effectiveActionId.startsWith('fup_') ||
+      pendingFollowUps.some(f => f.id === effectiveActionId)
+    );
 
     // Apply lazy energy regeneration (catch-up ticks)
     const regenResult = computeEnergyRegen({
@@ -764,9 +776,12 @@ export async function POST(request: Request) {
     }
 
     // --- Heat: server-authoritative computation ---
-    // Heat increases on follow-up actions, decreases on rest and every 3 actions
-    // Note: isFollowUp flag is passed from client since actionId in resolve is the origin action, not fup_*
-    const isRest = actionId === 'rest_recover' || actionId === 'rest';
+    // Heat increases on follow-up (+1), decreases on rest (-2), small decay per normal action (-1)
+    // effectiveActionId = sourceActionId (from execute) ?? rawActionId (backward compat)
+    // isFollowUp: effectiveActionId.startsWith('fup_') or exists in pendingFollowUps
+    // isRest: normalizeActionId(effectiveActionId) === 'rest_recover' or 'rest'
+    const normalizedEffective = effectiveActionId ? normalizeActionId(effectiveActionId) : undefined;
+    const isRest = normalizedEffective === 'rest_recover' || normalizedEffective === 'rest';
     const heatUpdate = computeHeatUpdate({
       currentHeat: character.heat ?? 0,
       actionId: actionId,
@@ -774,9 +789,7 @@ export async function POST(request: Request) {
       isFollowUp,
       isRest,
     });
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[Heat] actionId=${actionId} isFollowUp=${isFollowUp} isRest=${isRest} heat: ${heatUpdate.previousHeat}→${heatUpdate.newHeat}`);
-    }
+    console.log(`[Heat] sourceActionId=${sourceActionId} actionId=${rawActionId} effective=${effectiveActionId} followUp=${isFollowUp} heat ${heatUpdate.previousHeat}→${heatUpdate.newHeat}`);
     logHeatUpdate(character.id, heatUpdate);
 
     // Update character in transaction

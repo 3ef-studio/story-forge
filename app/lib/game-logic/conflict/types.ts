@@ -9,6 +9,15 @@ export interface OpponentLeverageState {
   position: number;
 }
 
+/** Heat effects applied at conflict start (for UI display) */
+export interface HeatEffects {
+  heatAtStart: number;
+  /** Starting resource bonus applied to opponent (e.g., { position: 1 }) */
+  heatBonusStart: Partial<ConflictResources>;
+  /** Leverage pool granted to opponent from heat */
+  heatBonusLeverage: OpponentLeverageState;
+}
+
 /** Log entry for opponent leverage spend events */
 export interface OpponentLeverageSpendLog {
   turn: number;
@@ -177,6 +186,8 @@ export interface ConflictState {
   gambitResult?: GambitResult;
   /** Heat level at the start of the conflict */
   heatAtStart?: number;
+  /** Heat effects breakdown (starting bonus + leverage bonus) for UI display */
+  heatEffects?: HeatEffects;
   /** Opponent's leverage pool (spent during conflict turns) */
   opponentLeverage?: OpponentLeverageState;
   /** Log of opponent leverage spend events */

@@ -8,7 +8,7 @@ import {
   evaluateOutcome,
   getPlayerMoves,
 } from '@/app/lib/game-logic/conflict/engine';
-import type { ConflictState, MoveId } from '@/app/lib/game-logic/conflict/types';
+import type { ConflictState, MoveId, HeatEffects, ConflictResources } from '@/app/lib/game-logic/conflict/types';
 import type { GambitResult, GambitEffect } from '@/app/lib/game-logic/combat/types';
 import {
   type LeverageState,
@@ -59,6 +59,134 @@ function formatGambitEffects(effects: GambitEffect[]): string {
     const resource = e.resource.charAt(0).toUpperCase() + e.resource.slice(1);
     return `${targetLabel} ${sign}${e.delta} ${resource}`;
   }).join(', ');
+}
+
+/** Format heat effects for display */
+function formatHeatEffects(heatEffects: HeatEffects): string | null {
+  const parts: string[] = [];
+
+  // Format starting resource bonus
+  const startEntries = Object.entries(heatEffects.heatBonusStart);
+  for (const [resource, value] of startEntries) {
+    if (value && value > 0) {
+      const label = resource.charAt(0).toUpperCase() + resource.slice(1);
+      parts.push(`+${value} ${label}`);
+    }
+  }
+
+  // Format leverage bonus
+  const lev = heatEffects.heatBonusLeverage;
+  const levTotal = lev.control + lev.stability + lev.position;
+  if (levTotal > 0) {
+    const levParts: string[] = [];
+    if (lev.control > 0) levParts.push(`C${lev.control}`);
+    if (lev.stability > 0) levParts.push(`S${lev.stability}`);
+    if (lev.position > 0) levParts.push(`P${lev.position}`);
+    parts.push(`leverage (${levParts.join(' ')})`);
+  }
+
+  return parts.length > 0 ? `Enemy ${parts.join(', ')}` : null;
+}
+
+/** Impact chip for move effects */
+interface ImpactChip {
+  label: string;
+  target: 'self' | 'opp';
+  resource: keyof ConflictResources;
+  delta: number;
+  fromLeverage?: boolean;
+}
+
+const RESOURCE_CHIP_COLORS: Record<keyof ConflictResources, { positive: string; negative: string }> = {
+  control: { positive: 'bg-blue-500/20 text-blue-300 border-blue-500/30', negative: 'bg-blue-500/20 text-blue-300 border-blue-500/30' },
+  stability: { positive: 'bg-green-500/20 text-green-300 border-green-500/30', negative: 'bg-green-500/20 text-green-300 border-green-500/30' },
+  position: { positive: 'bg-amber-500/20 text-amber-300 border-amber-500/30', negative: 'bg-amber-500/20 text-amber-300 border-amber-500/30' },
+};
+
+const RESOURCE_SHORT: Record<keyof ConflictResources, string> = {
+  control: 'C',
+  stability: 'S',
+  position: 'P',
+};
+
+/** Compute impact chips for a move, including armed leverage effects */
+function computeMoveImpactChips(
+  moveId: MoveId,
+  armedLeverage: LeverageSpend | undefined
+): ImpactChip[] {
+  const move = CONFLICT_MOVES[moveId];
+  const chips: ImpactChip[] = [];
+
+  // Add self effects from base move
+  for (const [resource, delta] of Object.entries(move.selfEffect)) {
+    if (delta && delta !== 0) {
+      chips.push({
+        label: `You ${delta > 0 ? '+' : ''}${delta}${RESOURCE_SHORT[resource as keyof ConflictResources]}`,
+        target: 'self',
+        resource: resource as keyof ConflictResources,
+        delta,
+      });
+    }
+  }
+
+  // Add opponent effects from base move
+  for (const [resource, delta] of Object.entries(move.opponentEffect)) {
+    if (delta && delta !== 0) {
+      chips.push({
+        label: `Opp ${delta > 0 ? '+' : ''}${delta}${RESOURCE_SHORT[resource as keyof ConflictResources]}`,
+        target: 'opp',
+        resource: resource as keyof ConflictResources,
+        delta,
+      });
+    }
+  }
+
+  // Add armed leverage effects
+  if (armedLeverage) {
+    const eff = armedLeverage.effect;
+    if (eff.type === 'boost_self') {
+      chips.push({
+        label: `You +1${RESOURCE_SHORT[eff.resource]}`,
+        target: 'self',
+        resource: eff.resource,
+        delta: 1,
+        fromLeverage: true,
+      });
+    } else if (eff.type === 'drain_opponent') {
+      chips.push({
+        label: `Opp -1${RESOURCE_SHORT[eff.resource]}`,
+        target: 'opp',
+        resource: eff.resource,
+        delta: -1,
+        fromLeverage: true,
+      });
+    }
+  }
+
+  return chips;
+}
+
+/** Render impact chips for a move */
+function MoveImpactChips({ chips }: { chips: ImpactChip[] }) {
+  if (chips.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-1 mt-1.5">
+      {chips.map((chip, i) => {
+        const colorClass = chip.delta > 0
+          ? RESOURCE_CHIP_COLORS[chip.resource].positive
+          : RESOURCE_CHIP_COLORS[chip.resource].negative;
+        return (
+          <span
+            key={i}
+            className={`text-[10px] px-1.5 py-0.5 rounded border ${colorClass} ${chip.fromLeverage ? 'ring-1 ring-purple-400/50' : ''}`}
+          >
+            {chip.label}
+          </span>
+        );
+      })}
+    </div>
+  );
 }
 
 function ResourceBar({ label, value, maxValue, colorClass }: {
@@ -147,15 +275,22 @@ export function ConflictPane({ state, leverage, onPlayerMove, onLeverageSpend, o
           <span className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-white/70">
             Turn {Math.min(state.turn, state.maxTurns)}/{state.maxTurns}
           </span>
-          {/* Heat badge */}
-          {state.heatAtStart !== undefined && state.heatAtStart > 0 && (
-            <span className={`text-xs px-1.5 py-0.5 rounded ${
-              state.heatAtStart >= 3
-                ? 'bg-red-500/20 text-red-300 border border-red-500/30'
-                : 'bg-orange-500/20 text-orange-300 border border-orange-500/30'
-            }`}>
-              Heat {state.heatAtStart}
-            </span>
+          {/* Heat badge with bonus display */}
+          {state.heatEffects && state.heatEffects.heatAtStart > 0 && (
+            <div className="flex items-center gap-2">
+              <span className={`text-xs px-1.5 py-0.5 rounded ${
+                state.heatEffects.heatAtStart >= 3
+                  ? 'bg-red-500/20 text-red-300 border border-red-500/30'
+                  : 'bg-orange-500/20 text-orange-300 border border-orange-500/30'
+              }`}>
+                Heat {state.heatEffects.heatAtStart}
+              </span>
+              {formatHeatEffects(state.heatEffects) && (
+                <span className="text-xs text-orange-300/70">
+                  {formatHeatEffects(state.heatEffects)}
+                </span>
+              )}
+            </div>
           )}
         </div>
         <div className="flex items-center gap-2">
@@ -370,6 +505,7 @@ export function ConflictPane({ state, leverage, onPlayerMove, onLeverageSpend, o
             {(['pressure', 'seize_control', 'reposition', 'stabilize', 'feint', 'withdraw'] as MoveId[]).map((moveId) => {
               const move = CONFLICT_MOVES[moveId];
               const available = availableMoves.includes(moveId);
+              const impactChips = computeMoveImpactChips(moveId, state.armedLeverage);
               return (
                 <button
                   key={moveId}
@@ -383,6 +519,7 @@ export function ConflictPane({ state, leverage, onPlayerMove, onLeverageSpend, o
                 >
                   <div className="text-sm font-medium text-white">{move.name}</div>
                   <div className="text-xs text-white/50 mt-0.5">{move.description}</div>
+                  <MoveImpactChips chips={impactChips} />
                 </button>
               );
             })}

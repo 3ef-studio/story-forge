@@ -9,6 +9,7 @@ import type {
   BonusBreakdown,
   OpponentLeverageState,
   OpponentLeverageSpendLog,
+  HeatEffects,
 } from './types';
 import type { OpponentArchetype } from './opponent-identity';
 import { CONFLICT_MOVES, isMoveAvailable, getAvailableMoves } from './moves';
@@ -293,17 +294,25 @@ export function initConflict(init: ConflictInit): ConflictState {
   const heatStartingBonus = getHeatStartingBonus(heat, archetype);
   if (Object.keys(heatStartingBonus).length > 0) {
     opponentResources = clampResources(applyEffect(opponentResources, heatStartingBonus));
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[Heat→Start] Applied heat bonus (heat=${heat}):`, heatStartingBonus);
-    }
   }
 
   // Compute opponent leverage pool (derived from heat + difficulty)
   const leverageTotal = computeEnemyLeverageTotal(heat, init.encounterDifficulty);
   const opponentLeverage = distributeEnemyLeverage(leverageTotal, archetype);
-  if (process.env.NODE_ENV === 'development' && leverageTotal > 0) {
-    console.log(`[Enemy Leverage] Init: total=${leverageTotal} archetype=${archetype} pool=`, opponentLeverage);
-  }
+
+  // Build heatEffects object for UI display
+  const heatEffects: HeatEffects = {
+    heatAtStart: heat,
+    heatBonusStart: heatStartingBonus,
+    heatBonusLeverage: opponentLeverage,
+  };
+
+  // Log heat effects
+  const startBonusStr = Object.entries(heatStartingBonus)
+    .map(([k, v]) => `${k[0].toUpperCase()}${v}`)
+    .join(' ') || 'none';
+  const levBonusStr = `C${opponentLeverage.control} S${opponentLeverage.stability} P${opponentLeverage.position}`;
+  console.log(`[HeatApply] heat=${heat} startBonus=${startBonusStr} levBonus=${levBonusStr}`);
 
   // Apply gambit effects to starting resources
   if (init.gambitResult) {
@@ -345,6 +354,7 @@ export function initConflict(init: ConflictInit): ConflictState {
     leverage: init.leverage,
     gambitResult: init.gambitResult,
     heatAtStart: heat,
+    heatEffects,
     opponentLeverage,
     opponentLeverageLog: [],
   };

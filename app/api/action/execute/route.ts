@@ -791,6 +791,10 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       ...result,
+      // Action ID tracking for Heat system in resolve
+      sourceActionId: rawActionId,  // Original action ID from client (may be fup_...)
+      baseActionId: actionId,       // Normalized base action ID
+      isFollowUp,                   // Whether this was a follow-up action
       goals: {
         active: activeGoals,
         completed: completedGoals,
