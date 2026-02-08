@@ -4,12 +4,11 @@ import { useRef, useEffect, useState } from 'react';
 import { AnimatedCard } from '@/app/components/ui/AnimatedCard';
 import {
   CONFLICT_MOVES,
-  isMoveAvailable,
   evaluateOutcome,
   getPlayerMoves,
 } from '@/app/lib/game-logic/conflict/engine';
 import type { ConflictState, MoveId, HeatEffects, ConflictResources } from '@/app/lib/game-logic/conflict/types';
-import type { GambitResult, GambitEffect } from '@/app/lib/game-logic/combat/types';
+import type { GambitEffect } from '@/app/lib/game-logic/combat/types';
 import {
   type LeverageState,
   type LeverageSpend,
@@ -215,7 +214,6 @@ function ResourceBar({ label, value, maxValue, colorClass }: {
 
 export function ConflictPane({ state, leverage, onPlayerMove, onLeverageSpend, onContinue }: ConflictPaneProps) {
   const logRef = useRef<HTMLDivElement>(null);
-  //const [spendingType, setSpendingType] = useState<LeverageType | null>(null);
   const [gambitBannerDismissed, setGambitBannerDismissed] = useState(false);
   const availableMoves = getPlayerMoves(state);
   const result = state.ended ? evaluateOutcome(state) : null;

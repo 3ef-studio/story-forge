@@ -2,7 +2,7 @@
  * Leverage System — earned from prep + focus, spent in conflict, decays over time.
  *
  * Leverage types map 1:1 to conflict resources: control, stability, position.
- * Max per type: 2. Max total: 3.
+ * Max per type: 2. Max total: 6.
  * Spending: 1 per conflict turn, applies an effect that can overcap resources to 7.
  * Decay: 1 leverage point per 3 completed actions (stable priority: control→stability→position).
  */

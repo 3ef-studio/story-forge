@@ -16,7 +16,7 @@ import { StoryLogPanel } from '@/app/components/game/StoryLogPanel';
 import { CityUpdateCard } from '@/app/components/game/CityUpdateCard';
 import { LoadingSigil } from '@/app/components/ui/LoadingSigil';
 import { AnimatedCard } from '@/app/components/ui/AnimatedCard';
-import { FocusChannel, type FocusResult, type FocusMode } from '@/app/components/game/FocusChannel';
+import { FocusChannel, type FocusResult } from '@/app/components/game/FocusChannel';
 import { useToast } from '@/app/components/ui/toast';
 import { getFactionById } from '@/app/data/factions';
 import { attributes as attributesList } from '@/app/data/attributes';
@@ -1031,11 +1031,11 @@ export default function GamePage() {
       });
 
       setLevelUpModal(null);
-    } catch {
+    } catch (err) {
       addToast({
         type: 'error',
         title: 'Error',
-        message: 'An error occurred',
+        message: err instanceof Error ? err.message : 'An error occurred',
         duration: 3000,
       });
     } finally {
