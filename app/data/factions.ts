@@ -2,6 +2,7 @@
 
 export type FactionAlignment = 'lawful' | 'neutral' | 'chaotic'
 export type FactionMorality = 'good' | 'neutral' | 'evil'
+export type FactionCategory = 'power' | 'institution' | 'ambient'
 
 export type Faction = {
   id: string
@@ -9,19 +10,24 @@ export type Faction = {
   shortName: string // For UI display
   description: string
   ideology: string // Core beliefs - for AI context
-  
+
   // Alignment system
   alignment: FactionAlignment
   morality: FactionMorality
-  
+
+  // Gameplay classification
+  isPlayable: boolean // Can the player join this faction
+  category: FactionCategory // High-level type used for UI and systems
+  canControlDistricts: boolean // Only 'power' factions should set this true
+
   // Player relationship (-100 to +100)
   startingReputation: number
-  
+
   // Behavioral traits (for AI generation)
   values: string[] // What they care about
   opposedTo: string[] // Faction IDs or concepts they oppose
   goals: string[] // What they're trying to achieve
-  
+
   // Encounter behavior
   responseThresholds: {
     hostile: number // Rep below this = attacks on sight
@@ -30,20 +36,20 @@ export type Faction = {
     friendly: number // Rep above this = offers assistance
     allied: number // Rep above this = considers you one of them
   }
-  
+
   // How often they appear in encounters
   encounterLikelihood: number // 0-1, base chance per action
   powerLevel: number // 1-10, how dangerous are they
-  
+
   // Territory and influence
   territories: string[] // Areas where they're most active
   resources: string[] // What they control (money, tech, etc.)
-  
+
   // Relationships with other factions
   allies: string[] // Faction IDs
   rivals: string[] // Faction IDs
   enemies: string[] // Faction IDs
-  
+
   // Narrative hooks
   recruitmentPitch?: string // What they'd say to recruit player
   reputationDescriptors: {
@@ -60,10 +66,15 @@ export const factions: Faction[] = [
     id: 'metro_police',
     name: 'Metro City Police Department',
     shortName: 'MCPD',
-    description: 'The city\'s law enforcement trying to maintain order in an age of powered individuals',
-    ideology: 'Uphold the law, protect citizens, maintain civil order. Deeply conflicted about vigilantes - grateful for help but concerned about accountability.',
+    description:
+      "The city's law enforcement trying to maintain order in an age of powered individuals",
+    ideology:
+      "Uphold the law, protect citizens, maintain civil order. Deeply conflicted about vigilantes - grateful for help but concerned about accountability.",
     alignment: 'lawful',
     morality: 'good',
+    isPlayable: false,
+    category: 'institution',
+    canControlDistricts: false,
     startingReputation: 0,
     values: [
       'rule of law',
@@ -93,7 +104,8 @@ export const factions: Faction[] = [
     allies: ['city_government'],
     rivals: ['vigilante_network'],
     enemies: ['syndicate', 'black_market'],
-    recruitmentPitch: 'Work with us officially. Get a badge, follow the rules, and we can do real good together.',
+    recruitmentPitch:
+      "Work with us officially. Get a badge, follow the rules, and we can do real good together.",
     reputationDescriptors: {
       veryNegative: 'Wanted criminal - shoot on sight',
       negative: 'Known troublemaker - under surveillance',
@@ -107,46 +119,46 @@ export const factions: Faction[] = [
     id: 'syndicate',
     name: 'The Syndicate',
     shortName: 'Syndicate',
-    description: 'Organized crime network that has adapted to the age of powers, recruiting powered enforcers',
-    ideology: 'Power and profit above all. Laws are for the weak. The strong take what they want.',
+    description:
+      'Organized crime network that has adapted to the age of powers, recruiting powered enforcers',
+    ideology:
+      'Power and profit above all. Laws are for the weak. The strong take what they want.',
     alignment: 'chaotic',
     morality: 'evil',
+    isPlayable: true,
+    category: 'power',
+    canControlDistricts: true,
     startingReputation: 0,
-    values: [
-      'profit',
-      'power',
-      'loyalty to the organization',
-      'fear and respect',
-      'territory control'
-    ],
-    opposedTo: ['law_enforcement', 'heroes', 'rival_gangs', 'snitches'],
+    values: ['profit', 'power', 'loyalty to the organization', 'fear and respect', 'territory control'],
+    opposedTo: ['law_enforcement', 'vigilantes', 'competition', 'betrayal'],
     goals: [
-      'expand criminal empire',
-      'control powered individuals',
-      'eliminate competition',
-      'corrupt officials'
+      'expand criminal operations',
+      'control key districts',
+      'eliminate rival organizations',
+      'corrupt institutions'
     ],
     responseThresholds: {
       hostile: -30,
       suspicious: -10,
-      neutral: 10,
-      friendly: 40,
-      allied: 70
+      neutral: 0,
+      friendly: 25,
+      allied: 55
     },
     encounterLikelihood: 0.6,
-    powerLevel: 6,
-    territories: ['industrial_district', 'docks', 'red_light_district', 'slums'],
-    resources: ['money', 'weapons', 'safe_houses', 'informants', 'black_market'],
-    allies: ['black_market'],
-    rivals: ['street_gangs', 'metro_police'],
-    enemies: ['metro_police', 'guardian_initiative'],
-    recruitmentPitch: 'You got power. We got money and connections. Together we can own this city.',
+    powerLevel: 7,
+    territories: ['industrial_zone', 'docklands', 'underground_markets'],
+    resources: ['money', 'weapons', 'information', 'corrupt_contacts'],
+    allies: ['black_market', 'street_gangs'],
+    rivals: ['guardian_initiative'],
+    enemies: ['metro_police', 'vigilante_network'],
+    recruitmentPitch:
+      'You have power. We have opportunities. Join us and take what you deserve.',
     reputationDescriptors: {
-      veryNegative: 'Traitor - marked for death',
-      negative: 'Problem - needs handling',
-      neutral: 'Unknown variable',
-      positive: 'Useful asset',
-      veryPositive: 'Made member - one of us'
+      veryNegative: 'Marked for elimination',
+      negative: 'Not trusted - watched closely',
+      neutral: 'Potential asset',
+      positive: 'Reliable associate',
+      veryPositive: 'Made member - protected'
     }
   },
 
@@ -154,46 +166,52 @@ export const factions: Faction[] = [
     id: 'guardian_initiative',
     name: 'The Guardian Initiative',
     shortName: 'Guardians',
-    description: 'Government-sanctioned superhero team with official authority and resources',
-    ideology: 'With great power comes great responsibility. We use our gifts to protect those who cannot protect themselves, operating within the law.',
+    description:
+      'Government-backed organization of registered powered individuals dedicated to public safety',
+    ideology:
+      'With great power comes great responsibility. Powered individuals must be accountable and serve the public good.',
     alignment: 'lawful',
     morality: 'good',
+    isPlayable: true,
+    category: 'power',
+    canControlDistricts: true,
     startingReputation: 0,
     values: [
-      'heroism',
-      'self-sacrifice',
-      'teamwork',
       'public service',
-      'oversight and accountability'
+      'accountability',
+      'teamwork',
+      'transparency',
+      'protecting the innocent'
     ],
-    opposedTo: ['vigilantism', 'villain_organizations', 'chaos', 'abuse_of_power'],
+    opposedTo: ['vigilante_justice', 'crime', 'corruption', 'recklessness'],
     goals: [
-      'respond to major threats',
-      'mentor new heroes',
-      'maintain public trust in powered individuals',
-      'prevent powered conflicts'
+      'protect civilians',
+      'maintain order',
+      'regulate powered activity',
+      'build public trust in heroes'
     ],
     responseThresholds: {
-      hostile: -50,
-      suspicious: -20,
+      hostile: -35,
+      suspicious: -10,
       neutral: 0,
       friendly: 35,
-      allied: 65
+      allied: 70
     },
-    encounterLikelihood: 0.4,
+    encounterLikelihood: 0.5,
     powerLevel: 8,
-    territories: ['city_center', 'guardian_hq', 'public_events'],
-    resources: ['advanced_tech', 'government_backing', 'training_facilities', 'intel_network'],
-    allies: ['metro_police', 'city_government'],
+    territories: ['government_quarter', 'downtown', 'residential_areas'],
+    resources: ['training', 'technology', 'government_support', 'public_relations'],
+    allies: ['city_government', 'metro_police'],
     rivals: ['vigilante_network'],
     enemies: ['syndicate', 'nihilist_collective'],
-    recruitmentPitch: 'You have potential. Train with us, join the team, become a real hero.',
+    recruitmentPitch:
+      'Register your abilities. Train with us. Be the hero this city needs - the right way.',
     reputationDescriptors: {
-      veryNegative: 'Villain - priority threat',
-      negative: 'Dangerous individual - monitoring',
-      neutral: 'Unaffiliated powered person',
-      positive: 'Potential recruit - promising',
-      veryPositive: 'Guardian member - trusted ally'
+      veryNegative: 'Threat to public safety',
+      negative: 'Unreliable and suspicious',
+      neutral: 'Unregistered but monitored',
+      positive: 'Trusted ally',
+      veryPositive: 'Recognized Guardian'
     }
   },
 
@@ -201,46 +219,46 @@ export const factions: Faction[] = [
     id: 'vigilante_network',
     name: 'The Vigilante Network',
     shortName: 'Vigilantes',
-    description: 'Loose collective of independent heroes who reject official oversight',
-    ideology: 'The system is too slow, too corrupt. Real justice requires getting your hands dirty. No badges, no bureaucracy, just results.',
-    alignment: 'chaotic',
+    description:
+      'Loose coalition of independent heroes who operate outside official channels',
+    ideology:
+      'The system is broken. Justice can’t wait for paperwork. Real change requires direct action.',
+    alignment: 'neutral',
     morality: 'good',
-    startingReputation: 10,
-    values: [
-      'street justice',
-      'protecting the little guy',
-      'independence',
-      'direct action',
-      'freedom from oversight'
-    ],
-    opposedTo: ['government_control', 'corruption', 'organized_crime', 'bureaucracy'],
+    isPlayable: true,
+    category: 'power',
+    canControlDistricts: true,
+    startingReputation: 0,
+    values: ['justice', 'freedom', 'protecting the weak', 'direct action', 'community trust'],
+    opposedTo: ['bureaucracy', 'corruption', 'organized_crime', 'authoritarian_control'],
     goals: [
-      'protect neighborhoods directly',
-      'fight crime without red tape',
+      'stop criminals that slip through the system',
       'expose corruption',
-      'maintain independence'
+      'protect neighborhoods',
+      'build grassroots support'
     ],
     responseThresholds: {
-      hostile: -40,
+      hostile: -35,
       suspicious: -10,
-      neutral: 5,
-      friendly: 25,
-      allied: 55
+      neutral: 0,
+      friendly: 30,
+      allied: 65
     },
-    encounterLikelihood: 0.5,
-    powerLevel: 5,
-    territories: ['slums', 'residential_areas', 'subway_system', 'rooftops'],
-    resources: ['local_knowledge', 'safe_houses', 'community_support', 'guerrilla_tactics'],
+    encounterLikelihood: 0.55,
+    powerLevel: 7,
+    territories: ['residential_areas', 'slums', 'downtown_rooftops'],
+    resources: ['local_contacts', 'safe_houses', 'street_intel', 'improvised_gear'],
     allies: ['civilian_population'],
-    rivals: ['guardian_initiative', 'metro_police'],
-    enemies: ['syndicate', 'corrupt_officials'],
-    recruitmentPitch: 'The badges and the official "heroes" don\'t care about these streets. But we do. Join us.',
+    rivals: ['metro_police', 'guardian_initiative'],
+    enemies: ['syndicate', 'nihilist_collective'],
+    recruitmentPitch:
+      'Forget the red tape. Help people now. Join the network and make a difference where it matters.',
     reputationDescriptors: {
-      veryNegative: 'Sellout - not welcome here',
-      negative: 'Suspicious - probably a plant',
-      neutral: 'New face on the streets',
-      positive: 'Good people - one of us',
-      veryPositive: 'Street legend - respected ally'
+      veryNegative: 'Dangerous rogue vigilante',
+      negative: 'Reckless and untrusted',
+      neutral: 'Independent operator',
+      positive: 'Reliable street hero',
+      veryPositive: 'Legend of the streets'
     }
   },
 
@@ -248,45 +266,45 @@ export const factions: Faction[] = [
     id: 'civilian_population',
     name: 'Civilian Population',
     shortName: 'Civilians',
-    description: 'Ordinary citizens trying to live their lives amid powered conflicts',
-    ideology: 'We just want to be safe. Some powered people help us, some hurt us. We remember both.',
+    description:
+      'The ordinary people of Metro City, caught between heroes, villains, and institutions',
+    ideology:
+      'We just want to live our lives safely. Heroes should protect us, not bring more danger.',
     alignment: 'neutral',
-    morality: 'neutral',
+    morality: 'good',
+    isPlayable: false,
+    category: 'ambient',
+    canControlDistricts: false,
     startingReputation: 0,
-    values: [
-      'personal safety',
-      'family protection',
-      'normal life',
-      'peace and stability'
-    ],
-    opposedTo: ['collateral_damage', 'powered_conflicts', 'fear', 'chaos'],
+    values: ['safety', 'stability', 'fairness', 'community', 'hope'],
+    opposedTo: ['collateral_damage', 'fear', 'oppression', 'crime'],
     goals: [
-      'survive',
-      'protect loved ones',
-      'return to normalcy',
-      'feel safe again'
+      'survive daily life',
+      'feel protected',
+      'avoid becoming targets',
+      'support those who help'
     ],
     responseThresholds: {
-      hostile: -60,
-      suspicious: -25,
+      hostile: -40,
+      suspicious: -15,
       neutral: 0,
       friendly: 25,
-      allied: 60
+      allied: 55
     },
     encounterLikelihood: 0.8,
     powerLevel: 1,
-    territories: ['everywhere'],
-    resources: ['information', 'shelter', 'gratitude', 'votes'],
-    allies: [],
+    territories: ['residential_areas', 'downtown', 'slums'],
+    resources: ['public_opinion', 'community_support', 'votes', 'word_of_mouth'],
+    allies: ['media_corporations'],
     rivals: [],
-    enemies: [],
-    recruitmentPitch: 'Please... just keep us safe.',
+    enemies: ['syndicate', 'nihilist_collective'],
+    recruitmentPitch: undefined,
     reputationDescriptors: {
-      veryNegative: 'Menace - feared and hated',
-      negative: 'Dangerous - avoid if possible',
-      neutral: 'Unknown powered individual',
-      positive: 'Hero - thanked and praised',
-      veryPositive: 'Beloved protector - celebrated'
+      veryNegative: 'Feared menace',
+      negative: 'Not welcome here',
+      neutral: 'Just another powered person',
+      positive: 'Local protector',
+      veryPositive: 'Beloved hero'
     }
   },
 
@@ -294,46 +312,45 @@ export const factions: Faction[] = [
     id: 'black_market',
     name: 'Black Market Network',
     shortName: 'Black Market',
-    description: 'Underground traders dealing in powered-related goods, tech, and information',
-    ideology: 'Everything has a price. No questions asked, no judgment passed. We provide what others won\'t.',
-    alignment: 'neutral',
+    description:
+      'Underground network of smugglers, fence operators, and illicit tech dealers',
+    ideology:
+      'Everything has a price. Laws are just obstacles. Information and goods should flow freely - to those who can pay.',
+    alignment: 'chaotic',
     morality: 'neutral',
+    isPlayable: false,
+    category: 'ambient',
+    canControlDistricts: false,
     startingReputation: 0,
-    values: [
-      'profit',
-      'discretion',
-      'neutrality',
-      'customer service',
-      'information brokering'
-    ],
-    opposedTo: ['law_enforcement_raids', 'competition', 'snitches', 'price_undercutting'],
+    values: ['profit', 'secrecy', 'connections', 'opportunity', 'leverage'],
+    opposedTo: ['law_enforcement', 'regulation', 'exposure', 'monopolies'],
     goals: [
-      'maximize profit',
+      'move illegal goods',
+      'sell powered tech',
       'maintain secrecy',
-      'expand network',
-      'avoid major heat'
+      'profit from chaos'
     ],
     responseThresholds: {
-      hostile: -50,
-      suspicious: -15,
+      hostile: -30,
+      suspicious: -10,
       neutral: 0,
-      friendly: 30,
-      allied: 65
+      friendly: 25,
+      allied: 55
     },
-    encounterLikelihood: 0.3,
-    powerLevel: 3,
-    territories: ['underground_markets', 'docks', 'hidden_locations'],
-    resources: ['rare_items', 'intel', 'connections', 'tech', 'contraband'],
-    allies: ['syndicate'],
-    rivals: ['metro_police'],
-    enemies: [],
-    recruitmentPitch: 'You need something? We got it. You got something? We\'ll buy it. Simple business.',
+    encounterLikelihood: 0.45,
+    powerLevel: 5,
+    territories: ['docklands', 'industrial_zone', 'underground_markets'],
+    resources: ['contraband', 'weapons', 'illegal_tech', 'contacts'],
+    allies: ['syndicate', 'street_gangs'],
+    rivals: [],
+    enemies: ['metro_police', 'guardian_initiative'],
+    recruitmentPitch: undefined,
     reputationDescriptors: {
-      veryNegative: 'Blacklisted - no service',
-      negative: 'Risky customer - cash upfront',
-      neutral: 'Potential customer',
-      positive: 'Valued client - special access',
-      veryPositive: 'VIP - exclusive deals'
+      veryNegative: 'Marked buyer - do not sell',
+      negative: 'Not trusted',
+      neutral: 'Customer',
+      positive: 'Preferred customer',
+      veryPositive: 'Inner circle broker'
     }
   },
 
@@ -341,46 +358,46 @@ export const factions: Faction[] = [
     id: 'nihilist_collective',
     name: 'The Nihilist Collective',
     shortName: 'Nihilists',
-    description: 'Powered individuals who believe the old world must burn for a new one to rise',
-    ideology: 'Society is a lie. Laws are chains. We will tear it all down and rebuild from the ashes. Chaos is the only truth.',
+    description:
+      'A destructive movement that believes the city deserves collapse and rebirth through chaos',
+    ideology:
+      'Order is a lie. Heroes are a mask. The city must burn so something real can rise from the ashes.',
     alignment: 'chaotic',
     morality: 'evil',
-    startingReputation: -20,
-    values: [
-      'destruction of the old order',
-      'absolute freedom',
-      'chaos as liberation',
-      'power without restraint',
-      'philosophical purity'
-    ],
-    opposedTo: ['all_authority', 'structure', 'society', 'rules', 'peace'],
+    isPlayable: true,
+    category: 'power',
+    canControlDistricts: true,
+    startingReputation: 0,
+    values: ['chaos', 'destruction', 'freedom from systems', 'fear', 'ideological purity'],
+    opposedTo: ['law', 'heroes', 'stability', 'institutions', 'hope'],
     goals: [
-      'destabilize society',
-      'recruit disillusioned powered individuals',
-      'perform spectacular attacks',
-      'prove superiority of chaos'
+      'destabilize districts',
+      'destroy symbols of order',
+      'recruit the disillusioned',
+      'accelerate city collapse'
     ],
     responseThresholds: {
       hostile: -20,
-      suspicious: 0,
-      neutral: 20,
-      friendly: 50,
-      allied: 80
+      suspicious: -5,
+      neutral: 0,
+      friendly: 20,
+      allied: 45
     },
-    encounterLikelihood: 0.3,
-    powerLevel: 7,
-    territories: ['abandoned_areas', 'ruins', 'underground', 'chaos_zones'],
-    resources: ['ideology', 'fearlessness', 'unpredictability', 'powerful_members'],
+    encounterLikelihood: 0.35,
+    powerLevel: 9,
+    territories: ['slums', 'abandoned_zones', 'industrial_zone'],
+    resources: ['fear', 'fanatics', 'improvised_weapons', 'sabotage'],
     allies: [],
-    rivals: ['everyone'],
-    enemies: ['guardian_initiative', 'metro_police', 'city_government', 'syndicate'],
-    recruitmentPitch: 'You feel it too, don\'t you? The chains. The lies. Join us and be truly free.',
+    rivals: ['syndicate'],
+    enemies: ['guardian_initiative', 'metro_police', 'vigilante_network', 'civilian_population'],
+    recruitmentPitch:
+      'You see the truth. The city is rotten. Help us tear it down and build something honest.',
     reputationDescriptors: {
-      veryNegative: 'Slave to the system - pathetic',
-      negative: 'Still shackled - disappointing',
-      neutral: 'Potential for awakening',
-      positive: 'Seeing the truth - promising',
-      veryPositive: 'Enlightened - one of us'
+      veryNegative: 'Target for ritual elimination',
+      negative: 'Not trusted',
+      neutral: 'Useful chaos',
+      positive: 'True believer',
+      veryPositive: 'Chosen destroyer'
     }
   },
 
@@ -388,46 +405,45 @@ export const factions: Faction[] = [
     id: 'city_government',
     name: 'City Government',
     shortName: 'City Hall',
-    description: 'Political leadership struggling to maintain control in the powered age',
-    ideology: 'We must balance public safety with civil liberties, manage powered individuals without persecution, and maintain order without tyranny.',
+    description:
+      'Elected officials and bureaucrats balancing public safety, public opinion, and political power',
+    ideology:
+      'Maintain governance, avoid panic, preserve legitimacy. Control the narrative and the budget.',
     alignment: 'lawful',
     morality: 'neutral',
+    isPlayable: false,
+    category: 'institution',
+    canControlDistricts: false,
     startingReputation: 0,
-    values: [
-      'political stability',
-      'public safety',
-      'economic prosperity',
-      're-election',
-      'managing powered individuals'
-    ],
-    opposedTo: ['anarchy', 'uncontrolled_powered_activity', 'negative_publicity', 'riots'],
+    values: ['stability', 'legitimacy', 'order', 'political capital', 'control'],
+    opposedTo: ['public_panic', 'scandals', 'uncontrolled_power', 'anarchy'],
     goals: [
-      'regulate powered individuals',
-      'maintain public confidence',
-      'prevent disasters',
-      'stay in power'
+      'keep the city running',
+      'prevent mass unrest',
+      'contain powered conflict',
+      'maintain authority'
     ],
     responseThresholds: {
-      hostile: -45,
-      suspicious: -20,
+      hostile: -35,
+      suspicious: -10,
       neutral: 0,
-      friendly: 35,
-      allied: 70
+      friendly: 25,
+      allied: 55
     },
-    encounterLikelihood: 0.2,
-    powerLevel: 2,
-    territories: ['government_quarter', 'city_hall', 'official_events'],
-    resources: ['legal_authority', 'budgets', 'policies', 'media_access', 'bureaucracy'],
+    encounterLikelihood: 0.25,
+    powerLevel: 3,
+    territories: ['government_quarter', 'downtown'],
+    resources: ['permits', 'funding', 'laws', 'influence'],
     allies: ['metro_police', 'guardian_initiative'],
-    rivals: ['vigilante_network'],
+    rivals: ['media_corporations'],
     enemies: ['nihilist_collective', 'syndicate'],
-    recruitmentPitch: 'We need someone like you working with us, not against us. Official sanction, resources, legitimacy.',
+    recruitmentPitch: undefined,
     reputationDescriptors: {
-      veryNegative: 'Public enemy - wanted',
-      negative: 'Problematic individual - under investigation',
-      neutral: 'Unregistered powered citizen',
-      positive: 'Cooperative asset - valued',
-      veryPositive: 'Official hero - city resource'
+      veryNegative: 'Declared enemy of the state',
+      negative: 'Political liability',
+      neutral: 'Unregistered factor',
+      positive: 'Trusted asset',
+      veryPositive: 'City-backed operative'
     }
   },
 
@@ -435,45 +451,44 @@ export const factions: Faction[] = [
     id: 'street_gangs',
     name: 'Street Gangs',
     shortName: 'Gangs',
-    description: 'Small-time criminals trying to survive while bigger players fight above them',
-    ideology: 'This is our turf. We take care of our own. The Syndicate wants to control us, cops want to arrest us, heroes ignore us.',
+    description:
+      'Fragmented neighborhood crews fighting over turf, protection, and respect in the shadows of bigger powers',
+    ideology:
+      'Survive your block. Earn respect. Take what you can and defend what’s yours.',
     alignment: 'chaotic',
     morality: 'neutral',
+    isPlayable: false,
+    category: 'ambient',
+    canControlDistricts: false,
     startingReputation: 0,
-    values: [
-      'territory',
-      'respect',
-      'survival',
-      'independence',
-      'street code'
-    ],
-    opposedTo: ['syndicate_control', 'police', 'outsiders', 'disrespect'],
+    values: ['respect', 'turf', 'survival', 'loyalty', 'fear'],
+    opposedTo: ['outsiders', 'betrayal', 'police', 'rival_crews'],
     goals: [
-      'control territory',
-      'make money',
-      'resist Syndicate takeover',
-      'survive'
+      'hold neighborhood turf',
+      'profit from protection',
+      'avoid being crushed by major factions',
+      'gain local influence'
     ],
     responseThresholds: {
       hostile: -35,
       suspicious: -10,
-      neutral: 5,
-      friendly: 30,
-      allied: 60
+      neutral: 0,
+      friendly: 20,
+      allied: 45
     },
     encounterLikelihood: 0.6,
-    powerLevel: 3,
-    territories: ['slums', 'specific_neighborhoods', 'back_alleys', 'gang_territory'],
-    resources: ['local_knowledge', 'numbers', 'desperation', 'street_contacts'],
-    allies: [],
-    rivals: ['syndicate', 'other_gangs'],
-    enemies: ['metro_police'],
-    recruitmentPitch: 'You help us, we help you. Simple as that. These streets respect power.',
+    powerLevel: 4,
+    territories: ['slums', 'industrial_zone', 'docklands'],
+    resources: ['numbers', 'local_intel', 'turf', 'petty_crime'],
+    allies: ['black_market'],
+    rivals: [],
+    enemies: ['metro_police', 'guardian_initiative'],
+    recruitmentPitch: undefined,
     reputationDescriptors: {
-      veryNegative: 'Enemy - kill on sight',
-      negative: 'Not welcome here - get lost',
-      neutral: 'Outsider - prove yourself',
-      positive: 'Cool with us - got our back',
+      veryNegative: 'Marked for a beating',
+      negative: 'Not welcome',
+      neutral: 'Outsider',
+      positive: 'Respect earned',
       veryPositive: 'One of us - family'
     }
   },
@@ -482,142 +497,93 @@ export const factions: Faction[] = [
     id: 'media_corporations',
     name: 'Media Corporations',
     shortName: 'The Media',
-    description: 'News networks and social media companies that shape public perception of powered individuals',
-    ideology: 'The narrative is power. We decide who\'s a hero and who\'s a villain. We create stars and destroy reputations.',
+    description:
+      'News networks and social media companies that shape public perception of powered individuals',
+    ideology:
+      "The narrative is power. We decide who's a hero and who's a villain. We create stars and destroy reputations.",
     alignment: 'neutral',
     morality: 'neutral',
+    isPlayable: false,
+    category: 'institution',
+    canControlDistricts: false,
     startingReputation: 0,
-    values: [
-      'ratings',
-      'narratives',
-      'exclusives',
-      'influence',
-      'sensationalism'
-    ],
-    opposedTo: ['boring_stories', 'media_blackouts', 'competition', 'obscurity'],
+    values: ['attention', 'stories', 'ratings', 'influence', 'access'],
+    opposedTo: ['secrecy', 'boring_truth', 'being_controlled', 'censorship'],
     goals: [
-      'get the story',
-      'shape public opinion',
-      'maximize viewership',
-      'maintain access'
+      'shape public perception',
+      'increase engagement',
+      'control the story of the city',
+      'gain access to powerful figures'
     ],
     responseThresholds: {
-      hostile: -40,
-      suspicious: -15,
+      hostile: -35,
+      suspicious: -10,
       neutral: 0,
       friendly: 25,
       allied: 55
     },
     encounterLikelihood: 0.4,
     powerLevel: 2,
-    territories: ['everywhere_with_cameras', 'media_hq', 'major_events'],
-    resources: ['publicity', 'narrative_control', 'information', 'cameras'],
-    allies: ['city_government'],
-    rivals: ['anyone_avoiding_publicity'],
-    enemies: [],
-    recruitmentPitch: 'An exclusive interview. Your side of the story. We can make you a household name.',
+    territories: ['downtown', 'commercial_district', 'government_quarter'],
+    resources: ['public_opinion', 'platforms', 'investigations', 'spin'],
+    allies: ['civilian_population'],
+    rivals: ['city_government'],
+    enemies: ['nihilist_collective', 'syndicate'],
+    recruitmentPitch: undefined,
     reputationDescriptors: {
-      veryNegative: 'Villain - we made you infamous',
-      negative: 'Controversial figure - ratings gold',
-      neutral: 'Unknown - not newsworthy yet',
-      positive: 'Rising star - cover story material',
-      veryPositive: 'Beloved icon - ratings gold'
+      veryNegative: 'Public enemy - media crusade',
+      negative: 'Bad press magnet',
+      neutral: 'On the radar',
+      positive: 'Favorable coverage',
+      veryPositive: 'Media darling'
     }
   }
 ]
 
-// === HELPER FUNCTIONS ===
+// Convenience subsets
+export const playableFactions = factions.filter(f => f.isPlayable)
+export const controllableFactions = factions.filter(f => f.canControlDistricts)
+export const npcFactions = factions.filter(f => !f.isPlayable)
 
 export function getFactionById(id: string): Faction | undefined {
   return factions.find(f => f.id === id)
 }
 
-export function getFactionsByAlignment(alignment: FactionAlignment): Faction[] {
-  return factions.filter(f => f.alignment === alignment)
-}
+export type FactionAttitudeLevel =
+  | 'hostile'
+  | 'suspicious'
+  | 'neutral'
+  | 'friendly'
+  | 'allied'
 
-export function getFactionsByMorality(morality: FactionMorality): Faction[] {
-  return factions.filter(f => f.morality === morality)
-}
-
-export function getAttitudeLevel(faction: Faction, reputation: number): string {
-  if (reputation <= faction.responseThresholds.hostile) return 'hostile'
-  if (reputation <= faction.responseThresholds.suspicious) return 'suspicious'
-  if (reputation <= faction.responseThresholds.neutral) return 'neutral'
-  if (reputation <= faction.responseThresholds.friendly) return 'friendly'
+export function getAttitudeLevel(
+  faction: Faction,
+  reputation: number
+): FactionAttitudeLevel {
+  const t = faction.responseThresholds
+  if (reputation <= t.hostile) return 'hostile'
+  if (reputation <= t.suspicious) return 'suspicious'
+  if (reputation <= t.neutral) return 'neutral'
+  if (reputation <= t.friendly) return 'friendly'
   return 'allied'
 }
 
-export function getReputationDescriptor(faction: Faction, reputation: number): string {
-  if (reputation <= -60) return faction.reputationDescriptors.veryNegative
-  if (reputation <= -20) return faction.reputationDescriptors.negative
-  if (reputation <= 19) return faction.reputationDescriptors.neutral
-  if (reputation <= 59) return faction.reputationDescriptors.positive
-  return faction.reputationDescriptors.veryPositive
-}
-
-export function getFactionsInTerritory(territory: string): Faction[] {
-  return factions.filter(f => 
-    f.territories.includes(territory) || f.territories.includes('everywhere')
-  )
-}
-
-export function getHostileFactions(playerReputations: Record<string, number>): Faction[] {
-  return factions.filter(f => {
-    const rep = playerReputations[f.id] || 0
-    return rep <= f.responseThresholds.hostile
-  })
-}
-
-export function getFriendlyFactions(playerReputations: Record<string, number>): Faction[] {
-  return factions.filter(f => {
-    const rep = playerReputations[f.id] || f.startingReputation
-    return rep >= f.responseThresholds.friendly
-  })
-}
-
-export function getConflictingFactions(faction: Faction): Faction[] {
-  const conflictIds = [...faction.rivals, ...faction.enemies]
-  return factions.filter(f => conflictIds.includes(f.id))
-}
-
-export function getAlliedFactions(faction: Faction): Faction[] {
-  return factions.filter(f => faction.allies.includes(f.id))
-}
-
-export function calculateReputationImpact(
-  baseFaction: Faction,
-  reputationChange: number,
-  allReputations: Record<string, number>
-): Record<string, number> {
-  const impacts: Record<string, number> = {
-    [baseFaction.id]: reputationChange
-  }
-  
-  // Allied factions get 25% of positive changes
-  if (reputationChange > 0) {
-    baseFaction.allies.forEach(allyId => {
-      impacts[allyId] = Math.floor(reputationChange * 0.25)
-    })
-  }
-  
-  // Enemy factions get opposite reaction (50% inverse)
-  baseFaction.enemies.forEach(enemyId => {
-    impacts[enemyId] = Math.floor(reputationChange * -0.5)
-  })
-  
-  // Rival factions get smaller opposite reaction (25% inverse)
-  baseFaction.rivals.forEach(rivalId => {
-    impacts[rivalId] = Math.floor(reputationChange * -0.25)
-  })
-  
-  return impacts
+export function getReputationDescriptor(
+  faction: Faction,
+  reputation: number
+): string {
+  const d = faction.reputationDescriptors
+  if (reputation <= -60) return d.veryNegative
+  if (reputation <= -20) return d.negative
+  if (reputation < 20) return d.neutral
+  if (reputation < 60) return d.positive
+  return d.veryPositive
 }
 
 export type PlayerFactionReputation = {
   factionId: string
   reputation: number
-  attitudeLevel: string
+  attitudeLevel: FactionAttitudeLevel
   descriptor: string
 }
 
@@ -629,11 +595,74 @@ export function getPlayerFactionStatus(
   if (!faction) {
     throw new Error(`Faction ${factionId} not found`)
   }
-  
+
   return {
     factionId,
     reputation,
     attitudeLevel: getAttitudeLevel(faction, reputation),
     descriptor: getReputationDescriptor(faction, reputation)
   }
+}
+
+/**
+ * Calculate cascading reputation changes when a faction's reputation changes.
+ * Allied factions gain a fraction of positive changes.
+ * Enemy factions lose reputation when you gain with their enemies.
+ *
+ * @param faction - The faction whose reputation changed
+ * @param change - The raw reputation change amount
+ * @param currentReputations - Current reputation values by faction ID
+ * @returns Record of faction IDs to their cascade change amounts
+ */
+export function calculateReputationImpact(
+  faction: Faction,
+  change: number,
+  _currentReputations: Record<string, number>
+): Record<string, number> {
+  const cascadeChanges: Record<string, number> = {}
+
+  // Always include the direct change
+  cascadeChanges[faction.id] = change
+
+  // Cascade multipliers
+  const ALLY_MULTIPLIER = 0.25 // Allies get 25% of positive changes
+  const RIVAL_MULTIPLIER = -0.15 // Rivals get inverse 15% of changes
+  const ENEMY_MULTIPLIER = -0.25 // Enemies get inverse 25% of changes
+
+  // Positive reputation change: allies benefit slightly
+  if (change > 0) {
+    for (const allyId of faction.allies) {
+      const ally = getFactionById(allyId)
+      if (ally) {
+        const allyChange = Math.round(change * ALLY_MULTIPLIER)
+        if (allyChange !== 0) {
+          cascadeChanges[allyId] = (cascadeChanges[allyId] || 0) + allyChange
+        }
+      }
+    }
+  }
+
+  // Any change affects rivals inversely (smaller effect)
+  for (const rivalId of faction.rivals) {
+    const rival = getFactionById(rivalId)
+    if (rival) {
+      const rivalChange = Math.round(change * RIVAL_MULTIPLIER)
+      if (rivalChange !== 0) {
+        cascadeChanges[rivalId] = (cascadeChanges[rivalId] || 0) + rivalChange
+      }
+    }
+  }
+
+  // Any change affects enemies inversely (larger effect)
+  for (const enemyId of faction.enemies) {
+    const enemy = getFactionById(enemyId)
+    if (enemy) {
+      const enemyChange = Math.round(change * ENEMY_MULTIPLIER)
+      if (enemyChange !== 0) {
+        cascadeChanges[enemyId] = (cascadeChanges[enemyId] || 0) + enemyChange
+      }
+    }
+  }
+
+  return cascadeChanges
 }

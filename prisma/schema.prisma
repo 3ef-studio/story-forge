@@ -265,6 +265,22 @@ model Rival {
   @@map("rivals")
 }
 
+// District State (world map control per character)
+model DistrictState {
+  id                   String    @id @default(uuid()) @db.Uuid
+  characterId          String    @map("character_id") @db.Uuid
+  districtId           String    @map("district_id") // matches DistrictId from districts.ts
+  controllingFactionId String?   @map("controlling_faction_id") // only controllable factions or null
+  controlValue         Int       @default(50) @map("control_value") // 0-100
+  instability          Int       @default(0) // 0-100
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  @@unique([characterId, districtId])
+  @@index([characterId])
+  @@map("district_states")
+}
+
 // Encounter telemetry for balance + behavior analysis
 model EncounterRun {
   id                    String    @id @default(uuid()) @db.Uuid
