@@ -24,7 +24,7 @@ import type { Action } from '@/app/data/actions';
 import type { DistrictId } from '@/app/data/districts';
 import type { EncounterTemplate } from '@/app/data/encounter-templates';
 import { getLocationBackground } from '@/app/lib/game-logic/location-backgrounds';
-import { LogOut, User, HelpCircle, Menu, X, Sparkles, Trophy, ArrowUp, Users } from 'lucide-react';
+import { LogOut, User, HelpCircle, Menu, X, Sparkles, Trophy, ArrowUp, Users, MapIcon } from 'lucide-react';
 import { previewEncounterResolution, inferApproachFromText, resolveGambitFromPreview, assignDistinctGambits } from '@/app/lib/game-logic/combat/resolve-encounter';
 import type { ResolutionPreview, PrepSelection, GambitResult } from '@/app/lib/game-logic/combat/types';
 import { ConflictPane } from '@/app/components/game/ConflictPane';
@@ -964,8 +964,36 @@ export default function GamePage() {
         }
       }
 
-      // Show world update toast if district control shifted
-      if (data.worldUpdate) {
+      // Show world update toasts if district control shifted
+      if (data.worldUpdates && data.worldUpdates.length > 0) {
+        // Show toasts for each world update (primary, ripple, counter)
+        data.worldUpdates.forEach((wu: {
+          delta: number;
+          factionName: string;
+          districtName: string;
+          newControlValue: number;
+          reason: 'primary' | 'ripple' | 'counter';
+        }, index: number) => {
+          const deltaSign = wu.delta > 0 ? '+' : '';
+          let title = 'District Control Shift';
+          if (wu.reason === 'ripple') {
+            title = 'Ripple Effect';
+          } else if (wu.reason === 'counter') {
+            title = 'Counter-Move';
+          }
+
+          // Stagger the toasts slightly for visual effect
+          setTimeout(() => {
+            addToast({
+              type: wu.reason === 'counter' ? 'warning' : 'info',
+              title,
+              message: `${deltaSign}${wu.delta} for ${wu.factionName} in ${wu.districtName} (now ${wu.newControlValue}%)`,
+              duration: 4000,
+            });
+          }, index * 500);
+        });
+      } else if (data.worldUpdate) {
+        // Fallback for backwards compatibility
         const wu = data.worldUpdate;
         const deltaSign = wu.delta > 0 ? '+' : '';
         addToast({
@@ -1224,6 +1252,15 @@ export default function GamePage() {
             <Button
               size="sm"
               variant="ghost"
+              onClick={() => router.push('/map')}
+              className="hidden sm:flex text-white/70 hover:text-white hover:bg-white/10"
+            >
+              <MapIcon className="h-4 w-4 mr-1" />
+              Map
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
               onClick={() => router.push('/help')}
               className="hidden sm:flex text-white/70 hover:text-white hover:bg-white/10"
             >
@@ -1277,6 +1314,17 @@ export default function GamePage() {
           >
             <Users className="h-4 w-4 mr-2" />
             Contacts
+          </Button>
+          <Button
+            variant="ghost"
+            className="w-full justify-start text-white/70 hover:text-white hover:bg-white/10"
+            onClick={() => {
+              router.push('/map');
+              setMobileMenuOpen(false);
+            }}
+          >
+            <MapIcon className="h-4 w-4 mr-2" />
+            Map
           </Button>
           <Button
             variant="ghost"

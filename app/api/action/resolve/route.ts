@@ -57,6 +57,11 @@ import {
   type EncounterOutcome,
   type WorldUpdateResult,
 } from '@/app/lib/game-logic/district-state';
+import {
+  applyWorldReactions,
+  type WorldReactionUpdate,
+  type WorldReactionsResult,
+} from '@/app/lib/world/applyWorldReactions';
 
 // Type for outcome result with optional fields
 type OutcomeResult = {
@@ -97,6 +102,57 @@ type RetreatResolution = {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+// Build combined world updates array for UI messaging
+type WorldUpdateEntry = {
+  districtId: string;
+  districtName: string;
+  delta: number;
+  previousControlValue: number;
+  newControlValue: number;
+  previousControllingFactionId: string | null;
+  controllingFactionId: string | null;
+  controllingFactionName: string | null;
+  reason: 'primary' | 'ripple' | 'counter';
+  factionId: string;
+  factionName: string;
+};
+
+function buildWorldUpdatesArray(
+  primaryUpdate: WorldUpdateResult | null,
+  reactions: WorldReactionsResult | null
+): WorldUpdateEntry[] | undefined {
+  const updates: WorldUpdateEntry[] = [];
+
+  // Add primary update
+  if (primaryUpdate) {
+    updates.push({
+      districtId: primaryUpdate.districtId,
+      districtName: primaryUpdate.districtName,
+      delta: primaryUpdate.delta,
+      previousControlValue: primaryUpdate.previousControlValue,
+      newControlValue: primaryUpdate.newControlValue,
+      previousControllingFactionId: primaryUpdate.previousControllingFactionId,
+      controllingFactionId: primaryUpdate.controllingFactionId,
+      controllingFactionName: primaryUpdate.controllingFactionName,
+      reason: 'primary',
+      factionId: primaryUpdate.factionId,
+      factionName: primaryUpdate.factionName,
+    });
+  }
+
+  // Add ripple update
+  if (reactions?.rippleUpdate) {
+    updates.push(reactions.rippleUpdate);
+  }
+
+  // Add counter update
+  if (reactions?.counterUpdate) {
+    updates.push(reactions.counterUpdate);
+  }
+
+  return updates.length > 0 ? updates : undefined;
 }
 
 async function handleRetreat(
@@ -1100,14 +1156,25 @@ export async function POST(request: Request) {
 
     // --- World State Update: update district control based on outcome ---
     let worldUpdate: WorldUpdateResult | null = null;
+    let worldReactions: WorldReactionsResult | null = null;
     try {
       const districtOutcome: EncounterOutcome = isSuccess ? 'success' : isPartial ? 'partial' : 'failure';
+
+      // PRIMARY district update (existing logic)
       worldUpdate = await updateDistrictStateFromEncounter(
         character.id,
         character.currentDistrict,
         character.factionId,
         districtOutcome
       );
+
+      // WORLD REACTIONS: ripple + counter-move (new additive step)
+      worldReactions = await applyWorldReactions({
+        characterId: character.id,
+        encounterDistrictId: character.currentDistrict,
+        playerFactionId: character.factionId,
+        outcome: districtOutcome,
+      });
     } catch (worldUpdateError) {
       // Fail-soft: log the error but don't break the game
       console.error('[WorldState] Failed to update district state:', worldUpdateError);
@@ -1241,6 +1308,8 @@ export async function POST(request: Request) {
       } : undefined,
       followUps: mergedFollowUps.length > 0 ? mergedFollowUps : undefined,
       worldUpdate: worldUpdate ?? undefined,
+      // Combined world updates array for UI messaging
+      worldUpdates: buildWorldUpdatesArray(worldUpdate, worldReactions),
     });
   } catch (error) {
     console.error('Encounter resolution error:', error);
