@@ -7,9 +7,9 @@ import { Badge } from '@/app/components/ui/badge';
 import { Progress } from '@/app/components/ui/progress';
 import { getOriginById } from '@/app/data/origins';
 import { getPowerById } from '@/app/data/powers';
-import { getFactionById, getAttitudeLevel, getReputationDescriptor } from '@/app/data/factions';
+import { getFactionById, getAttitudeLevel, getReputationDescriptor, controllableFactions } from '@/app/data/factions';
 import { getAttributeById } from '@/app/data/attributes';
-import { ArrowLeft, User, Zap, Users, ScrollText, Trash2 } from 'lucide-react';
+import { ArrowLeft, User, Zap, Users, ScrollText, Trash2, Shield, UserPlus, LogOut } from 'lucide-react';
 
 interface CharacterData {
   id: string;
@@ -26,6 +26,7 @@ interface CharacterData {
   attributes: Record<string, number>;
   powers: Array<{ powerId: string; level: number; xp: number; timesUsed: number }>;
   factions: Record<string, number>;
+  factionId: string | null;
   storyEvents: Array<{
     id: string;
     type: string;
@@ -41,6 +42,9 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [joiningFaction, setJoiningFaction] = useState(false);
+  const [leavingFaction, setLeavingFaction] = useState(false);
+  const [factionError, setFactionError] = useState<string | null>(null);
 
   const fetchCharacter = useCallback(async () => {
     try {
@@ -78,6 +82,52 @@ export default function ProfilePage() {
       console.error('Error deleting character:', err);
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleJoinFaction = async (factionId: string) => {
+    setJoiningFaction(true);
+    setFactionError(null);
+    try {
+      const response = await fetch('/api/character/faction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ factionId }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setFactionError(data.error || 'Failed to join faction');
+        return;
+      }
+      // Refresh character data
+      await fetchCharacter();
+    } catch (err) {
+      console.error('Error joining faction:', err);
+      setFactionError('Failed to join faction');
+    } finally {
+      setJoiningFaction(false);
+    }
+  };
+
+  const handleLeaveFaction = async () => {
+    setLeavingFaction(true);
+    setFactionError(null);
+    try {
+      const response = await fetch('/api/character/faction', {
+        method: 'DELETE',
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setFactionError(data.error || 'Failed to leave faction');
+        return;
+      }
+      // Refresh character data
+      await fetchCharacter();
+    } catch (err) {
+      console.error('Error leaving faction:', err);
+      setFactionError('Failed to leave faction');
+    } finally {
+      setLeavingFaction(false);
     }
   };
 
@@ -322,6 +372,81 @@ export default function ProfilePage() {
                   );
                 })}
             </div>
+          </div>
+        </div>
+
+        {/* Faction Membership */}
+        <div className="panel-glass rounded-2xl overflow-hidden">
+          <div className="p-4 sm:p-6">
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              Faction Membership
+            </h3>
+          </div>
+          <div className="px-4 sm:px-6 pb-5">
+            {factionError && (
+              <div className="mb-4 p-3 bg-red-500/15 border border-red-500/20 rounded-lg text-red-300 text-sm">
+                {factionError}
+              </div>
+            )}
+
+            {character.factionId ? (
+              <div className="space-y-4">
+                <div className="p-4 bg-blue-500/15 border border-blue-500/20 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-blue-300/70">Current Faction</p>
+                      <p className="text-lg font-semibold text-blue-200">
+                        {getFactionById(character.factionId)?.name ?? character.factionId}
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleLeaveFaction}
+                      disabled={leavingFaction}
+                      className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded-lg font-medium text-sm transition-colors flex items-center gap-2 border border-red-500/30 disabled:opacity-50"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      {leavingFaction ? 'Leaving...' : 'Leave Faction'}
+                    </button>
+                  </div>
+                </div>
+                <p className="text-sm text-white/50">
+                  As a faction member, your actions may affect district control and faction reputation.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <p className="text-white/70 mb-4">
+                  Join a faction to participate in the struggle for district control.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {controllableFactions.map((faction) => {
+                    const reputation = character.factions[faction.id] ?? 0;
+                    const attitude = getAttitudeLevel(faction, reputation);
+
+                    return (
+                      <button
+                        key={faction.id}
+                        onClick={() => handleJoinFaction(faction.id)}
+                        disabled={joiningFaction}
+                        className="p-4 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 rounded-lg text-left transition-all disabled:opacity-50 group"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-medium text-white group-hover:text-blue-300 transition-colors">
+                            {faction.name}
+                          </span>
+                          <UserPlus className="h-4 w-4 text-white/40 group-hover:text-blue-400 transition-colors" />
+                        </div>
+                        <p className="text-sm text-white/50 mb-2">{faction.shortName}</p>
+                        <div className="text-xs text-white/40">
+                          Your standing: <span className="capitalize">{attitude}</span> ({reputation > 0 ? '+' : ''}{reputation})
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

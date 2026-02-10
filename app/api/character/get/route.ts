@@ -179,6 +179,7 @@ export async function GET() {
         heat: character.heat ?? 0,
         actionCounter: character.actionCounter,
         followUps: parsePendingFollowUps(character.pendingFollowUps),
+        factionId: character.factionId,
       },
     });
   } catch (error) {

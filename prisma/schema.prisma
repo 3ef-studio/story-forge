@@ -46,6 +46,7 @@ model Character {
   leveragePosition            Int                  @default(0) @map("leverage_position")
   actionCounter               Int                  @default(0) @map("action_counter")
   heat                        Int                  @default(0)
+  factionId                   String?              @map("faction_id") // controllable faction membership
   pendingFollowUps            Json?                @map("pending_follow_ups") // FollowUpAction[]
   followUpHistory             Json?                @map("follow_up_history") // FollowUpHistory
   createdAt                   DateTime             @default(now()) @map("created_at")
