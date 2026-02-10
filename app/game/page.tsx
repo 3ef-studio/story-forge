@@ -963,6 +963,18 @@ export default function GamePage() {
           setTimeout(() => setCompletedGoals([]), 5000);
         }
       }
+
+      // Show world update toast if district control shifted
+      if (data.worldUpdate) {
+        const wu = data.worldUpdate;
+        const deltaSign = wu.delta > 0 ? '+' : '';
+        addToast({
+          type: 'info',
+          title: 'District Control Shift',
+          message: `${deltaSign}${wu.delta} for ${wu.factionName} in ${wu.districtName} (now ${wu.newControlValue}%)`,
+          duration: 4000,
+        });
+      }
     } catch (err) {
       console.error('Resolve error:', err);
       setError('An error occurred');

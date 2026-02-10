@@ -147,3 +147,155 @@ export function canFactionControlDistrict(factionId: string): boolean {
 export function getControllableFactionIds(): string[] {
   return controllableFactions.map(f => f.id);
 }
+
+// ============================================================
+// World State Updates from Encounters
+// ============================================================
+
+export type EncounterOutcome = 'success' | 'partial' | 'failure';
+
+export interface WorldUpdateResult {
+  districtId: string;
+  districtName: string;
+  factionId: string;
+  factionName: string;
+  delta: number;
+  previousControlValue: number;
+  newControlValue: number;
+  previousControllingFactionId: string | null;
+  controllingFactionId: string | null;
+  controllingFactionName: string | null;
+}
+
+/**
+ * Compute the control delta based on encounter outcome.
+ * Success: +10, Partial: +5, Failure: -10
+ */
+function getControlDelta(outcome: EncounterOutcome): number {
+  switch (outcome) {
+    case 'success':
+      return 10;
+    case 'partial':
+      return 5;
+    case 'failure':
+      return -10;
+  }
+}
+
+/**
+ * Determine controlling faction based on control value thresholds.
+ * >= 60: faction controls, <= 40: contested (null), otherwise unchanged
+ */
+function computeControllingFaction(
+  controlValue: number,
+  factionId: string,
+  currentControllingFactionId: string | null
+): string | null {
+  if (controlValue >= 60) {
+    return factionId;
+  }
+  if (controlValue <= 40) {
+    return null; // Contested
+  }
+  // In the middle zone (41-59), keep current controlling faction
+  return currentControllingFactionId;
+}
+
+/**
+ * Update district state after an encounter resolves.
+ *
+ * Called once after encounter resolution to update world state based on outcome.
+ *
+ * @param characterId - The character's ID (scope for district state)
+ * @param districtId - The district where the encounter took place
+ * @param factionId - The character's faction (null means no update)
+ * @param outcome - 'success', 'partial', or 'failure'
+ * @returns WorldUpdateResult or null if no update was made
+ */
+export async function updateDistrictStateFromEncounter(
+  characterId: string,
+  districtId: string,
+  factionId: string | null,
+  outcome: EncounterOutcome
+): Promise<WorldUpdateResult | null> {
+  // If character is not in a faction, no district control update
+  if (!factionId) {
+    return null;
+  }
+
+  // Validate faction can control districts
+  if (!canFactionControlDistrict(factionId)) {
+    console.warn(`[DistrictState] Faction ${factionId} cannot control districts`);
+    return null;
+  }
+
+  // Ensure district state exists (lazy init if needed)
+  let districtState = await prisma.districtState.findUnique({
+    where: {
+      characterId_districtId: { characterId, districtId },
+    },
+  });
+
+  // If no state exists, initialize all district states for this character
+  if (!districtState) {
+    await getDistrictStates(characterId); // This initializes if needed
+    districtState = await prisma.districtState.findUnique({
+      where: {
+        characterId_districtId: { characterId, districtId },
+      },
+    });
+  }
+
+  // If still no state (shouldn't happen), bail
+  if (!districtState) {
+    console.error(`[DistrictState] Failed to find/create state for district ${districtId}`);
+    return null;
+  }
+
+  // Calculate delta and new control value
+  const delta = getControlDelta(outcome);
+  const previousControlValue = districtState.controlValue;
+  const newControlValue = Math.max(0, Math.min(100, previousControlValue + delta));
+
+  // Determine new controlling faction
+  const previousControllingFactionId = districtState.controllingFactionId;
+  const newControllingFactionId = computeControllingFaction(
+    newControlValue,
+    factionId,
+    previousControllingFactionId
+  );
+
+  // Update the database
+  await prisma.districtState.update({
+    where: {
+      characterId_districtId: { characterId, districtId },
+    },
+    data: {
+      controlValue: newControlValue,
+      controllingFactionId: newControllingFactionId,
+    },
+  });
+
+  // Get display names for the response
+  const district = districts.find(d => d.id === districtId);
+  const faction = getFactionById(factionId);
+  const controllingFaction = newControllingFactionId ? getFactionById(newControllingFactionId) : null;
+
+  console.log(
+    `[DistrictState] ${district?.name ?? districtId}: ${previousControlValue}% → ${newControlValue}% (${delta > 0 ? '+' : ''}${delta}) | ` +
+    `Control: ${previousControllingFactionId ?? 'contested'} → ${newControllingFactionId ?? 'contested'}`
+  );
+
+  return {
+    districtId,
+    districtName: district?.name ?? districtId,
+    factionId,
+    factionName: faction?.name ?? factionId,
+    delta,
+    previousControlValue,
+    newControlValue,
+    previousControllingFactionId,
+    controllingFactionId: newControllingFactionId,
+    controllingFactionName: controllingFaction?.name ?? null,
+  };
+}

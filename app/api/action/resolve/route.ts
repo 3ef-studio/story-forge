@@ -52,6 +52,11 @@ import {
   type GambitOutcome as FollowUpGambitOutcome,
   type IntentHint,
 } from '@/app/lib/game-logic/follow-up-actions';
+import {
+  updateDistrictStateFromEncounter,
+  type EncounterOutcome,
+  type WorldUpdateResult,
+} from '@/app/lib/game-logic/district-state';
 
 // Type for outcome result with optional fields
 type OutcomeResult = {
@@ -1093,6 +1098,21 @@ export async function POST(request: Request) {
       console.error('[Telemetry] Failed to write EncounterRun:', telemetryError);
     }
 
+    // --- World State Update: update district control based on outcome ---
+    let worldUpdate: WorldUpdateResult | null = null;
+    try {
+      const districtOutcome: EncounterOutcome = isSuccess ? 'success' : isPartial ? 'partial' : 'failure';
+      worldUpdate = await updateDistrictStateFromEncounter(
+        character.id,
+        character.currentDistrict,
+        character.factionId,
+        districtOutcome
+      );
+    } catch (worldUpdateError) {
+      // Fail-soft: log the error but don't break the game
+      console.error('[WorldState] Failed to update district state:', worldUpdateError);
+    }
+
     // --- Follow-Up Actions: generate and persist after all other updates ---
     let mergedFollowUps: FollowUpAction[] = [];
     try {
@@ -1220,6 +1240,7 @@ export async function POST(request: Request) {
         xpToNextLevel: powerProgression.xpToNextLevel,
       } : undefined,
       followUps: mergedFollowUps.length > 0 ? mergedFollowUps : undefined,
+      worldUpdate: worldUpdate ?? undefined,
     });
   } catch (error) {
     console.error('Encounter resolution error:', error);
