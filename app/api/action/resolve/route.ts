@@ -62,6 +62,20 @@ import {
   type WorldReactionUpdate,
   type WorldReactionsResult,
 } from '@/app/lib/world/applyWorldReactions';
+import {
+  applyDeathWorldConsequences,
+  type DeathWorldUpdate,
+  type DeathWorldConsequencesResult,
+  DEATH_CONTROL_DELTA,
+  DEATH_INSTABILITY_DELTA,
+} from '@/app/lib/world/applyDeathWorldConsequences';
+import {
+  applyWoundedState,
+  decrementWoundedCounter,
+  type WoundedStateResult,
+  WOUNDED_ENCOUNTERS_DURATION,
+  WOUNDED_HEAT_PENALTY,
+} from '@/app/lib/character/applyWoundedState';
 
 // Type for outcome result with optional fields
 type OutcomeResult = {
@@ -114,14 +128,19 @@ type WorldUpdateEntry = {
   previousControllingFactionId: string | null;
   controllingFactionId: string | null;
   controllingFactionName: string | null;
-  reason: 'primary' | 'ripple' | 'counter';
+  reason: 'primary' | 'ripple' | 'counter' | 'death';
   factionId: string;
   factionName: string;
+  // Death-specific fields (optional)
+  instabilityDelta?: number;
+  previousInstability?: number;
+  newInstability?: number;
 };
 
 function buildWorldUpdatesArray(
   primaryUpdate: WorldUpdateResult | null,
-  reactions: WorldReactionsResult | null
+  reactions: WorldReactionsResult | null,
+  deathResult?: DeathWorldConsequencesResult | null
 ): WorldUpdateEntry[] | undefined {
   const updates: WorldUpdateEntry[] = [];
 
@@ -150,6 +169,27 @@ function buildWorldUpdatesArray(
   // Add counter update
   if (reactions?.counterUpdate) {
     updates.push(reactions.counterUpdate);
+  }
+
+  // Add death update (replaces normal updates if death occurred)
+  if (deathResult?.deathUpdate) {
+    const du = deathResult.deathUpdate;
+    updates.push({
+      districtId: du.districtId,
+      districtName: du.districtName,
+      delta: du.controlDelta,
+      previousControlValue: du.previousControlValue,
+      newControlValue: du.newControlValue,
+      previousControllingFactionId: du.previousControllingFactionId,
+      controllingFactionId: du.controllingFactionId,
+      controllingFactionName: du.controllingFactionName,
+      reason: 'death',
+      factionId: du.factionId,
+      factionName: du.factionName,
+      instabilityDelta: du.instabilityDelta,
+      previousInstability: du.previousInstability,
+      newInstability: du.newInstability,
+    });
   }
 
   return updates.length > 0 ? updates : undefined;
@@ -680,6 +720,10 @@ export async function POST(request: Request) {
     let isPartial: boolean;
     let isFailure: boolean;
 
+    // Check if character is wounded (for difficulty modifier and death handling)
+    // Use optional chaining for backwards compatibility during migration
+    const isWounded = (character as { isWounded?: boolean }).isWounded ?? false;
+
     if (resolutionOutcomeOverride && VALID_OUTCOME_OVERRIDES.includes(resolutionOutcomeOverride)) {
       // Client-side conflict engine provided the outcome — skip resolveEncounter()
       isSuccess = resolutionOutcomeOverride === 'success';
@@ -700,6 +744,9 @@ export async function POST(request: Request) {
       }
     } else {
       // Standard combat resolver path
+      // Calculate wounded penalty if character is wounded
+      const woundedPenalty = isWounded ? WOUNDED_HEAT_PENALTY : 0;
+
       resolution = resolveEncounter({
         difficulty: encounter.difficulty,
         approach,
@@ -714,6 +761,8 @@ export async function POST(request: Request) {
         npcInfluenceLabel,
         focusBonus: focusModifier,
         focusBonusLabel: focusMode ? `Focus (${focusMode.charAt(0).toUpperCase() + focusMode.slice(1)})` : undefined,
+        woundedPenalty,
+        woundedPenaltyLabel: isWounded ? `Wounded (+${WOUNDED_HEAT_PENALTY})` : undefined,
       });
 
       isSuccess = resolution.outcome === 'success';
@@ -1180,6 +1229,42 @@ export async function POST(request: Request) {
       console.error('[WorldState] Failed to update district state:', worldUpdateError);
     }
 
+    // --- Death Handling: check if character died (HP = 0) ---
+    let deathOccurred = false;
+    let woundedResult: WoundedStateResult | null = null;
+    let deathWorldResult: DeathWorldConsequencesResult | null = null;
+
+    if (newHp === 0 && hpLoss > 0) {
+      deathOccurred = true;
+      console.log(`[Death] Character ${character.id} died in ${character.currentDistrict}`);
+
+      try {
+        // Apply wounded state (revives with 10 HP, adds heat, sets 6-encounter duration)
+        woundedResult = await applyWoundedState(
+          character.id,
+          leverageUpdate.newActionCounter,
+          heatUpdate.newHeat
+        );
+
+        // Apply world consequences (district control hit, instability spike)
+        deathWorldResult = await applyDeathWorldConsequences({
+          characterId: character.id,
+          encounterDistrictId: character.currentDistrict,
+          playerFactionId: character.factionId,
+        });
+      } catch (deathError) {
+        // Fail-soft: log the error but don't break the game
+        console.error('[Death] Failed to apply death consequences:', deathError);
+      }
+    } else if (isWounded) {
+      // Not dead, but character is wounded - decrement the counter
+      try {
+        await decrementWoundedCounter(character.id);
+      } catch (woundedError) {
+        console.error('[Wounded] Failed to decrement wounded counter:', woundedError);
+      }
+    }
+
     // --- Follow-Up Actions: generate and persist after all other updates ---
     let mergedFollowUps: FollowUpAction[] = [];
     try {
@@ -1309,7 +1394,16 @@ export async function POST(request: Request) {
       followUps: mergedFollowUps.length > 0 ? mergedFollowUps : undefined,
       worldUpdate: worldUpdate ?? undefined,
       // Combined world updates array for UI messaging
-      worldUpdates: buildWorldUpdatesArray(worldUpdate, worldReactions),
+      worldUpdates: buildWorldUpdatesArray(worldUpdate, worldReactions, deathWorldResult),
+      // Death consequences
+      deathOccurred,
+      wounded: woundedResult ? {
+        isWounded: woundedResult.isWounded,
+        heatDelta: woundedResult.heatDelta,
+        durationType: woundedResult.durationType,
+        encountersRemaining: woundedResult.encountersRemaining,
+      } : undefined,
+      deathWorldUpdate: deathWorldResult?.deathUpdate ?? undefined,
     });
   } catch (error) {
     console.error('Encounter resolution error:', error);

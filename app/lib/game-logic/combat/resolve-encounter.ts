@@ -728,7 +728,7 @@ function generateSummary(approach: Approach, outcome: Outcome): string {
  * Uses same math as preview to ensure consistency.
  */
 export function resolveEncounter(input: ResolveEncounterInput): ResolutionBreakdown {
-  const { rng = Math.random, powerLevelBonus, powerLevelLabel, npcInfluenceBonus, npcInfluenceLabel, focusBonus, focusBonusLabel, ...resolutionInput } = input;
+  const { rng = Math.random, powerLevelBonus, powerLevelLabel, npcInfluenceBonus, npcInfluenceLabel, focusBonus, focusBonusLabel, woundedPenalty, woundedPenaltyLabel, ...resolutionInput } = input;
 
   // Use shared math computation
   const math = computeResolutionMath(resolutionInput);
@@ -765,6 +765,16 @@ export function resolveEncounter(input: ResolveEncounterInput): ResolutionBreakd
       value: bonusValue,
     });
     target = clamp(target + bonusValue, 5, 99);
+  }
+
+  // Apply wounded penalty if provided (positive = harder, raises target)
+  if (woundedPenalty && woundedPenalty > 0) {
+    const penaltyValue = woundedPenalty; // Positive penalty = higher target = harder
+    modifiers.push({
+      label: woundedPenaltyLabel ?? 'Wounded',
+      value: penaltyValue,
+    });
+    target = clamp(target + penaltyValue, 5, 99);
   }
 
   // Roll the dice (1-100)

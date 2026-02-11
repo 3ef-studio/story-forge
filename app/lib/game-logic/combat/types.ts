@@ -46,6 +46,8 @@ export type ResolveEncounterInput = ResolutionInput & {
   npcInfluenceLabel?: string;            // Label for NPC influence modifier
   focusBonus?: number;                   // Optional bonus from focus channeling (0..4)
   focusBonusLabel?: string;              // Label for focus bonus modifier
+  woundedPenalty?: number;               // Optional penalty from wounded state (positive = harder)
+  woundedPenaltyLabel?: string;          // Label for wounded penalty modifier
 };
 
 // Risk tier for previews

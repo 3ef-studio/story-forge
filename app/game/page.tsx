@@ -964,16 +964,43 @@ export default function GamePage() {
         }
       }
 
+      // Show death/wounded toast if character died
+      if (data.deathOccurred && data.wounded) {
+        addToast({
+          type: 'error',
+          title: 'Defeated!',
+          message: `You return Wounded (+${data.wounded.heatDelta} Heat) for ${data.wounded.encountersRemaining} encounters.`,
+          duration: 6000,
+        });
+
+        // Show district impact if available
+        if (data.deathWorldUpdate) {
+          const dwu = data.deathWorldUpdate;
+          setTimeout(() => {
+            addToast({
+              type: 'error',
+              title: 'District Impact',
+              message: `${dwu.controlDelta} control in ${dwu.districtName}. Instability +${dwu.instabilityDelta}.`,
+              duration: 5000,
+            });
+          }, 500);
+        }
+      }
+
       // Show world update toasts if district control shifted
       if (data.worldUpdates && data.worldUpdates.length > 0) {
-        // Show toasts for each world update (primary, ripple, counter)
+        // Show toasts for each world update (primary, ripple, counter, death)
         data.worldUpdates.forEach((wu: {
           delta: number;
           factionName: string;
           districtName: string;
           newControlValue: number;
-          reason: 'primary' | 'ripple' | 'counter';
+          reason: 'primary' | 'ripple' | 'counter' | 'death';
+          instabilityDelta?: number;
         }, index: number) => {
+          // Skip death updates here - they're handled above with the wounded toast
+          if (wu.reason === 'death') return;
+
           const deltaSign = wu.delta > 0 ? '+' : '';
           let title = 'District Control Shift';
           if (wu.reason === 'ripple') {

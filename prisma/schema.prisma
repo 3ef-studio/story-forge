@@ -46,6 +46,9 @@ model Character {
   leveragePosition            Int                  @default(0) @map("leverage_position")
   actionCounter               Int                  @default(0) @map("action_counter")
   heat                        Int                  @default(0)
+  isWounded                   Boolean              @default(false) @map("is_wounded")
+  woundedEncountersRemaining  Int                  @default(0) @map("wounded_encounters_remaining")
+  woundedAtActionCounter      Int?                 @map("wounded_at_action_counter") // for debugging
   factionId                   String?              @map("faction_id") // controllable faction membership
   pendingFollowUps            Json?                @map("pending_follow_ups") // FollowUpAction[]
   followUpHistory             Json?                @map("follow_up_history") // FollowUpHistory
