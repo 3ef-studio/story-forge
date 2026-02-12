@@ -82,6 +82,10 @@ export async function POST(request: Request) {
     let usedFollowUpId: string | null = null;
     let actionId: string;
 
+    // Pre-compute follow-up removal data for atomic persistence inside transaction
+    let remainingFollowUps: FollowUpAction[] | null = null;
+    let updatedFollowUpHistory: ReturnType<typeof parseFollowUpHistory> | null = null;
+
     if (isFollowUpActionId(rawActionId)) {
       // Load follow-up from character's pendingFollowUps
       const pendingFollowUps = parsePendingFollowUps(character.pendingFollowUps);
@@ -99,6 +103,17 @@ export async function POST(request: Request) {
       isFollowUp = true;
       usedFollowUpId = rawActionId;
       actionId = followUp.origin.actionId ?? 'followup';
+
+      // Pre-compute the remaining follow-ups and updated history for atomic persistence
+      remainingFollowUps = pendingFollowUps.filter(f => f.id !== usedFollowUpId);
+      updatedFollowUpHistory = parseFollowUpHistory(character.followUpHistory);
+      if (followUp.followUpKey) {
+        updatedFollowUpHistory = addHistoryEntries(updatedFollowUpHistory, [{
+          followUpKey: followUp.followUpKey,
+          actionCounter: character.actionCounter ?? 0,
+          status: 'executed',
+        }]);
+      }
 
       if (process.env.NODE_ENV === 'development') {
         console.log('[Execute] Follow-up action:', followUp.name, '| Base action:', actionId);
@@ -497,6 +512,8 @@ export async function POST(request: Request) {
     // Update character in transaction
     const result = await prisma.$transaction(async (tx) => {
       // Update character stats including XP
+      // NOTE: Follow-up removal is done atomically here (not post-transaction) to prevent
+      // race conditions where a server crash could leave stale follow-ups or duplicate history entries
       await tx.character.update({
         where: { id: character.id },
         data: {
@@ -516,6 +533,11 @@ export async function POST(request: Request) {
             leverageControl: decayResult.leverage.control,
             leverageStability: decayResult.leverage.stability,
             leveragePosition: decayResult.leverage.position,
+          } : {}),
+          // Atomic follow-up removal: persist updated follow-ups and history in same transaction
+          ...(isFollowUp && remainingFollowUps !== null ? {
+            pendingFollowUps: remainingFollowUps.length > 0 ? JSON.parse(JSON.stringify(remainingFollowUps)) : Prisma.DbNull,
+            followUpHistory: updatedFollowUpHistory ? JSON.parse(JSON.stringify(updatedFollowUpHistory)) : undefined,
           } : {}),
         },
       });
@@ -706,38 +728,9 @@ export async function POST(request: Request) {
     // Get updated active goals
     const activeGoals = await getActiveGoals(character.id);
 
-    // Remove used follow-up from pendingFollowUps and record in history
-    if (isFollowUp && usedFollowUpId) {
-      try {
-        const pendingFollowUps = parsePendingFollowUps(character.pendingFollowUps);
-        const usedFollowUp: FollowUpAction | undefined = pendingFollowUps.find(f => f.id === usedFollowUpId);
-        const remainingFollowUps = pendingFollowUps.filter(f => f.id !== usedFollowUpId);
-
-        // Update history: mark as executed so it stays on cooldown
-        let history = parseFollowUpHistory(character.followUpHistory);
-        if (usedFollowUp?.followUpKey) {
-          history = addHistoryEntries(history, [{
-            followUpKey: usedFollowUp.followUpKey,
-            actionCounter: character.actionCounter ?? 0,
-            status: 'executed',
-          }]);
-        }
-
-        await prisma.character.update({
-          where: { id: character.id },
-          data: {
-            pendingFollowUps: remainingFollowUps.length > 0 ? JSON.parse(JSON.stringify(remainingFollowUps)) : Prisma.DbNull,
-            followUpHistory: JSON.parse(JSON.stringify(history)),
-          },
-        });
-
-        if (process.env.NODE_ENV === 'development') {
-          console.log('[Execute] Follow-up consumed:', usedFollowUpId, '| Key:', usedFollowUp?.followUpKey, '| Remaining:', remainingFollowUps.length);
-        }
-      } catch (followUpError) {
-        // Fail-soft: log the error but don't break the game
-        console.error('[Execute] Failed to remove used follow-up:', followUpError);
-      }
+    // Follow-up removal is now done atomically inside the transaction above
+    if (isFollowUp && usedFollowUpId && process.env.NODE_ENV === 'development') {
+      console.log('[Execute] Follow-up consumed (atomic):', usedFollowUpId, '| Remaining:', remainingFollowUps?.length ?? 0);
     }
 
     // City Update Logic: Check if we should emit a city update

@@ -902,8 +902,84 @@ export async function POST(request: Request) {
     console.log(`[Heat] sourceActionId=${sourceActionId} actionId=${rawActionId} effective=${effectiveActionId} followUp=${isFollowUp} heat ${heatUpdate.previousHeat}→${heatUpdate.newHeat}`);
     logHeatUpdate(character.id, heatUpdate);
 
+    // Determine used powers from choice (needed for follow-up generation)
+    const usedPowerIds = choice.requiredPowers ?? [];
+
+    // --- Pre-compute follow-up generation BEFORE transaction for atomic persistence ---
+    // This ensures follow-up state is written in the same transaction as other character updates,
+    // preventing race conditions where a server crash could leave stale follow-ups or duplicate entries
+    let precomputedFollowUps: FollowUpAction[] = [];
+    let precomputedHistory: ReturnType<typeof parseFollowUpHistory> | null = null;
+    try {
+      const existingFollowUps = parsePendingFollowUps(character.pendingFollowUps);
+      let history = parseFollowUpHistory(character.followUpHistory);
+      const currentActionCounter = character.actionCounter ?? 0;
+
+      // Decrement TTLs — get alive + expired partitions
+      const { alive: decrementedFollowUps, expired: expiredFollowUps } = decrementFollowUpTTLs(existingFollowUps);
+
+      // Record expired follow-ups in history so they stay on cooldown
+      if (expiredFollowUps.length > 0) {
+        const expiredEntries: FollowUpHistoryEntry[] = expiredFollowUps
+          .filter(f => f.followUpKey)
+          .map(f => ({ followUpKey: f.followUpKey, actionCounter: currentActionCounter, status: 'expired' as const }));
+        history = addHistoryEntries(history, expiredEntries);
+      }
+
+      // Build context for follow-up generation
+      const followUpContext: FollowUpContext = {
+        characterId: character.id,
+        actionCounter: currentActionCounter,
+        encounterId,
+        seedId: encounterId,
+        encounterType: encounter.category,
+        encounterDifficulty: encounter.difficulty,
+        encounterTags: encounter.narrativeTags,
+        factions: encounter.requiredFactions ?? [],
+        district: character.currentDistrict,
+        actionId: actionId ?? undefined,
+        outcomeType: isSuccess ? 'success' : isPartial ? 'partial' : 'failure',
+        conflictResult: conflictOutcome?.result as FollowUpConflictResult | undefined,
+        gambitOutcome: gambitResult?.outcomeTier as FollowUpGambitOutcome | undefined,
+        npcId: npcId ?? undefined,
+        npcName: npcId ? getNPCById(npcId)?.name : undefined,
+        rivalPresent: rivalPresent ?? false,
+        leverageState: leverageUpdate.finalLeverage,
+        usedPowers: usedPowerIds,
+        baseActionIntent: actionId ? (getActionById(actionId)?.moralIntent ?? undefined) : undefined,
+      };
+
+      // Generate new follow-ups with cooldown + dedupe + diversity
+      const newFollowUps = generateFollowUps(followUpContext, {
+        max: 3,
+        history,
+        cooldownActions: 3,
+        pendingFollowUps: decrementedFollowUps,
+      });
+
+      // Record newly generated follow-ups in history
+      if (newFollowUps.length > 0) {
+        const generatedEntries: FollowUpHistoryEntry[] = newFollowUps
+          .map(f => ({ followUpKey: f.followUpKey, actionCounter: currentActionCounter, status: 'generated' as const }));
+        history = addHistoryEntries(history, generatedEntries);
+      }
+
+      // Merge with existing (max 5 total)
+      precomputedFollowUps = mergeFollowUps(decrementedFollowUps, newFollowUps, { maxTotal: 5 });
+      precomputedHistory = history;
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[FollowUps] Pre-computed:', newFollowUps.length, 'new |', expiredFollowUps.length, 'expired |', precomputedFollowUps.length, 'merged total');
+      }
+    } catch (followUpPrecomputeError) {
+      // Fail-soft: log error but continue with empty follow-ups
+      console.error('[FollowUps] Failed to pre-compute follow-ups:', followUpPrecomputeError);
+    }
+
     // Update character in transaction
     await prisma.$transaction(async (tx) => {
+      // NOTE: Follow-up persistence is done atomically here (not post-transaction) to prevent
+      // race conditions where a server crash could leave stale follow-ups or duplicate history entries
       await tx.character.update({
         where: { id: character.id },
         data: {
@@ -920,6 +996,9 @@ export async function POST(request: Request) {
           leverageControl: leverageUpdate.finalLeverage.control,
           leverageStability: leverageUpdate.finalLeverage.stability,
           leveragePosition: leverageUpdate.finalLeverage.position,
+          // Atomic follow-up persistence: write follow-ups and history in same transaction
+          pendingFollowUps: precomputedFollowUps.length > 0 ? JSON.parse(JSON.stringify(precomputedFollowUps)) : Prisma.DbNull,
+          ...(precomputedHistory !== null ? { followUpHistory: JSON.parse(JSON.stringify(precomputedHistory)) } : {}),
         },
       });
 
@@ -991,8 +1070,7 @@ export async function POST(request: Request) {
     });
 
     // Apply goal progress for encounter resolution
-    // Determine used powers from choice (if choice required powers, consider them used)
-    const usedPowerIds = choice.requiredPowers ?? [];
+    // usedPowerIds was already computed before the transaction for follow-up generation
 
     // Goals count success and partial as "won"
     const wonEncounter = isSuccess || isPartial;
@@ -1265,85 +1343,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // --- Follow-Up Actions: generate and persist after all other updates ---
-    let mergedFollowUps: FollowUpAction[] = [];
-    try {
-      // Load existing follow-ups and history
-      const existingFollowUps = parsePendingFollowUps(character.pendingFollowUps);
-      let history = parseFollowUpHistory(character.followUpHistory);
-      const currentActionCounter = character.actionCounter ?? 0;
-
-      // Decrement TTLs — get alive + expired partitions
-      const { alive: decrementedFollowUps, expired: expiredFollowUps } = decrementFollowUpTTLs(existingFollowUps);
-
-      // Record expired follow-ups in history so they stay on cooldown
-      if (expiredFollowUps.length > 0) {
-        const expiredEntries: FollowUpHistoryEntry[] = expiredFollowUps
-          .filter(f => f.followUpKey)
-          .map(f => ({ followUpKey: f.followUpKey, actionCounter: currentActionCounter, status: 'expired' as const }));
-        history = addHistoryEntries(history, expiredEntries);
-      }
-
-      // Build context for follow-up generation
-      const followUpContext: FollowUpContext = {
-        characterId: character.id,
-        actionCounter: currentActionCounter,
-        encounterId,
-        seedId: encounterId,
-        encounterType: encounter.category,
-        encounterDifficulty: encounter.difficulty,
-        encounterTags: encounter.narrativeTags,
-        factions: encounter.requiredFactions ?? [],
-        district: character.currentDistrict,
-        actionId: actionId ?? undefined,
-        outcomeType: isSuccess ? 'success' : isPartial ? 'partial' : 'failure',
-        conflictResult: conflictOutcome?.result as FollowUpConflictResult | undefined,
-        gambitOutcome: gambitResult?.outcomeTier as FollowUpGambitOutcome | undefined,
-        npcId: npcId ?? undefined,
-        npcName: npcId ? getNPCById(npcId)?.name : undefined,
-        rivalPresent: rivalPresent ?? false,
-        leverageState: leverageUpdate.finalLeverage,
-        usedPowers: usedPowerIds,
-        baseActionIntent: actionId ? (getActionById(actionId)?.moralIntent ?? undefined) : undefined,
-      };
-
-      // Generate new follow-ups with cooldown + dedupe + diversity
-      const newFollowUps = generateFollowUps(followUpContext, {
-        max: 3,
-        history,
-        cooldownActions: 3,
-        pendingFollowUps: decrementedFollowUps,
-      });
-
-      // Record newly generated follow-ups in history
-      if (newFollowUps.length > 0) {
-        const generatedEntries: FollowUpHistoryEntry[] = newFollowUps
-          .map(f => ({ followUpKey: f.followUpKey, actionCounter: currentActionCounter, status: 'generated' as const }));
-        history = addHistoryEntries(history, generatedEntries);
-      }
-
-      // Merge with existing (max 5 total)
-      mergedFollowUps = mergeFollowUps(decrementedFollowUps, newFollowUps, { maxTotal: 5 });
-
-      // Persist follow-ups and history
-      await prisma.character.update({
-        where: { id: character.id },
-        data: {
-          pendingFollowUps: mergedFollowUps.length > 0 ? JSON.parse(JSON.stringify(mergedFollowUps)) : Prisma.DbNull,
-          followUpHistory: JSON.parse(JSON.stringify(history)),
-        },
-      });
-
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[FollowUps] Generated:', newFollowUps.length, '| Expired:', expiredFollowUps.length, '| Merged total:', mergedFollowUps.length);
-        if (newFollowUps.length > 0) {
-          console.log('[FollowUps] New:', newFollowUps.map(f => `${f.name} (${f.intentHint}/${f.category})`).join(', '));
-        }
-      }
-    } catch (followUpError) {
-      // Fail-soft: log the error but don't break the game
-      console.error('[FollowUps] Failed to generate/persist follow-ups:', followUpError);
-    }
+    // Follow-up generation and persistence is now done atomically inside the transaction above
 
     return NextResponse.json({
       success: isSuccess,
@@ -1391,7 +1391,7 @@ export async function POST(request: Request) {
         powerBonusApplied: powerProgression.powerBonus,
         xpToNextLevel: powerProgression.xpToNextLevel,
       } : undefined,
-      followUps: mergedFollowUps.length > 0 ? mergedFollowUps : undefined,
+      followUps: precomputedFollowUps.length > 0 ? precomputedFollowUps : undefined,
       worldUpdate: worldUpdate ?? undefined,
       // Combined world updates array for UI messaging
       worldUpdates: buildWorldUpdatesArray(worldUpdate, worldReactions, deathWorldResult),
