@@ -3,7 +3,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, MapPin, Shield, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, MapPin, Shield, AlertTriangle, Info } from 'lucide-react';
+import { getDistrictTraits } from '@/app/data/districtModifiers';
 
 interface DistrictState {
   id: string;
@@ -78,6 +79,7 @@ function InstabilityIndicator({ value }: { value: number }) {
 function DistrictCard({ district }: { district: DistrictState }) {
   const colors = getFactionColors(district.controllingFactionId);
   const controlLabel = district.controllingFactionShortName ?? 'Contested';
+  const traits = getDistrictTraits(district.districtId);
 
   return (
     <div
@@ -106,6 +108,16 @@ function DistrictCard({ district }: { district: DistrictState }) {
         </div>
         <ControlBar value={district.controlValue} factionId={district.controllingFactionId} />
       </div>
+
+      {/* District Traits */}
+      {traits.length > 0 && (
+        <div className="mt-3 pt-2 border-t border-white/10">
+          <div className="flex items-center gap-1 text-xs text-white/40">
+            <Info className="w-3 h-3" />
+            <span>{traits.join(' · ')}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

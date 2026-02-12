@@ -10,6 +10,7 @@ import { prisma } from '@/app/lib/db';
 import { getDistrictById } from '@/app/data/districts';
 import { getFactionById } from '@/app/data/factions';
 import { getDistrictStates, canFactionControlDistrict } from '@/app/lib/game-logic/district-state';
+import { applyControlModifier, applyInstabilityModifier } from './applyDistrictModifiers';
 
 // ============================================================
 // Constants
@@ -138,11 +139,15 @@ export async function applyDeathWorldConsequences(
   const previousInstability = districtState.instability;
   const previousControllingFactionId = districtState.controllingFactionId;
 
+  // Apply district-specific modifiers to the death deltas
+  const controlDelta = applyControlModifier(DEATH_CONTROL_DELTA, encounterDistrictId, 'death');
+  const instabilityDelta = applyInstabilityModifier(DEATH_INSTABILITY_DELTA, encounterDistrictId);
+
   // Apply control hit (negative delta)
-  const newControlValue = clamp(previousControlValue + DEATH_CONTROL_DELTA);
+  const newControlValue = clamp(previousControlValue + controlDelta);
 
   // Apply instability spike
-  const newInstability = clamp(previousInstability + DEATH_INSTABILITY_DELTA);
+  const newInstability = clamp(previousInstability + instabilityDelta);
 
   // Determine new controlling faction
   // Note: For death, we're reducing control, so the current faction may lose control
@@ -173,20 +178,20 @@ export async function applyDeathWorldConsequences(
 
   console.log(
     `[DeathWorld] Death consequences in ${district?.name ?? encounterDistrictId}: ` +
-    `Control ${previousControlValue}% → ${newControlValue}% (${DEATH_CONTROL_DELTA}), ` +
-    `Instability ${previousInstability} → ${newInstability} (+${DEATH_INSTABILITY_DELTA})`
+    `Control ${previousControlValue}% → ${newControlValue}% (${controlDelta}), ` +
+    `Instability ${previousInstability} → ${newInstability} (+${instabilityDelta})`
   );
 
   result.deathUpdate = {
     districtId: encounterDistrictId,
     districtName: district?.name ?? encounterDistrictId,
-    controlDelta: DEATH_CONTROL_DELTA,
+    controlDelta,
     previousControlValue,
     newControlValue,
     previousControllingFactionId,
     controllingFactionId: newControllingFactionId,
     controllingFactionName: controllingFaction?.name ?? null,
-    instabilityDelta: DEATH_INSTABILITY_DELTA,
+    instabilityDelta,
     previousInstability,
     newInstability,
     reason: 'death',

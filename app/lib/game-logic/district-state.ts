@@ -8,6 +8,7 @@
 import { prisma } from '@/app/lib/db';
 import { districts, type DistrictId } from '@/app/data/districts';
 import { controllableFactions, getFactionById } from '@/app/data/factions';
+import { applyControlModifier } from '@/app/lib/world/applyDistrictModifiers';
 
 // Types for district state
 export interface DistrictStateRecord {
@@ -253,7 +254,9 @@ export async function updateDistrictStateFromEncounter(
   }
 
   // Calculate delta and new control value
-  const delta = getControlDelta(outcome);
+  // Apply district-specific modifier to the base delta
+  const baseDelta = getControlDelta(outcome);
+  const delta = applyControlModifier(baseDelta, districtId, 'primary');
   const previousControlValue = districtState.controlValue;
   const newControlValue = Math.max(0, Math.min(100, previousControlValue + delta));
 

@@ -285,6 +285,19 @@ model DistrictState {
   @@map("district_states")
 }
 
+// World State (turn counter and cooldown tracking per character scope)
+model WorldState {
+  id                   String    @id @default(uuid()) @db.Uuid
+  scopeId              String    @unique @map("scope_id") @db.Uuid // characterId for per-character world state
+  worldTurn            Int       @default(0) @map("world_turn")
+  lastCounterFactionId String?   @map("last_counter_faction_id")
+  lastCounterTurn      Int?      @map("last_counter_turn")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  @@map("world_states")
+}
+
 // Encounter telemetry for balance + behavior analysis
 model EncounterRun {
   id                    String    @id @default(uuid()) @db.Uuid

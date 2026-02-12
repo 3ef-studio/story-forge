@@ -1,8 +1,24 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+/**
+ * REGRESSION CHECKLIST (after animation changes):
+ * - [ ] Scene transitions work: idle → executing → encounter → conflict → outcome → idle
+ * - [ ] Mobile tab switching animates smoothly with pill indicator
+ * - [ ] Desktop layout unchanged (3-column grid)
+ * - [ ] Existing panes render correctly: EncounterDisplay, ConflictPane, OutcomeDisplay
+ * - [ ] Loading sigil animates during executing state
+ * - [ ] Buttons remain clickable with hover/tap feedback
+ * - [ ] prefers-reduced-motion disables animations
+ * - [ ] No layout shifts or content jumping during transitions
+ * - [ ] Error banner still displays when error state is set
+ * - [ ] Level-up modal and goal choice modal work correctly
+ */
+
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useReducedMotion } from '@/app/hooks/useReducedMotion';
 import { Button } from '@/app/components/ui/button';
 import { CharacterSheet } from '@/app/components/game/CharacterSheet';
 import { ActionSelector } from '@/app/components/game/ActionSelector';
@@ -54,6 +70,51 @@ const LOADING_STEPS = [
   'Tracking factions...',
   'Shaping your options...',
 ];
+
+// ============================================================
+// Animation Variants (respects reduced motion via hook)
+// ============================================================
+
+const sceneVariants = {
+  initial: { opacity: 0, y: 12 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -8 },
+};
+
+const mobileContentVariants = {
+  initial: { opacity: 0, x: 20 },
+  animate: { opacity: 1, x: 0 },
+  exit: { opacity: 0, x: -20 },
+};
+
+const staggerContainerVariants = {
+  animate: {
+    transition: {
+      staggerChildren: 0.08,
+    },
+  },
+};
+
+const staggerItemVariants = {
+  initial: { opacity: 0, y: 16 },
+  animate: { opacity: 1, y: 0 },
+};
+
+const loadingStepVariants = {
+  inactive: { opacity: 0.3, x: 0 },
+  active: { opacity: 1, x: 4 },
+};
+
+const sigilFloatVariants = {
+  animate: {
+    y: [0, -6, 0],
+    rotate: [0, 3, -3, 0],
+    transition: {
+      y: { duration: 2.5, repeat: Infinity, ease: 'easeInOut' as const },
+      rotate: { duration: 4, repeat: Infinity, ease: 'easeInOut' as const },
+    },
+  },
+};
 
 interface CharacterData {
   id: string;
@@ -143,6 +204,7 @@ interface EncounterChoice {
 export default function GamePage() {
   const router = useRouter();
   const { showFactionChange, addToast } = useToast();
+  const prefersReducedMotion = useReducedMotion();
   const [character, setCharacter] = useState<CharacterData | null>(null);
   const [gameState, setGameState] = useState<GameState>('idle');
   const [currentEncounter, setCurrentEncounter] = useState<(EncounterTemplate & { threadId?: string; threadTitle?: string; npcId?: string }) | null>(null);
@@ -1113,6 +1175,16 @@ export default function GamePage() {
   // Get active goal title for status strip
   const activeGoalTitle = activeGoals.length > 0 ? activeGoals[0].title : undefined;
 
+  // Animation transition config (disabled when reduced motion preferred)
+  const transition = useMemo(
+    () => (prefersReducedMotion ? { duration: 0 } : { duration: 0.25, ease: 'easeOut' as const }),
+    [prefersReducedMotion]
+  );
+  const springTransition = useMemo(
+    () => (prefersReducedMotion ? { duration: 0 } : { type: 'spring' as const, stiffness: 300, damping: 25 }),
+    [prefersReducedMotion]
+  );
+
   // Find the most recent city update from story events
   const latestCityUpdate = character?.storyEvents?.find(
     (event) => event.type === 'city_update'
@@ -1143,109 +1215,182 @@ export default function GamePage() {
   const hasActiveEncounter = gameState === 'encounter' || gameState === 'executing' || gameState === 'conflict' || gameState === 'outcome';
 
   // Scene content (shared between mobile tab and desktop center column)
+  // Wrapped with AnimatePresence for crossfade + slide transitions
   const renderSceneContent = () => {
-    if (gameState === 'idle') {
-      return (
-        <AnimatedCard variant="panel" className="panel-glass p-5 sm:p-6 text-center">
-          <h2 className="text-lg sm:text-xl font-bold text-white mb-2">What will you do?</h2>
-          <p className="text-white/60 text-sm sm:text-base">
-            <span className="hidden sm:inline">Choose an action from the panel on the right to continue your story.</span>
-            <span className="sm:hidden">Tap the <span className="font-semibold text-white/80">Actions</span> tab below to choose your next move.</span>
-          </p>
-        </AnimatedCard>
-      );
-    }
+    const content = (() => {
+      if (gameState === 'idle') {
+        return (
+          <motion.div
+            key="idle"
+            variants={sceneVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={transition}
+          >
+            <AnimatedCard variant="panel" className="panel-glass p-5 sm:p-6 text-center">
+              <h2 className="text-lg sm:text-xl font-bold text-white mb-2">What will you do?</h2>
+              <p className="text-white/60 text-sm sm:text-base">
+                <span className="hidden sm:inline">Choose an action from the panel on the right to continue your story.</span>
+                <span className="sm:hidden">Tap the <span className="font-semibold text-white/80">Actions</span> tab below to choose your next move.</span>
+              </p>
+            </AnimatedCard>
+          </motion.div>
+        );
+      }
 
-    if (gameState === 'executing') {
-      return (
-        <AnimatedCard variant="panel" className="panel-glass p-6">
-          <div className="space-y-5">
-            <div className="text-center space-y-4">
-              {/* Title */}
-              <h3 className="text-lg font-semibold text-white">Encounter forming...</h3>
-
-              {/* Animated sigil */}
-              <div className="flex justify-center">
-                <LoadingSigil label="Generating encounter" />
-              </div>
-
-              {/* 3-step indicator */}
-              <div className="space-y-2">
-                {LOADING_STEPS.map((step, index) => (
-                  <div
-                    key={step}
-                    className={`flex items-center gap-2 justify-center transition-opacity duration-300 ${
-                      index === loadingStep ? 'opacity-100' : 'opacity-30'
-                    }`}
+      if (gameState === 'executing') {
+        return (
+          <motion.div
+            key="executing"
+            variants={sceneVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={transition}
+          >
+            <AnimatedCard variant="panel" className="panel-glass p-6">
+              <div className="space-y-5">
+                <div className="text-center space-y-4">
+                  {/* Title */}
+                  <motion.h3
+                    className="text-lg font-semibold text-white"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.1 }}
                   >
-                    <div
-                      className={`w-2 h-2 rounded-full ${
-                        index === loadingStep ? 'bg-blue-400 animate-pulse' : 'bg-white/30'
-                      }`}
-                    />
-                    <span
-                      className={`text-sm ${
-                        index === loadingStep ? 'text-blue-300 font-medium' : 'text-white/40'
-                      }`}
-                    >
-                      {step}
-                    </span>
+                    Encounter forming...
+                  </motion.h3>
+
+                  {/* Animated sigil with gentle float */}
+                  <motion.div
+                    className="flex justify-center"
+                    variants={prefersReducedMotion ? {} : sigilFloatVariants}
+                    animate="animate"
+                  >
+                    <LoadingSigil label="Generating encounter" />
+                  </motion.div>
+
+                  {/* 3-step indicator with slide animation */}
+                  <div className="space-y-2">
+                    {LOADING_STEPS.map((step, index) => (
+                      <motion.div
+                        key={step}
+                        className="flex items-center gap-2 justify-center"
+                        variants={loadingStepVariants}
+                        initial="inactive"
+                        animate={index === loadingStep ? 'active' : 'inactive'}
+                        transition={springTransition}
+                      >
+                        <motion.div
+                          className={`w-2 h-2 rounded-full ${
+                            index === loadingStep ? 'bg-blue-400' : 'bg-white/30'
+                          }`}
+                          animate={
+                            index === loadingStep && !prefersReducedMotion
+                              ? { scale: [1, 1.3, 1] }
+                              : { scale: 1 }
+                          }
+                          transition={{ duration: 0.8, repeat: Infinity }}
+                        />
+                        <span
+                          className={`text-sm ${
+                            index === loadingStep ? 'text-blue-300 font-medium' : 'text-white/40'
+                          }`}
+                        >
+                          {step}
+                        </span>
+                      </motion.div>
+                    ))}
                   </div>
-                ))}
+                </div>
+
+                {/* Focus Channeling Mini-Game */}
+                <div className="border-t border-white/10 pt-4">
+                  <FocusChannel
+                    active={gameState === 'executing'}
+                    onComplete={setFocusResult}
+                  />
+                </div>
               </div>
-            </div>
+            </AnimatedCard>
+          </motion.div>
+        );
+      }
 
-            {/* Focus Channeling Mini-Game */}
-            <div className="border-t border-white/10 pt-4">
-              <FocusChannel
-                active={gameState === 'executing'}
-                onComplete={setFocusResult}
-              />
-            </div>
-          </div>
-        </AnimatedCard>
-      );
-    }
+      if ((gameState === 'encounter' || gameState === 'resolving') && currentEncounter) {
+        return (
+          <motion.div
+            key="encounter"
+            variants={sceneVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={transition}
+          >
+            <EncounterDisplay
+              encounter={currentEncounter}
+              choices={encounterChoices}
+              onSelectChoice={handleSelectChoice}
+              isResolving={gameState === 'resolving'}
+              characterEnergy={character.currentEnergy}
+              characterPowers={character.powers}
+              focusResult={focusResult}
+            />
+          </motion.div>
+        );
+      }
 
-    if ((gameState === 'encounter' || gameState === 'resolving') && currentEncounter) {
-      return (
-        <EncounterDisplay
-          encounter={currentEncounter}
-          choices={encounterChoices}
-          onSelectChoice={handleSelectChoice}
-          isResolving={gameState === 'resolving'}
-          characterEnergy={character.currentEnergy}
-          characterPowers={character.powers}
-          focusResult={focusResult}
-        />
-      );
-    }
+      if (gameState === 'conflict' && conflictState) {
+        return (
+          <motion.div
+            key="conflict"
+            variants={sceneVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={transition}
+          >
+            <ConflictPane
+              state={conflictState}
+              leverage={leverage}
+              onPlayerMove={handleConflictMove}
+              onLeverageSpend={handleLeverageSpend}
+              onContinue={handleConflictContinue}
+            />
+          </motion.div>
+        );
+      }
 
-    if (gameState === 'conflict' && conflictState) {
-      return (
-        <ConflictPane
-          state={conflictState}
-          leverage={leverage}
-          onPlayerMove={handleConflictMove}
-          onLeverageSpend={handleLeverageSpend}
-          onContinue={handleConflictContinue}
-        />
-      );
-    }
+      if (gameState === 'outcome' && currentOutcome) {
+        return (
+          <motion.div
+            key="outcome"
+            variants={sceneVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={transition}
+          >
+            <OutcomeDisplay
+              outcome={currentOutcome}
+              resolution={currentResolution ?? undefined}
+              powerProgression={currentPowerProgression ?? undefined}
+              conflictResult={conflictResult ?? undefined}
+              onContinue={handleContinue}
+            />
+          </motion.div>
+        );
+      }
 
-    if (gameState === 'outcome' && currentOutcome) {
-      return (
-        <OutcomeDisplay
-          outcome={currentOutcome}
-          resolution={currentResolution ?? undefined}
-          powerProgression={currentPowerProgression ?? undefined}
-          conflictResult={conflictResult ?? undefined}
-          onContinue={handleContinue}
-        />
-      );
-    }
+      return null;
+    })();
 
-    return null;
+    return (
+      <AnimatePresence mode="wait">
+        {content}
+      </AnimatePresence>
+    );
   };
 
   return (
@@ -1258,114 +1403,180 @@ export default function GamePage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => router.push('/profile')}
-              className="hidden sm:flex text-white/70 hover:text-white hover:bg-white/10"
-            >
-              <User className="h-4 w-4 mr-1" />
-              Profile
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => router.push('/game/npcs')}
-              className="hidden sm:flex text-white/70 hover:text-white hover:bg-white/10"
-            >
-              <Users className="h-4 w-4 mr-1" />
-              Contacts
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => router.push('/map')}
-              className="hidden sm:flex text-white/70 hover:text-white hover:bg-white/10"
-            >
-              <MapIcon className="h-4 w-4 mr-1" />
-              Map
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => router.push('/help')}
-              className="hidden sm:flex text-white/70 hover:text-white hover:bg-white/10"
-            >
-              <HelpCircle className="h-4 w-4 mr-1" />
-              Help
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => signOut({ callbackUrl: '/' })}
-              className="text-white/70 hover:text-white hover:bg-white/10"
-            >
-              <LogOut className="h-4 w-4" />
-              <span className="hidden sm:inline ml-1">Logout</span>
-            </Button>
+            <motion.div whileHover={prefersReducedMotion ? {} : { scale: 1.02 }} whileTap={prefersReducedMotion ? {} : { scale: 0.98 }}>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => router.push('/profile')}
+                className="hidden sm:flex text-white/70 hover:text-white hover:bg-white/10"
+              >
+                <User className="h-4 w-4 mr-1" />
+                Profile
+              </Button>
+            </motion.div>
+            <motion.div whileHover={prefersReducedMotion ? {} : { scale: 1.02 }} whileTap={prefersReducedMotion ? {} : { scale: 0.98 }}>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => router.push('/game/npcs')}
+                className="hidden sm:flex text-white/70 hover:text-white hover:bg-white/10"
+              >
+                <Users className="h-4 w-4 mr-1" />
+                Contacts
+              </Button>
+            </motion.div>
+            <motion.div whileHover={prefersReducedMotion ? {} : { scale: 1.02 }} whileTap={prefersReducedMotion ? {} : { scale: 0.98 }}>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => router.push('/map')}
+                className="hidden sm:flex text-white/70 hover:text-white hover:bg-white/10"
+              >
+                <MapIcon className="h-4 w-4 mr-1" />
+                Map
+              </Button>
+            </motion.div>
+            <motion.div whileHover={prefersReducedMotion ? {} : { scale: 1.02 }} whileTap={prefersReducedMotion ? {} : { scale: 0.98 }}>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => router.push('/help')}
+                className="hidden sm:flex text-white/70 hover:text-white hover:bg-white/10"
+              >
+                <HelpCircle className="h-4 w-4 mr-1" />
+                Help
+              </Button>
+            </motion.div>
+            <motion.div whileHover={prefersReducedMotion ? {} : { scale: 1.02 }} whileTap={prefersReducedMotion ? {} : { scale: 0.98 }}>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => signOut({ callbackUrl: '/' })}
+                className="text-white/70 hover:text-white hover:bg-white/10"
+              >
+                <LogOut className="h-4 w-4" />
+                <span className="hidden sm:inline ml-1">Logout</span>
+              </Button>
+            </motion.div>
 
             {/* Mobile menu button */}
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="sm:hidden text-white/70 hover:text-white hover:bg-white/10"
-            >
-              {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-            </Button>
+            <motion.div whileTap={prefersReducedMotion ? {} : { scale: 0.95 }}>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="sm:hidden text-white/70 hover:text-white hover:bg-white/10"
+              >
+                <AnimatePresence mode="wait">
+                  {mobileMenuOpen ? (
+                    <motion.div
+                      key="close"
+                      initial={{ rotate: -90, opacity: 0 }}
+                      animate={{ rotate: 0, opacity: 1 }}
+                      exit={{ rotate: 90, opacity: 0 }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      <X className="h-5 w-5" />
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="menu"
+                      initial={{ rotate: 90, opacity: 0 }}
+                      animate={{ rotate: 0, opacity: 1 }}
+                      exit={{ rotate: -90, opacity: 0 }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      <Menu className="h-5 w-5" />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </Button>
+            </motion.div>
           </div>
         </div>
       </header>
 
       {/* Mobile dropdown menu */}
-      {mobileMenuOpen && (
-        <div className="sm:hidden bg-gray-900/95 border-b border-white/10 p-3 space-y-2 backdrop-blur-md">
-          <Button
-            variant="ghost"
-            className="w-full justify-start text-white/70 hover:text-white hover:bg-white/10"
-            onClick={() => {
-              router.push('/profile');
-              setMobileMenuOpen(false);
-            }}
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <motion.div
+            className="sm:hidden bg-gray-900/95 border-b border-white/10 p-3 space-y-2 backdrop-blur-md overflow-hidden"
+            initial={prefersReducedMotion ? {} : { height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={prefersReducedMotion ? {} : { height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
           >
-            <User className="h-4 w-4 mr-2" />
-            Profile
-          </Button>
-          <Button
-            variant="ghost"
-            className="w-full justify-start text-white/70 hover:text-white hover:bg-white/10"
-            onClick={() => {
-              router.push('/game/npcs');
-              setMobileMenuOpen(false);
-            }}
-          >
-            <Users className="h-4 w-4 mr-2" />
-            Contacts
-          </Button>
-          <Button
-            variant="ghost"
-            className="w-full justify-start text-white/70 hover:text-white hover:bg-white/10"
-            onClick={() => {
-              router.push('/map');
-              setMobileMenuOpen(false);
-            }}
-          >
-            <MapIcon className="h-4 w-4 mr-2" />
-            Map
-          </Button>
-          <Button
-            variant="ghost"
-            className="w-full justify-start text-white/70 hover:text-white hover:bg-white/10"
-            onClick={() => {
-              router.push('/help');
-              setMobileMenuOpen(false);
-            }}
-          >
-            <HelpCircle className="h-4 w-4 mr-2" />
-            Help
-          </Button>
-        </div>
-      )}
+            <motion.div
+              initial={prefersReducedMotion ? {} : { y: -10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.05 }}
+            >
+              <Button
+                variant="ghost"
+                className="w-full justify-start text-white/70 hover:text-white hover:bg-white/10"
+                onClick={() => {
+                  router.push('/profile');
+                  setMobileMenuOpen(false);
+                }}
+              >
+                <User className="h-4 w-4 mr-2" />
+                Profile
+              </Button>
+            </motion.div>
+            <motion.div
+              initial={prefersReducedMotion ? {} : { y: -10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.08 }}
+            >
+              <Button
+                variant="ghost"
+                className="w-full justify-start text-white/70 hover:text-white hover:bg-white/10"
+                onClick={() => {
+                  router.push('/game/npcs');
+                  setMobileMenuOpen(false);
+                }}
+              >
+                <Users className="h-4 w-4 mr-2" />
+                Contacts
+              </Button>
+            </motion.div>
+            <motion.div
+              initial={prefersReducedMotion ? {} : { y: -10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.11 }}
+            >
+              <Button
+                variant="ghost"
+                className="w-full justify-start text-white/70 hover:text-white hover:bg-white/10"
+                onClick={() => {
+                  router.push('/map');
+                  setMobileMenuOpen(false);
+                }}
+              >
+                <MapIcon className="h-4 w-4 mr-2" />
+                Map
+              </Button>
+            </motion.div>
+            <motion.div
+              initial={prefersReducedMotion ? {} : { y: -10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.14 }}
+            >
+              <Button
+                variant="ghost"
+                className="w-full justify-start text-white/70 hover:text-white hover:bg-white/10"
+                onClick={() => {
+                  router.push('/help');
+                  setMobileMenuOpen(false);
+                }}
+              >
+                <HelpCircle className="h-4 w-4 mr-2" />
+                Help
+              </Button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Mobile Status Strip */}
       <StatusStrip
@@ -1402,74 +1613,104 @@ export default function GamePage() {
         {/* MOBILE LAYOUT (< sm) */}
         <div className="sm:hidden">
           <div className="px-4 py-4 max-w-lg mx-auto">
-            {mobileTab === 'scene' && renderSceneContent()}
+            <AnimatePresence mode="wait">
+              {mobileTab === 'scene' && (
+                <motion.div
+                  key="mobile-scene"
+                  variants={mobileContentVariants}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  transition={transition}
+                >
+                  {renderSceneContent()}
+                </motion.div>
+              )}
 
-            {mobileTab === 'actions' && (
-              <ActionSelector
-                playerLevel={character.level}
-                playerAttributes={character.attributes}
-                playerPowers={character.powers.map((p) => p.powerId)}
-                playerEnergy={character.currentEnergy}
-                cooldowns={character.cooldowns}
-                onSelectAction={handleSelectAction}
-                onSelectFollowUp={handleSelectFollowUp}
-                followUps={character.followUps}
-                disabled={gameState !== 'idle'}
-                activeGoals={activeGoals}
-                currentDistrict={character.currentDistrict}
-                onDistrictChange={handleDistrictChange}
-                compact
-                hideHeader
-              />
-            )}
-
-            {mobileTab === 'log' && (
-              <div className="space-y-4">
-                {/* City Update */}
-                {latestCityUpdate && (
-                  <CityUpdateCard
-                    title={latestCityUpdate.summary}
-                    body={latestCityUpdate.fullDescription || ''}
-                    timestamp={latestCityUpdate.createdAt}
+              {mobileTab === 'actions' && (
+                <motion.div
+                  key="mobile-actions"
+                  variants={mobileContentVariants}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  transition={transition}
+                >
+                  <ActionSelector
+                    playerLevel={character.level}
+                    playerAttributes={character.attributes}
+                    playerPowers={character.powers.map((p) => p.powerId)}
+                    playerEnergy={character.currentEnergy}
+                    cooldowns={character.cooldowns}
+                    onSelectAction={handleSelectAction}
+                    onSelectFollowUp={handleSelectFollowUp}
+                    followUps={character.followUps}
+                    disabled={gameState !== 'idle'}
+                    activeGoals={activeGoals}
+                    currentDistrict={character.currentDistrict}
+                    onDistrictChange={handleDistrictChange}
+                    compact
+                    hideHeader
                   />
-                )}
+                </motion.div>
+              )}
 
-                {/* Compact goals summary */}
-                {activeGoals.length > 0 && (
-                  <div className="panel-glass p-3">
-                    <h3 className="text-sm font-semibold text-white/80 mb-2 flex items-center gap-1">
-                      <span className="text-yellow-400">★</span> Goals
-                    </h3>
-                    <div className="space-y-2">
-                      {activeGoals.slice(0, 2).map((goal) => (
-                        <div key={goal.id} className="text-xs">
-                          <div className="flex justify-between text-white/80">
-                            <span className="truncate flex-1">{goal.title}</span>
-                            <span className="text-white/50 ml-2">
-                              {goal.currentProgress}/{goal.targetValue}
-                            </span>
+              {mobileTab === 'log' && (
+                <motion.div
+                  key="mobile-log"
+                  variants={mobileContentVariants}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  transition={transition}
+                  className="space-y-4"
+                >
+                  {/* City Update */}
+                  {latestCityUpdate && (
+                    <CityUpdateCard
+                      title={latestCityUpdate.summary}
+                      body={latestCityUpdate.fullDescription || ''}
+                      timestamp={latestCityUpdate.createdAt}
+                    />
+                  )}
+
+                  {/* Compact goals summary */}
+                  {activeGoals.length > 0 && (
+                    <div className="panel-glass p-3">
+                      <h3 className="text-sm font-semibold text-white/80 mb-2 flex items-center gap-1">
+                        <span className="text-yellow-400">★</span> Goals
+                      </h3>
+                      <div className="space-y-2">
+                        {activeGoals.slice(0, 2).map((goal) => (
+                          <div key={goal.id} className="text-xs">
+                            <div className="flex justify-between text-white/80">
+                              <span className="truncate flex-1">{goal.title}</span>
+                              <span className="text-white/50 ml-2">
+                                {goal.currentProgress}/{goal.targetValue}
+                              </span>
+                            </div>
+                            <div className="h-1 bg-white/10 rounded-full mt-1 overflow-hidden">
+                              <div
+                                className="h-full bg-blue-400 rounded-full"
+                                style={{
+                                  width: `${Math.min(100, (goal.currentProgress / goal.targetValue) * 100)}%`,
+                                }}
+                              />
+                            </div>
                           </div>
-                          <div className="h-1 bg-white/10 rounded-full mt-1 overflow-hidden">
-                            <div
-                              className="h-full bg-blue-400 rounded-full"
-                              style={{
-                                width: `${Math.min(100, (goal.currentProgress / goal.targetValue) * 100)}%`,
-                              }}
-                            />
-                          </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {/* Story log */}
-                <div className="panel-glass p-3">
-                  <h3 className="text-sm font-semibold text-white/80 mb-3">Recent Events</h3>
-                  <StoryLogPanel events={character.storyEvents} maxItems={10} compact />
-                </div>
-              </div>
-            )}
+                  {/* Story log */}
+                  <div className="panel-glass p-3">
+                    <h3 className="text-sm font-semibold text-white/80 mb-3">Recent Events</h3>
+                    <StoryLogPanel events={character.storyEvents} maxItems={10} compact />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
 
@@ -1483,24 +1724,35 @@ export default function GamePage() {
             </aside>
 
             {/* Center - Scene */}
-            <section className="col-span-8 lg:col-span-6 space-y-4">
+            <motion.section
+              className="col-span-8 lg:col-span-6 space-y-4"
+              variants={staggerContainerVariants}
+              initial="initial"
+              animate="animate"
+            >
               {renderSceneContent()}
 
-              {/* City Update (desktop only) */}
+              {/* City Update (desktop only) - staggered entrance */}
               {latestCityUpdate && (
-                <CityUpdateCard
-                  title={latestCityUpdate.summary}
-                  body={latestCityUpdate.fullDescription || ''}
-                  timestamp={latestCityUpdate.createdAt}
-                />
+                <motion.div variants={staggerItemVariants} transition={transition}>
+                  <CityUpdateCard
+                    title={latestCityUpdate.summary}
+                    body={latestCityUpdate.fullDescription || ''}
+                    timestamp={latestCityUpdate.createdAt}
+                  />
+                </motion.div>
               )}
 
-              {/* Story Log (desktop only) */}
-              <div className="panel-glass p-4">
+              {/* Story Log (desktop only) - staggered entrance */}
+              <motion.div
+                className="panel-glass p-4"
+                variants={staggerItemVariants}
+                transition={transition}
+              >
                 <h3 className="text-sm font-semibold text-white/80 mb-3">Story Log</h3>
                 <StoryLogPanel events={character.storyEvents} maxItems={5} />
-              </div>
-            </section>
+              </motion.div>
+            </motion.section>
 
             {/* Right - Actions */}
             <aside className="hidden lg:block lg:col-span-3">
