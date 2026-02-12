@@ -714,60 +714,97 @@ export async function POST(request: Request) {
       }
     }
 
-    // Resolve encounter outcome — either via conflict engine override or standard combat resolver
-    let resolution: ResolutionBreakdown;
-    let isSuccess: boolean;
-    let isPartial: boolean;
-    let isFailure: boolean;
+    // --- SERVER-AUTHORITATIVE OUTCOME RESOLUTION ---
+    // SECURITY: The server ALWAYS computes the authoritative outcome for rewards and persistent state.
+    // Client-provided `resolutionOutcomeOverride` is treated as telemetry/UI hint ONLY in production.
+    // This prevents malicious clients from claiming "success" to farm rewards.
 
     // Check if character is wounded (for difficulty modifier and death handling)
     // Use optional chaining for backwards compatibility during migration
     const isWounded = (character as { isWounded?: boolean }).isWounded ?? false;
 
-    if (resolutionOutcomeOverride && VALID_OUTCOME_OVERRIDES.includes(resolutionOutcomeOverride)) {
-      // Client-side conflict engine provided the outcome — skip resolveEncounter()
-      isSuccess = resolutionOutcomeOverride === 'success';
-      isPartial = resolutionOutcomeOverride === 'partial';
-      isFailure = resolutionOutcomeOverride === 'failure';
+    // ALWAYS compute server-side resolution — this is the authoritative outcome for rewards/state
+    const woundedPenalty = isWounded ? WOUNDED_HEAT_PENALTY : 0;
+    const serverResolution = resolveEncounter({
+      difficulty: encounter.difficulty,
+      approach,
+      attributes: attributesMap,
+      powerIds: powersList,
+      repByFaction: factionReputations,
+      encounterTags: encounter.narrativeTags,
+      involvedFactions: encounter.requiredFactions,
+      powerLevelBonus: totalPowerLevelBonus,
+      powerLevelLabel: totalPowerLevelLabel,
+      npcInfluenceBonus,
+      npcInfluenceLabel,
+      focusBonus: focusModifier,
+      focusBonusLabel: focusMode ? `Focus (${focusMode.charAt(0).toUpperCase() + focusMode.slice(1)})` : undefined,
+      woundedPenalty,
+      woundedPenaltyLabel: isWounded ? `Wounded (+${WOUNDED_HEAT_PENALTY})` : undefined,
+    });
+
+    // Server outcome is ALWAYS authoritative for rewards and persistent state
+    const serverOutcome = serverResolution.outcome;
+
+    // Track if client sent an override (for telemetry/logging only)
+    const clientOutcomeReceived = resolutionOutcomeOverride && VALID_OUTCOME_OVERRIDES.includes(resolutionOutcomeOverride)
+      ? resolutionOutcomeOverride
+      : null;
+
+    // In development ONLY, allow override for testing purposes (opt-in via env var)
+    // In production, server outcome is always authoritative — client override is ignored for rewards
+    const allowClientOverride = process.env.NODE_ENV !== 'production' && process.env.ALLOW_OUTCOME_OVERRIDE === 'true';
+
+    let resolution: ResolutionBreakdown;
+    let isSuccess: boolean;
+    let isPartial: boolean;
+    let isFailure: boolean;
+
+    if (allowClientOverride && clientOutcomeReceived) {
+      // DEV ONLY: Allow client override for testing conflict engine
+      isSuccess = clientOutcomeReceived === 'success';
+      isPartial = clientOutcomeReceived === 'partial';
+      isFailure = clientOutcomeReceived === 'failure';
 
       resolution = {
-        outcome: resolutionOutcomeOverride,
+        outcome: clientOutcomeReceived,
         roll: 0,
         target: 0,
-        modifiers: [{ label: 'Conflict resolution', value: 0 }],
-        summary: `Outcome determined by conflict resolution: ${resolutionOutcomeOverride}.`,
+        modifiers: [{ label: 'Conflict resolution (dev override)', value: 0 }],
+        summary: `Outcome determined by conflict resolution: ${clientOutcomeReceived}. (DEV OVERRIDE)`,
       } as ResolutionBreakdown;
 
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[Resolve] Conflict outcome received:', conflictOutcome);
-        console.log('[Resolve] Using resolutionOutcomeOverride:', resolutionOutcomeOverride, '→', { isSuccess, isPartial, isFailure });
-      }
-    } else {
-      // Standard combat resolver path
-      // Calculate wounded penalty if character is wounded
-      const woundedPenalty = isWounded ? WOUNDED_HEAT_PENALTY : 0;
-
-      resolution = resolveEncounter({
-        difficulty: encounter.difficulty,
-        approach,
-        attributes: attributesMap,
-        powerIds: powersList,
-        repByFaction: factionReputations,
-        encounterTags: encounter.narrativeTags,
-        involvedFactions: encounter.requiredFactions,
-        powerLevelBonus: totalPowerLevelBonus,
-        powerLevelLabel: totalPowerLevelLabel,
-        npcInfluenceBonus,
-        npcInfluenceLabel,
-        focusBonus: focusModifier,
-        focusBonusLabel: focusMode ? `Focus (${focusMode.charAt(0).toUpperCase() + focusMode.slice(1)})` : undefined,
-        woundedPenalty,
-        woundedPenaltyLabel: isWounded ? `Wounded (+${WOUNDED_HEAT_PENALTY})` : undefined,
+      console.warn('[Resolve] DEV OVERRIDE: Using client outcome instead of server outcome:', {
+        clientOutcome: clientOutcomeReceived,
+        serverOutcome,
+        diff: clientOutcomeReceived !== serverOutcome,
       });
+    } else {
+      // PRODUCTION PATH: Use server-authoritative outcome for all game-impacting decisions
+      isSuccess = serverOutcome === 'success';
+      isPartial = serverOutcome === 'partial';
+      isFailure = serverOutcome === 'failure';
+      resolution = serverResolution;
 
-      isSuccess = resolution.outcome === 'success';
-      isPartial = resolution.outcome === 'partial';
-      isFailure = resolution.outcome === 'failure';
+      // Log if client sent a different outcome (potential exploit attempt or desync)
+      if (clientOutcomeReceived && clientOutcomeReceived !== serverOutcome) {
+        console.warn('[Resolve] Client outcome mismatch (ignored for rewards):', {
+          clientOutcome: clientOutcomeReceived,
+          serverOutcome,
+          characterId: character.id,
+          encounterId,
+        });
+      }
+
+      if (process.env.NODE_ENV === 'development' && clientOutcomeReceived) {
+        console.log('[Resolve] Client outcome received but using server outcome:', {
+          clientOutcome: clientOutcomeReceived,
+          serverOutcome,
+          isSuccess,
+          isPartial,
+          isFailure,
+        });
+      }
     }
 
     // Select base result - partial uses success result with reduced rewards
@@ -1411,12 +1448,18 @@ export async function POST(request: Request) {
   }
 }
 
-// Manual test steps for resolutionOutcomeOverride:
+// SECURITY NOTE: Server-authoritative outcome resolution
+// The server ALWAYS computes the authoritative outcome via resolveEncounter().
+// Client-provided resolutionOutcomeOverride is treated as telemetry ONLY in production.
+// This prevents malicious clients from claiming "success" to farm rewards.
+//
+// Manual test steps (production behavior):
 // 1. Start game, execute action, trigger encounter, pick a choice.
-// 2. In the conflict phase UI, play through turns, get a ConflictResult.
-// 3. The client maps ConflictResult.outcome → resolutionOutcomeOverride:
-//      player_victory → "success", opponent_victory → "failure", stalemate → "partial"
-// 4. POST /api/action/resolve with body including resolutionOutcomeOverride: "success"
-// 5. Verify response.resolution.summary starts with "Outcome determined by conflict resolution"
-// 6. Verify rewards/XP/faction changes still apply correctly.
-// 7. Omit resolutionOutcomeOverride → standard resolveEncounter() path runs as before.
+// 2. Send resolutionOutcomeOverride: "success" even when server would compute "failure"
+// 3. Verify: rewards/XP/state reflect the SERVER outcome (not client override)
+// 4. Verify: console logs a warning about client outcome mismatch
+//
+// To enable DEV override for conflict engine testing:
+// 1. Set NODE_ENV !== 'production' AND ALLOW_OUTCOME_OVERRIDE=true
+// 2. Client override will be used (with warning logged)
+// 3. This is for testing only — never enable in production.
