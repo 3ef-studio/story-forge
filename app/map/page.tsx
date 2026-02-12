@@ -18,6 +18,22 @@ interface DistrictState {
   controllingFactionShortName: string | null;
 }
 
+interface FactionCityControl {
+  factionId: string;
+  factionName: string;
+  factionShortName: string;
+  totalPoints: number;
+  percent: number;
+}
+
+interface CityControlSummary {
+  factions: FactionCityControl[];
+  totalControlledPoints: number;
+  contestedPoints: number;
+  contestedPercent: number;
+  totalAllPoints: number;
+}
+
 // Faction colors for visual distinction
 const FACTION_COLORS: Record<string, { bg: string; border: string; text: string }> = {
   guardian_initiative: { bg: 'bg-blue-500/20', border: 'border-blue-500/50', text: 'text-blue-400' },
@@ -97,6 +113,7 @@ function DistrictCard({ district }: { district: DistrictState }) {
 export default function MapPage() {
   const router = useRouter();
   const [districtStates, setDistrictStates] = useState<DistrictState[]>([]);
+  const [cityControl, setCityControl] = useState<CityControlSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -120,6 +137,7 @@ export default function MapPage() {
 
       const data = await response.json();
       setDistrictStates(data.districtStates);
+      setCityControl(data.cityControl ?? null);
     } catch (err) {
       console.error('Error fetching district states:', err);
       setError(err instanceof Error ? err.message : 'An error occurred');
@@ -185,9 +203,47 @@ export default function MapPage() {
 
       {/* Main Content */}
       <main className="max-w-4xl mx-auto px-4 py-6">
+        {/* City Control Summary */}
+        {cityControl && (
+          <div className="mb-6 p-4 rounded-xl bg-white/5 border border-white/10">
+            <h2 className="text-sm font-medium text-white/60 mb-4">City Control</h2>
+            <div className="space-y-3">
+              {cityControl.factions.map((faction) => {
+                const colors = getFactionColors(faction.factionId);
+                return (
+                  <div key={faction.factionId} className="space-y-1">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className={colors.text}>{faction.factionShortName}</span>
+                      <span className="text-white/70">{faction.percent}%</span>
+                    </div>
+                    <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full transition-all duration-500 ${colors.bg.replace('/20', '/60')}`}
+                        style={{ width: `${faction.percent}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+              {/* Contested indicator */}
+              {cityControl.contestedPercent > 0 && (
+                <div className="pt-2 border-t border-white/10">
+                  <div className="flex items-center justify-between text-xs text-white/50">
+                    <span>Contested districts</span>
+                    <span>{cityControl.contestedPercent}% of city</span>
+                  </div>
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-white/40 mt-3">
+              Contested districts not counted toward faction totals
+            </p>
+          </div>
+        )}
+
         {/* Legend */}
         <div className="mb-6 p-4 rounded-xl bg-white/5 border border-white/10">
-          <h2 className="text-sm font-medium text-white/60 mb-3">Faction Control</h2>
+          <h2 className="text-sm font-medium text-white/60 mb-3">Faction Colors</h2>
           <div className="flex flex-wrap gap-3">
             {Object.entries(FACTION_COLORS).map(([id, colors]) => (
               <div key={id} className="flex items-center gap-2">

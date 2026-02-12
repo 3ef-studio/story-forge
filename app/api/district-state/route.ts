@@ -3,12 +3,14 @@
  *
  * GET /api/district-state
  * Returns all district states for the current character, initializing if necessary.
+ * Also includes city-level control summary for controllable factions.
  */
 
 import { NextResponse } from 'next/server';
 import { auth } from '@/app/lib/auth';
 import { prisma } from '@/app/lib/db';
 import { getDistrictStates } from '@/app/lib/game-logic/district-state';
+import { computeCityControl } from '@/app/lib/world/cityControl';
 
 export async function GET() {
   try {
@@ -31,9 +33,13 @@ export async function GET() {
     // Get district states (will initialize if needed)
     const districtStates = await getDistrictStates(character.id);
 
+    // Compute city-level control summary
+    const cityControl = computeCityControl(districtStates);
+
     return NextResponse.json({
       success: true,
       districtStates,
+      cityControl,
     });
   } catch (error) {
     console.error('[DistrictState API] Error:', error);
