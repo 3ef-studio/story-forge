@@ -348,11 +348,14 @@ const MAX_HEAT = 10;
 /**
  * Compute the heat update for an action resolution.
  *
- * Heat rules:
- * - Follow-up action: +1 heat
- * - Rest action: -2 heat
- * - Normal action (non-follow-up, non-rest): -1 heat (decay per action)
+ * Heat rules (checked in priority order):
+ * 1. Rest action: -2 heat (always takes priority, even for follow-up rests)
+ * 2. Follow-up action (non-rest): +1 heat
+ * 3. Normal action (non-follow-up, non-rest): -1 heat (decay per action)
  * - Clamp to [0, MAX_HEAT]
+ *
+ * NOTE: Rest takes priority over follow-up to avoid penalizing players who
+ * use a follow-up rest action. A follow-up rest should still provide rest benefits.
  *
  * Detection uses the executed actionId directly:
  * - isFollowUp: rawActionId.startsWith('fup_')
@@ -371,15 +374,15 @@ export function computeHeatUpdate(input: {
   let newHeat = currentHeat;
   let reason: HeatUpdateResult['reason'] = 'none';
 
-  // Follow-up action: +1 heat
-  if (isFollowUp) {
-    newHeat = Math.min(MAX_HEAT, currentHeat + 1);
-    reason = 'followUp';
-  }
-  // Rest action: -2 heat
-  else if (isRest) {
+  // Rest action: -2 heat (takes priority over follow-up to avoid penalizing rest follow-ups)
+  if (isRest) {
     newHeat = Math.max(0, currentHeat - 2);
     reason = currentHeat > 0 ? 'rest' : 'none';
+  }
+  // Follow-up action (non-rest): +1 heat
+  else if (isFollowUp) {
+    newHeat = Math.min(MAX_HEAT, currentHeat + 1);
+    reason = 'followUp';
   }
   // Normal action (non-follow-up, non-rest): -1 heat decay
   else if (currentHeat > 0) {
