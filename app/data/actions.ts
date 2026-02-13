@@ -248,8 +248,8 @@ export const actions: Action[] = [
     narrativeContext: 'Player commits high-profile robbery, willing to use powers for personal gain',
     locationTypes: ['banks', 'financial_district', 'downtown'],
     baseXPReward: 40,
-    baseMoneyReward: 300,
-    cooldownHours: 3
+    baseMoneyReward: 200,
+    cooldownHours: 1
   },
 
   {
@@ -311,13 +311,50 @@ export const actions: Action[] = [
       'rival_gang_conflict',
       'smuggling_run'
     ],
-    difficultyRange: [4, 8],
+    difficultyRange: [2, 6],
     likelyFactions: ['syndicate', 'metro_police', 'street_gangs', 'guardian_initiative'],
     narrativeContext: 'Player works for organized crime, taking orders and getting paid',
     locationTypes: ['docks', 'warehouses', 'syndicate_territory'],
     baseXPReward: 35,
-    baseMoneyReward: 300,
-    cooldownHours: 5
+    baseMoneyReward: 30
+  },
+
+  {
+    id: 'vandalize_public_property',  
+    name: 'Vandalize Public Property',
+    description: 'Cause chaos and damage by destroying public infrastructure',
+    category: 'criminal',
+    moralIntent: 'villainous',
+    energyCost: 5,
+    requiredAttributes: [
+      { attributeId: 'notoriety', minValue: 1 }
+    ],
+    factionImpacts: [
+      { factionId: 'guardian_initiative', reputationChange: -4 },
+      { factionId: 'vigilante_network', reputationChange: -3 },
+      { factionId: 'metro_police', reputationChange: -2 },
+      { factionId: 'civilian_population', reputationChange: -3 },
+      { factionId: 'nihilist_collective', reputationChange: 2 },
+      { factionId: 'syndicate', reputationChange: 1 }
+    ],
+    attributeGrowthChance: [
+      { attributeId: 'notoriety', chance: 0.6 },
+      { attributeId: 'strength', chance: 0.3 }
+    ],
+    encounterChance: 0.8,
+    encounterTypes: [
+      'public_disturbance',
+      'property_damage',
+      'vandalism_challenge',
+      'law_enforcement_response',
+      'civilian_witness'
+    ],
+    difficultyRange: [3, 7],
+    likelyFactions: ['guardian_initiative', 'vigilante_network', 'metro_police'],
+    narrativeContext: 'Player engages in acts of vandalism, making a statement against authority',
+    locationTypes: ['public_spaces', 'government_buildings', 'transportation_hubs'],
+    baseXPReward: 30,
+    baseMoneyReward: 0
   },
 
   {
@@ -328,7 +365,7 @@ export const actions: Action[] = [
     moralIntent: 'villainous',
     energyCost: 18,
     requiredAttributes: [
-      { attributeId: 'notoriety', minValue: 20 }
+      { attributeId: 'notoriety', minValue: 5 }
     ],
     factionImpacts: [
       { factionId: 'guardian_initiative', reputationChange: -6 },
@@ -355,8 +392,7 @@ export const actions: Action[] = [
     narrativeContext: 'Player actively hunts heroes, establishing themselves as a villain',
     locationTypes: ['anywhere', 'hero_patrol_routes', 'guardian_hq_vicinity'],
     baseXPReward: 50,
-    baseMoneyReward: 0,
-    cooldownHours: 24
+    baseMoneyReward: 0
   },
 
   // === NEUTRAL ACTIONS ===
@@ -626,7 +662,7 @@ export const actions: Action[] = [
     locationTypes: ['meeting_places', 'bars', 'community_centers', 'hideouts'],
     baseXPReward: 25,
     baseMoneyReward: 0,
-    cooldownHours: 24
+    cooldownHours: 4
   },
 
   {
