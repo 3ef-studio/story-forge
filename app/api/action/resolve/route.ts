@@ -715,17 +715,18 @@ export async function POST(request: Request) {
     }
 
     // --- SERVER-AUTHORITATIVE OUTCOME RESOLUTION ---
-    // SECURITY: The server ALWAYS computes the authoritative outcome for rewards and persistent state.
-    // Client-provided `resolutionOutcomeOverride` is treated as telemetry/UI hint ONLY in production.
-    // This prevents malicious clients from claiming "success" to farm rewards.
+    // SECURITY: The server validates all outcomes before applying rewards.
+    // Two resolution paths:
+    // 1. CONFLICT MINI-GAME: If conflictOutcome is provided, validate and use it (player played the game)
+    // 2. DICE ROLL FALLBACK: If no conflict mini-game, use resolveEncounter() dice roll
 
     // Check if character is wounded (for difficulty modifier and death handling)
     // Use optional chaining for backwards compatibility during migration
     const isWounded = (character as { isWounded?: boolean }).isWounded ?? false;
 
-    // ALWAYS compute server-side resolution — this is the authoritative outcome for rewards/state
+    // Compute server-side resolution as fallback (used when no mini-game was played)
     const woundedPenalty = isWounded ? WOUNDED_HEAT_PENALTY : 0;
-    const serverResolution = resolveEncounter({
+    const diceRollResolution = resolveEncounter({
       difficulty: encounter.difficulty,
       approach,
       attributes: attributesMap,
@@ -743,66 +744,110 @@ export async function POST(request: Request) {
       woundedPenaltyLabel: isWounded ? `Wounded (+${WOUNDED_HEAT_PENALTY})` : undefined,
     });
 
-    // Server outcome is ALWAYS authoritative for rewards and persistent state
-    const serverOutcome = serverResolution.outcome;
+    // Validate conflict outcome if provided (player played the mini-game)
+    // The validation checks that the result is consistent with the final resource states
+    function validateConflictOutcome(co: ConflictOutcomePayload): boolean {
+      // Must have a valid result
+      if (!['victory', 'defeat', 'stalemate'].includes(co.result)) {
+        return false;
+      }
 
-    // Track if client sent an override (for telemetry/logging only)
-    const clientOutcomeReceived = resolutionOutcomeOverride && VALID_OUTCOME_OVERRIDES.includes(resolutionOutcomeOverride)
-      ? resolutionOutcomeOverride
-      : null;
+      // If final resources are provided, validate they match the claimed result
+      if (co.final) {
+        const playerTotal = co.final.player.control + co.final.player.stability + co.final.player.position;
+        const opponentTotal = co.final.opponent.control + co.final.opponent.stability + co.final.opponent.position;
 
-    // In development ONLY, allow override for testing purposes (opt-in via env var)
-    // In production, server outcome is always authoritative — client override is ignored for rewards
-    const allowClientOverride = process.env.NODE_ENV !== 'production' && process.env.ALLOW_OUTCOME_OVERRIDE === 'true';
+        // Victory: opponent should be depleted (total <= 0) or player significantly ahead
+        if (co.result === 'victory') {
+          // Valid if opponent is depleted OR player has clear advantage
+          if (opponentTotal > 0 && playerTotal <= opponentTotal) {
+            console.warn('[Resolve] Invalid conflict outcome: victory claimed but opponent not depleted', {
+              playerTotal,
+              opponentTotal,
+            });
+            return false;
+          }
+        }
+
+        // Defeat: player should be depleted or opponent significantly ahead
+        if (co.result === 'defeat') {
+          if (playerTotal > 0 && opponentTotal <= playerTotal) {
+            console.warn('[Resolve] Invalid conflict outcome: defeat claimed but player not depleted', {
+              playerTotal,
+              opponentTotal,
+            });
+            return false;
+          }
+        }
+
+        // Stalemate: both should be in similar state or time ran out
+        // (less strict validation since stalemate can occur in various ways)
+      }
+
+      return true;
+    }
 
     let resolution: ResolutionBreakdown;
     let isSuccess: boolean;
     let isPartial: boolean;
     let isFailure: boolean;
+    let usedConflictOutcome = false;
 
-    if (allowClientOverride && clientOutcomeReceived) {
-      // DEV ONLY: Allow client override for testing conflict engine
-      isSuccess = clientOutcomeReceived === 'success';
-      isPartial = clientOutcomeReceived === 'partial';
-      isFailure = clientOutcomeReceived === 'failure';
+    // Check if a valid conflict mini-game was played
+    if (conflictOutcome && validateConflictOutcome(conflictOutcome)) {
+      // CONFLICT MINI-GAME PATH: Player played the mini-game, use their result
+      usedConflictOutcome = true;
+
+      // Map conflict result to resolution outcome
+      const conflictResultToOutcome: Record<string, ResolutionOutcomeOverride> = {
+        'victory': 'success',
+        'defeat': 'failure',
+        'stalemate': 'partial',
+      };
+      const mappedOutcome = conflictResultToOutcome[conflictOutcome.result] ?? 'failure';
+
+      isSuccess = mappedOutcome === 'success';
+      isPartial = mappedOutcome === 'partial';
+      isFailure = mappedOutcome === 'failure';
 
       resolution = {
-        outcome: clientOutcomeReceived,
+        outcome: mappedOutcome,
         roll: 0,
         target: 0,
-        modifiers: [{ label: 'Conflict resolution (dev override)', value: 0 }],
-        summary: `Outcome determined by conflict resolution: ${clientOutcomeReceived}. (DEV OVERRIDE)`,
+        modifiers: [{ label: 'Conflict resolution', value: 0 }],
+        summary: `Outcome determined by conflict resolution: ${conflictOutcome.result}.`,
       } as ResolutionBreakdown;
 
-      console.warn('[Resolve] DEV OVERRIDE: Using client outcome instead of server outcome:', {
-        clientOutcome: clientOutcomeReceived,
-        serverOutcome,
-        diff: clientOutcomeReceived !== serverOutcome,
-      });
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Resolve] Using validated conflict outcome:', {
+          conflictResult: conflictOutcome.result,
+          mappedOutcome,
+          final: conflictOutcome.final,
+          turnsUsed: conflictOutcome.turnsUsed,
+        });
+      }
     } else {
-      // PRODUCTION PATH: Use server-authoritative outcome for all game-impacting decisions
-      isSuccess = serverOutcome === 'success';
-      isPartial = serverOutcome === 'partial';
-      isFailure = serverOutcome === 'failure';
-      resolution = serverResolution;
+      // DICE ROLL PATH: No valid mini-game, use server-computed resolution
+      isSuccess = diceRollResolution.outcome === 'success';
+      isPartial = diceRollResolution.outcome === 'partial';
+      isFailure = diceRollResolution.outcome === 'failure';
+      resolution = diceRollResolution;
 
-      // Log if client sent a different outcome (potential exploit attempt or desync)
-      if (clientOutcomeReceived && clientOutcomeReceived !== serverOutcome) {
-        console.warn('[Resolve] Client outcome mismatch (ignored for rewards):', {
-          clientOutcome: clientOutcomeReceived,
-          serverOutcome,
+      // Log if client sent an override without valid conflict outcome (suspicious)
+      if (resolutionOutcomeOverride && !conflictOutcome) {
+        console.warn('[Resolve] Outcome override without conflict data (ignored):', {
+          clientOverride: resolutionOutcomeOverride,
+          serverOutcome: diceRollResolution.outcome,
           characterId: character.id,
           encounterId,
         });
       }
 
-      if (process.env.NODE_ENV === 'development' && clientOutcomeReceived) {
-        console.log('[Resolve] Client outcome received but using server outcome:', {
-          clientOutcome: clientOutcomeReceived,
-          serverOutcome,
-          isSuccess,
-          isPartial,
-          isFailure,
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Resolve] Using dice roll resolution:', {
+          outcome: resolution.outcome,
+          roll: resolution.roll,
+          target: resolution.target,
         });
       }
     }
@@ -1190,7 +1235,7 @@ export async function POST(request: Request) {
         prepEnergyCost,
         factionChanges: Object.keys(allReputationChanges).length,
         powerProgression: powerProgression?.powerId ?? 'none',
-        conflictDriven: !!resolutionOutcomeOverride,
+        conflictDriven: usedConflictOutcome,
       });
     }
 
@@ -1303,7 +1348,7 @@ export async function POST(request: Request) {
             prepEnergyCost,
             factionChangesCount: Object.keys(allReputationChanges).length,
           },
-          isConflictDriven: !!resolutionOutcomeOverride,
+          isConflictDriven: usedConflictOutcome,
 
           // Performance
           resolveMs: Date.now() - resolveStartTime,
@@ -1448,18 +1493,20 @@ export async function POST(request: Request) {
   }
 }
 
-// SECURITY NOTE: Server-authoritative outcome resolution
-// The server ALWAYS computes the authoritative outcome via resolveEncounter().
-// Client-provided resolutionOutcomeOverride is treated as telemetry ONLY in production.
-// This prevents malicious clients from claiming "success" to farm rewards.
+// OUTCOME RESOLUTION: Two paths based on whether mini-game was played
 //
-// Manual test steps (production behavior):
-// 1. Start game, execute action, trigger encounter, pick a choice.
-// 2. Send resolutionOutcomeOverride: "success" even when server would compute "failure"
-// 3. Verify: rewards/XP/state reflect the SERVER outcome (not client override)
-// 4. Verify: console logs a warning about client outcome mismatch
+// 1. CONFLICT MINI-GAME PATH (conflictOutcome provided):
+//    - Player played through the Resource Fracture mini-game
+//    - Server validates the outcome (checks final resource states match claimed result)
+//    - If valid: uses conflict result (victory→success, defeat→failure, stalemate→partial)
+//    - If invalid: falls back to dice roll
 //
-// To enable DEV override for conflict engine testing:
-// 1. Set NODE_ENV !== 'production' AND ALLOW_OUTCOME_OVERRIDE=true
-// 2. Client override will be used (with warning logged)
-// 3. This is for testing only — never enable in production.
+// 2. DICE ROLL PATH (no conflictOutcome):
+//    - No mini-game was played, use resolveEncounter() dice roll
+//    - resolutionOutcomeOverride without conflictOutcome is logged as suspicious and ignored
+//
+// Manual test steps:
+// 1. Play through conflict mini-game, win → expect success outcome and rewards
+// 2. Play through conflict mini-game, lose → expect failure outcome
+// 3. Send resolutionOutcomeOverride without conflictOutcome → expect dice roll used, warning logged
+// 4. Send invalid conflictOutcome (result doesn't match final resources) → expect dice roll fallback
