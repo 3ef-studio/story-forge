@@ -50,6 +50,7 @@ model Character {
   woundedEncountersRemaining  Int                  @default(0) @map("wounded_encounters_remaining")
   woundedAtActionCounter      Int?                 @map("wounded_at_action_counter") // for debugging
   factionId                   String?              @map("faction_id") // controllable faction membership
+  intentScore                 Int                  @default(0) @map("intent_score") // -100 (villain) to +100 (hero)
   pendingFollowUps            Json?                @map("pending_follow_ups") // FollowUpAction[]
   followUpHistory             Json?                @map("follow_up_history") // FollowUpHistory
   createdAt                   DateTime             @default(now()) @map("created_at")

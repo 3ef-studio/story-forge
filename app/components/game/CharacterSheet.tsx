@@ -9,6 +9,7 @@ import { getFactionById } from '@/app/data/factions';
 import { getFactionState, getFactionStateLabel, getFactionStateColor, type FactionState } from '@/app/lib/world/faction-state';
 import { getAttributeById } from '@/app/data/attributes';
 import { Heart, Zap, Star, Shield, Brain, Eye, Footprints, Sparkles, AlertTriangle, ChevronDown, Swords } from 'lucide-react';
+import { IntentMeter } from './IntentMeter';
 
 interface CharacterSheetProps {
   character: {
@@ -26,6 +27,7 @@ interface CharacterSheetProps {
     energyRegenTickAmount?: number;
     leverage?: { control: number; stability: number; position: number };
     heat?: number;
+    intentScore?: number;
     attributes: Record<string, number>;
     powers: Array<{ powerId: string; level: number; xp: number }>;
     factions: Record<string, number>;
@@ -234,6 +236,13 @@ export function CharacterSheet({ character }: CharacterSheetProps) {
               }`}>
                 {character.heat}
               </span>
+            </div>
+          )}
+
+          {/* Intent */}
+          {character.intentScore !== undefined && (
+            <div className="pt-3 px-1 border-t border-white/10 mt-2">
+              <IntentMeter score={character.intentScore} showScore />
             </div>
           )}
         </div>

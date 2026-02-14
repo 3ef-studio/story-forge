@@ -101,6 +101,18 @@ export type CachedEncounterData = {
 // SEED + PERSONALIZER ARCHITECTURE (V1)
 // ============================================
 
+// Player intent context for narrative framing
+export type PlayerIntentContext = {
+  intentScore: number
+  intentBand: 'villain' | 'criminal' | 'neutral' | 'vigilante' | 'hero'
+  playerFactionId: string | null
+  actionId: string
+  actionCategory: string
+  moralIntent: 'heroic' | 'neutral' | 'villainous'
+  districtId: string
+  playerRoleHint: 'initiator' | 'responder'
+}
+
 // Seed generation inputs - NO player-specific data
 export type SeedGenerationInput = {
   actionId: string
@@ -111,6 +123,7 @@ export type SeedGenerationInput = {
   difficultyBucket: 'easy' | 'medium' | 'hard' // For cache key grouping
   location: string
   involvedFactions: string[] // Sorted for deterministic cache key
+  playerIntentContext?: PlayerIntentContext // Player's overall intent for narrative framing
 }
 
 // Enums for structural variety in seeds

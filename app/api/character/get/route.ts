@@ -180,6 +180,7 @@ export async function GET() {
         actionCounter: character.actionCounter,
         followUps: parsePendingFollowUps(character.pendingFollowUps),
         factionId: character.factionId,
+        intentScore: character.intentScore ?? 0,
       },
     });
   } catch (error) {

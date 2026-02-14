@@ -35,6 +35,7 @@ import {
 import { generateRivalForCharacter } from '@/app/lib/game-logic/rival-generator';
 import { RIVAL_FLAVOR, type RivalIntensity } from '@/app/data/rivals';
 import { applyDecay, type LeverageState } from '@/app/lib/game-logic/leverage';
+import { computeIntentDelta, applyIntentDelta, buildPlayerIntentContext } from '@/app/lib/game-logic/intent';
 import {
   isFollowUpActionId,
   parsePendingFollowUps,
@@ -257,6 +258,16 @@ export async function POST(request: Request) {
       const involvedFactions = action.likelyFactions;
       const location = districtToLocationType(currentDistrict);
 
+      // Build player intent context for narrative framing
+      const playerIntentContext = buildPlayerIntentContext({
+        intentScore: character.intentScore ?? 0,
+        playerFactionId: character.factionId,
+        actionId,
+        actionCategory: action.category,
+        moralIntent: action.moralIntent ?? 'neutral',
+        districtId: currentDistrict,
+      });
+
       // Build seed input for cache lookup
       const seedInput = buildSeedInput(
         actionId,
@@ -265,7 +276,8 @@ export async function POST(request: Request) {
         difficulty,
         location,
         involvedFactions,
-        action.moralIntent ?? 'neutral'
+        action.moralIntent ?? 'neutral',
+        playerIntentContext
       );
 
       let seed: EncounterSeed | null = null;
@@ -509,6 +521,16 @@ export async function POST(request: Request) {
       );
     }
 
+    // Compute intent delta based on action's moral intent
+    // Intent shifts toward hero (+) for heroic actions, toward villain (-) for villainous actions
+    const currentIntentScore = character.intentScore ?? 0;
+    const intentDelta = computeIntentDelta(action.moralIntent, encounter?.difficulty ?? 5);
+    const newIntentScore = applyIntentDelta(currentIntentScore, intentDelta);
+
+    if (process.env.NODE_ENV === 'development' && intentDelta !== 0) {
+      console.log(`[Intent] char=${character.id} | action=${action.id} | moralIntent=${action.moralIntent} | ${currentIntentScore}→${newIntentScore} (${intentDelta > 0 ? '+' : ''}${intentDelta})`);
+    }
+
     // Update character in transaction
     const result = await prisma.$transaction(async (tx) => {
       // Update character stats including XP
@@ -539,6 +561,8 @@ export async function POST(request: Request) {
             pendingFollowUps: remainingFollowUps.length > 0 ? JSON.parse(JSON.stringify(remainingFollowUps)) : Prisma.DbNull,
             followUpHistory: updatedFollowUpHistory ? JSON.parse(JSON.stringify(updatedFollowUpHistory)) : undefined,
           } : {}),
+          // Update intent score based on action's moral intent
+          intentScore: newIntentScore,
         },
       });
 

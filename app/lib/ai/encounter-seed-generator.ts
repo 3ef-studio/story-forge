@@ -4,7 +4,7 @@
 import { z } from 'zod'
 import { generateJSONCompletion } from '@/app/lib/openai'
 import { SEED_SYSTEM_PROMPT, buildSeedPrompt, SEED_FEW_SHOT_EXAMPLE } from './seed-prompts'
-import type { EncounterSeed, SeedGenerationInput, SeedChoice, SeedOutcome } from './types'
+import type { EncounterSeed, SeedGenerationInput, SeedChoice, SeedOutcome, PlayerIntentContext } from './types'
 import { factions } from '@/app/data/factions'
 
 const VALID_FACTION_IDS = factions.map(f => f.id)
@@ -223,7 +223,8 @@ export function buildSeedInput(
   difficulty: number,
   location: string,
   involvedFactions: string[],
-  moralIntent: 'heroic' | 'neutral' | 'villainous' = 'neutral'
+  moralIntent: 'heroic' | 'neutral' | 'villainous' = 'neutral',
+  playerIntentContext?: PlayerIntentContext
 ): SeedGenerationInput {
   const difficultyBucket = difficulty <= 3 ? 'easy' : difficulty <= 6 ? 'medium' : 'hard'
 
@@ -236,5 +237,6 @@ export function buildSeedInput(
     difficultyBucket,
     location,
     involvedFactions: [...involvedFactions].sort(), // Sort for deterministic cache key
+    playerIntentContext,
   }
 }

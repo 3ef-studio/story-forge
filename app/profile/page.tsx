@@ -10,6 +10,7 @@ import { getPowerById } from '@/app/data/powers';
 import { getFactionById, getAttitudeLevel, getReputationDescriptor, controllableFactions } from '@/app/data/factions';
 import { getAttributeById } from '@/app/data/attributes';
 import { ArrowLeft, User, Zap, Users, ScrollText, Trash2, Shield, UserPlus, LogOut } from 'lucide-react';
+import { IntentMeter } from '@/app/components/game/IntentMeter';
 
 interface CharacterData {
   id: string;
@@ -23,6 +24,7 @@ interface CharacterData {
   currentEnergy: number;
   maxEnergy: number;
   money: number;
+  intentScore: number;
   attributes: Record<string, number>;
   powers: Array<{ powerId: string; level: number; xp: number; timesUsed: number }>;
   factions: Record<string, number>;
@@ -224,6 +226,11 @@ export default function ProfilePage() {
               showLabel
               label={`XP to Level ${character.level + 1}`}
             />
+
+            {/* Intent */}
+            <div className="mt-4 pt-4 border-t border-white/10">
+              <IntentMeter score={character.intentScore} showScore />
+            </div>
           </div>
         </div>
 

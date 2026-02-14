@@ -2,6 +2,7 @@
 // Prompts for encounter seed generation - NO player-specific data
 
 import type { SeedGenerationInput } from './types'
+import { generateIntentNarrativeGuidance, type PlayerIntentContext } from '@/app/lib/game-logic/intent'
 
 // System prompt for seed generation - emphasizes generic, cacheable output
 export const SEED_SYSTEM_PROMPT = `You are a narrative game master creating GENERIC encounter templates for a superhero RPG.
@@ -158,6 +159,11 @@ function buildMoralIntentSection(moralIntent: string): string {
 export function buildSeedPrompt(input: SeedGenerationInput): string {
   const moralSection = buildMoralIntentSection(input.moralIntent)
 
+  // Add player intent narrative guidance if available
+  const intentSection = input.playerIntentContext
+    ? '\n' + generateIntentNarrativeGuidance(input.playerIntentContext as PlayerIntentContext) + '\n'
+    : ''
+
   return `Generate a GENERIC encounter seed for:
 
 SCENARIO:
@@ -168,7 +174,7 @@ SCENARIO:
 - Action Category: ${input.actionCategory}
 
 ${moralSection}
-
+${intentSection}
 This must influence situation framing, NPC reactions, and choice flavor.
 Do NOT change choice structure or counts.
 
