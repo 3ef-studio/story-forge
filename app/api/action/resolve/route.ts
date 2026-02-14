@@ -984,8 +984,12 @@ export async function POST(request: Request) {
     console.log(`[Heat] sourceActionId=${sourceActionId} actionId=${rawActionId} effective=${effectiveActionId} followUp=${isFollowUp} heat ${heatUpdate.previousHeat}→${heatUpdate.newHeat}`);
     logHeatUpdate(character.id, heatUpdate);
 
-    // Determine used powers from choice (needed for follow-up generation)
-    const usedPowerIds = choice.requiredPowers ?? [];
+    // Determine used powers from choice AND prep phase (needed for goal tracking and follow-up generation)
+    // Include: 1) powers required by the choice, 2) power selected in prep phase
+    const usedPowerIds: string[] = [
+      ...(choice.requiredPowers ?? []),
+      ...(prepPowerId ? [prepPowerId] : []),
+    ];
 
     // --- Pre-compute follow-up generation BEFORE transaction for atomic persistence ---
     // This ensures follow-up state is written in the same transaction as other character updates,
