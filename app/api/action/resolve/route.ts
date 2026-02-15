@@ -1004,6 +1004,7 @@ export async function POST(request: Request) {
     // preventing race conditions where a server crash could leave stale follow-ups or duplicate entries
     let precomputedFollowUps: FollowUpAction[] = [];
     let precomputedHistory: ReturnType<typeof parseFollowUpHistory> | null = null;
+    let followUpFailed = false;
     try {
       const existingFollowUps = parsePendingFollowUps(character.pendingFollowUps);
       let history = parseFollowUpHistory(character.followUpHistory);
@@ -1067,7 +1068,13 @@ export async function POST(request: Request) {
       }
     } catch (followUpPrecomputeError) {
       // Fail-soft: log error but continue with empty follow-ups
-      console.error('[FollowUps] Failed to pre-compute follow-ups:', followUpPrecomputeError);
+      // Set flag so client can show warning
+      followUpFailed = true;
+      console.error('[FollowUps] Failed to pre-compute follow-ups:', {
+        characterId: character.id,
+        encounterId,
+        error: followUpPrecomputeError instanceof Error ? followUpPrecomputeError.message : 'Unknown error',
+      });
     }
 
     // Update character in transaction
@@ -1495,6 +1502,7 @@ export async function POST(request: Request) {
         xpToNextLevel: powerProgression.xpToNextLevel,
       } : undefined,
       followUps: precomputedFollowUps.length > 0 ? precomputedFollowUps : undefined,
+      followUpStatus: followUpFailed ? 'failed' : 'ok',
       worldUpdate: worldUpdate ?? undefined,
       // Combined world updates array for UI messaging
       worldUpdates: buildWorldUpdatesArray(worldUpdate, worldReactions, deathWorldResult),

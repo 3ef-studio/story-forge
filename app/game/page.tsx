@@ -40,7 +40,7 @@ import type { Action } from '@/app/data/actions';
 import type { DistrictId } from '@/app/data/districts';
 import type { EncounterTemplate } from '@/app/data/encounter-templates';
 import { getLocationBackground } from '@/app/lib/game-logic/location-backgrounds';
-import { LogOut, User, HelpCircle, Menu, X, Sparkles, Trophy, ArrowUp, Users, MapIcon } from 'lucide-react';
+import { LogOut, User, HelpCircle, Menu, X, Sparkles, Trophy, ArrowUp, Users, MapIcon, AlertCircle } from 'lucide-react';
 import { previewEncounterResolution, inferApproachFromText, resolveGambitFromPreview, assignDistinctGambits } from '@/app/lib/game-logic/combat/resolve-encounter';
 import type { ResolutionPreview, PrepSelection, GambitResult } from '@/app/lib/game-logic/combat/types';
 import { ConflictPane } from '@/app/components/game/ConflictPane';
@@ -246,6 +246,12 @@ export default function GamePage() {
   const [goalChoices, setGoalChoices] = useState<GoalChoice[]>([]);
   const [showGoalChoice, setShowGoalChoice] = useState(false);
 
+  // Double-submit prevention and loading state flags
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isChangingDistrict, setIsChangingDistrict] = useState(false);
+  // Follow-up failure warning
+  const [followUpWarning, setFollowUpWarning] = useState<string | null>(null);
+
   const fetchGoals = useCallback(async () => {
     try {
       const response = await fetch('/api/goals');
@@ -304,6 +310,8 @@ export default function GamePage() {
   };
 
   const handleDistrictChange = useCallback(async (districtId: DistrictId) => {
+    if (isChangingDistrict) return; // Prevent double-submit
+    setIsChangingDistrict(true);
     try {
       const response = await fetch('/api/character/district', {
         method: 'POST',
@@ -329,8 +337,10 @@ export default function GamePage() {
       });
     } catch (err) {
       console.error('District change error:', err);
+    } finally {
+      setIsChangingDistrict(false);
     }
-  }, [addToast]);
+  }, [addToast, isChangingDistrict]);
 
   const fetchCharacter = useCallback(async () => {
     try {
@@ -388,12 +398,14 @@ export default function GamePage() {
 
   // Handle follow-up action selection
   const handleSelectFollowUp = async (followUp: FollowUpAction) => {
-    if (!character || gameState !== 'idle') return;
+    if (!character || gameState !== 'idle' || isSubmitting) return;
 
+    setIsSubmitting(true);
     setGameState('executing');
     setError(null);
     setLoadingStep(0);
     setFocusResult({ mode: null, modifier: 0 });
+    setFollowUpWarning(null);
     setMobileTab('scene');
 
     try {
@@ -409,6 +421,7 @@ export default function GamePage() {
       if (!response.ok) {
         setError(data.error || 'Failed to execute follow-up');
         setGameState('idle');
+        setIsSubmitting(false);
         return;
       }
 
@@ -499,6 +512,7 @@ export default function GamePage() {
 
         setEncounterChoices(choices);
         setGameState('encounter');
+        setIsSubmitting(false);
       } else {
         const outcomeDescription = `You pursued ${followUp.name}. ${
           Object.keys(data.attributeGrowth).length > 0
@@ -521,6 +535,7 @@ export default function GamePage() {
           })),
         });
         setGameState('outcome');
+        setIsSubmitting(false);
 
         setCharacter((prev) => {
           if (!prev) return null;
@@ -557,16 +572,19 @@ export default function GamePage() {
       console.error('Follow-up execution error:', err);
       setError('An error occurred');
       setGameState('idle');
+      setIsSubmitting(false);
     }
   };
 
   const handleSelectAction = async (action: Action) => {
-    if (!character || gameState !== 'idle') return;
+    if (!character || gameState !== 'idle' || isSubmitting) return;
 
+    setIsSubmitting(true);
     setGameState('executing');
     setError(null);
     setLoadingStep(0);
     setFocusResult({ mode: null, modifier: 0 });
+    setFollowUpWarning(null);
     // Switch to scene tab on mobile when action is selected
     setMobileTab('scene');
 
@@ -582,6 +600,7 @@ export default function GamePage() {
       if (!response.ok) {
         setError(data.error || 'Failed to execute action');
         setGameState('idle');
+        setIsSubmitting(false);
         return;
       }
 
@@ -671,6 +690,7 @@ export default function GamePage() {
 
         setEncounterChoices(choices);
         setGameState('encounter');
+        setIsSubmitting(false);
       } else {
         let outcomeDescription = `You completed ${action.name}. ${
           Object.keys(data.attributeGrowth).length > 0
@@ -699,6 +719,7 @@ export default function GamePage() {
           })),
         });
         setGameState('outcome');
+        setIsSubmitting(false);
 
         setCharacter((prev) => {
           if (!prev) return null;
@@ -735,6 +756,7 @@ export default function GamePage() {
       console.error('Action error:', err);
       setError('An error occurred');
       setGameState('idle');
+      setIsSubmitting(false);
     }
   };
 
@@ -1026,6 +1048,11 @@ export default function GamePage() {
         }
       }
 
+      // Check for follow-up generation failure
+      if (data.followUpStatus === 'failed') {
+        setFollowUpWarning('Follow-up actions could not be generated. You can continue playing.');
+      }
+
       // Show death/wounded toast if character died
       if (data.deathOccurred && data.wounded) {
         addToast({
@@ -1244,6 +1271,21 @@ export default function GamePage() {
             exit="exit"
             transition={transition}
           >
+            {/* Follow-up warning banner */}
+            {followUpWarning && (
+              <div className="mb-3 p-3 bg-yellow-500/20 border border-yellow-500/40 rounded-lg flex items-start gap-2">
+                <AlertCircle className="w-5 h-5 text-yellow-400 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm text-yellow-200">{followUpWarning}</p>
+                  <button
+                    onClick={() => setFollowUpWarning(null)}
+                    className="mt-1 text-xs text-yellow-300 hover:text-yellow-100 underline"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
             <AnimatedCard variant="panel" className="panel-glass p-5 sm:p-6 text-center">
               <h2 className="text-lg sm:text-xl font-bold text-white mb-2">What will you do?</h2>
               <p className="text-white/60 text-sm sm:text-base">
@@ -1652,6 +1694,20 @@ export default function GamePage() {
                   exit="exit"
                   transition={transition}
                 >
+                  {/* Loading indicator for mobile actions tab */}
+                  {(gameState === 'executing' || gameState === 'resolving' || isSubmitting) && (
+                    <div className="mb-3 p-2 bg-blue-500/20 border border-blue-500/30 rounded-lg flex items-center gap-2" aria-busy="true">
+                      <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                      <span className="text-sm text-blue-300">Processing action...</span>
+                    </div>
+                  )}
+                  {/* District change loading indicator */}
+                  {isChangingDistrict && (
+                    <div className="mb-3 p-2 bg-purple-500/20 border border-purple-500/30 rounded-lg flex items-center gap-2" aria-busy="true">
+                      <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                      <span className="text-sm text-purple-300">Changing district...</span>
+                    </div>
+                  )}
                   <ActionSelector
                     playerLevel={character.level}
                     playerAttributes={character.attributes}
@@ -1661,7 +1717,7 @@ export default function GamePage() {
                     onSelectAction={handleSelectAction}
                     onSelectFollowUp={handleSelectFollowUp}
                     followUps={character.followUps}
-                    disabled={gameState !== 'idle'}
+                    disabled={gameState !== 'idle' || isSubmitting}
                     activeGoals={activeGoals}
                     currentDistrict={character.currentDistrict}
                     onDistrictChange={handleDistrictChange}
@@ -1771,7 +1827,20 @@ export default function GamePage() {
             </motion.section>
 
             {/* Right - Actions */}
-            <aside className="hidden lg:block lg:col-span-3">
+            <aside className="hidden lg:block lg:col-span-3 space-y-3">
+              {/* Loading indicators for desktop */}
+              {(gameState === 'executing' || gameState === 'resolving' || isSubmitting) && (
+                <div className="p-2 bg-blue-500/20 border border-blue-500/30 rounded-lg flex items-center gap-2" aria-busy="true">
+                  <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                  <span className="text-sm text-blue-300">Processing action...</span>
+                </div>
+              )}
+              {isChangingDistrict && (
+                <div className="p-2 bg-purple-500/20 border border-purple-500/30 rounded-lg flex items-center gap-2" aria-busy="true">
+                  <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                  <span className="text-sm text-purple-300">Changing district...</span>
+                </div>
+              )}
               <ActionSelector
                 playerLevel={character.level}
                 playerAttributes={character.attributes}
@@ -1781,7 +1850,7 @@ export default function GamePage() {
                 onSelectAction={handleSelectAction}
                 onSelectFollowUp={handleSelectFollowUp}
                 followUps={character.followUps}
-                disabled={gameState !== 'idle'}
+                disabled={gameState !== 'idle' || isSubmitting}
                 activeGoals={activeGoals}
                 currentDistrict={character.currentDistrict}
                 onDistrictChange={handleDistrictChange}
