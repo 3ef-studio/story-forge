@@ -6,6 +6,16 @@ import Link from 'next/link';
 import { ArrowLeft, MapPin, Shield, AlertTriangle, Info } from 'lucide-react';
 import { getDistrictTraits } from '@/app/data/districtModifiers';
 
+interface DistrictShares {
+  [controllerId: string]: number;
+}
+
+interface DistrictLeader {
+  leaderFactionId: string | null;
+  leaderShare: number;
+  status: 'controlled' | 'contested';
+}
+
 interface DistrictState {
   id: string;
   characterId: string;
@@ -17,6 +27,8 @@ interface DistrictState {
   districtIcon: string;
   controllingFactionName: string | null;
   controllingFactionShortName: string | null;
+  shares: DistrictShares;
+  leader: DistrictLeader;
 }
 
 interface FactionCityControl {
@@ -30,35 +42,79 @@ interface FactionCityControl {
 interface CityControlSummary {
   factions: FactionCityControl[];
   totalControlledPoints: number;
-  contestedPoints: number;
-  contestedPercent: number;
+  uncontrolledPoints: number;
+  uncontrolledPercent: number;
   totalAllPoints: number;
 }
 
 // Faction colors for visual distinction
-const FACTION_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-  guardian_initiative: { bg: 'bg-blue-500/20', border: 'border-blue-500/50', text: 'text-blue-400' },
-  vigilante_network: { bg: 'bg-purple-500/20', border: 'border-purple-500/50', text: 'text-purple-400' },
-  syndicate: { bg: 'bg-red-500/20', border: 'border-red-500/50', text: 'text-red-400' },
-  nihilist_collective: { bg: 'bg-orange-500/20', border: 'border-orange-500/50', text: 'text-orange-400' },
-  neutral: { bg: 'bg-gray-500/20', border: 'border-gray-500/50', text: 'text-gray-400' },
+const FACTION_COLORS: Record<string, { bg: string; border: string; text: string; solid: string }> = {
+  guardian_initiative: { bg: 'bg-blue-500/20', border: 'border-blue-500/50', text: 'text-blue-400', solid: 'bg-blue-500' },
+  vigilante_network: { bg: 'bg-purple-500/20', border: 'border-purple-500/50', text: 'text-purple-400', solid: 'bg-purple-500' },
+  syndicate: { bg: 'bg-red-500/20', border: 'border-red-500/50', text: 'text-red-400', solid: 'bg-red-500' },
+  nihilist_collective: { bg: 'bg-orange-500/20', border: 'border-orange-500/50', text: 'text-orange-400', solid: 'bg-orange-500' },
+  neutral: { bg: 'bg-gray-500/20', border: 'border-gray-500/50', text: 'text-gray-400', solid: 'bg-gray-600' },
+  uncontrolled: { bg: 'bg-gray-700/20', border: 'border-gray-700/50', text: 'text-gray-500', solid: 'bg-gray-700' },
 };
+
+// Controllable faction IDs in display order
+const CONTROLLABLE_FACTION_IDS = ['guardian_initiative', 'vigilante_network', 'syndicate', 'nihilist_collective'];
 
 function getFactionColors(factionId: string | null) {
   if (!factionId) return FACTION_COLORS.neutral;
   return FACTION_COLORS[factionId] ?? FACTION_COLORS.neutral;
 }
 
-function ControlBar({ value, factionId }: { value: number; factionId: string | null }) {
-  const colors = getFactionColors(factionId);
-  const clampedValue = Math.max(0, Math.min(100, value));
+function getFactionShortName(factionId: string): string {
+  const names: Record<string, string> = {
+    guardian_initiative: 'GI',
+    vigilante_network: 'VN',
+    syndicate: 'SYN',
+    nihilist_collective: 'NC',
+    uncontrolled: 'UC',
+  };
+  return names[factionId] ?? factionId.slice(0, 3).toUpperCase();
+}
+
+/**
+ * Stacked control bar showing shares for all factions + uncontrolled
+ */
+function StackedControlBar({ shares }: { shares: DistrictShares }) {
+  // Build segments in consistent order
+  const segments: Array<{ id: string; share: number; color: string }> = [];
+
+  // Add faction segments
+  for (const factionId of CONTROLLABLE_FACTION_IDS) {
+    const share = shares[factionId] ?? 0;
+    if (share > 0) {
+      segments.push({
+        id: factionId,
+        share,
+        color: FACTION_COLORS[factionId]?.solid ?? 'bg-gray-500',
+      });
+    }
+  }
+
+  // Add uncontrolled segment
+  const uncontrolledShare = shares['uncontrolled'] ?? 0;
+  if (uncontrolledShare > 0) {
+    segments.push({
+      id: 'uncontrolled',
+      share: uncontrolledShare,
+      color: FACTION_COLORS.uncontrolled.solid,
+    });
+  }
 
   return (
-    <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
-      <div
-        className={`h-full transition-all duration-500 ${colors.bg.replace('/20', '/60')}`}
-        style={{ width: `${clampedValue}%` }}
-      />
+    <div className="w-full h-3 bg-black/30 rounded-full overflow-hidden flex">
+      {segments.map((segment, index) => (
+        <div
+          key={segment.id}
+          className={`h-full transition-all duration-500 ${segment.color} ${index === 0 ? 'rounded-l-full' : ''} ${index === segments.length - 1 ? 'rounded-r-full' : ''}`}
+          style={{ width: `${segment.share}%` }}
+          title={`${getFactionShortName(segment.id)}: ${segment.share}%`}
+        />
+      ))}
     </div>
   );
 }
@@ -77,13 +133,23 @@ function InstabilityIndicator({ value }: { value: number }) {
 }
 
 function DistrictCard({ district }: { district: DistrictState }) {
-  const colors = getFactionColors(district.controllingFactionId);
-  const controlLabel = district.controllingFactionShortName ?? 'Contested';
+  const leader = district.leader;
+  const leaderColors = getFactionColors(leader.leaderFactionId);
   const traits = getDistrictTraits(district.districtId);
+
+  // Build leader label
+  let leaderLabel: string;
+  if (leader.status === 'controlled' && leader.leaderFactionId) {
+    leaderLabel = `Controlled by ${getFactionShortName(leader.leaderFactionId)} (${leader.leaderShare}%)`;
+  } else if (leader.leaderFactionId) {
+    leaderLabel = `Contested (${getFactionShortName(leader.leaderFactionId)} leads: ${leader.leaderShare}%)`;
+  } else {
+    leaderLabel = 'Contested';
+  }
 
   return (
     <div
-      className={`p-4 rounded-xl border ${colors.border} ${colors.bg} transition-all hover:scale-[1.02]`}
+      className={`p-4 rounded-xl border ${leaderColors.border} ${leaderColors.bg} transition-all hover:scale-[1.02]`}
     >
       {/* Header */}
       <div className="flex items-start justify-between mb-3">
@@ -91,22 +157,41 @@ function DistrictCard({ district }: { district: DistrictState }) {
           <span className="text-2xl">{district.districtIcon}</span>
           <div>
             <h3 className="font-semibold text-white">{district.districtName}</h3>
-            <div className={`text-sm ${colors.text}`}>
+            <div className={`text-sm ${leaderColors.text}`}>
               <Shield className="w-3 h-3 inline mr-1" />
-              {controlLabel}
+              {leaderLabel}
             </div>
           </div>
         </div>
         <InstabilityIndicator value={district.instability} />
       </div>
 
-      {/* Control Bar */}
+      {/* Stacked Control Bar */}
       <div className="space-y-1">
         <div className="flex justify-between text-xs text-white/60">
-          <span>Control</span>
-          <span>{district.controlValue}%</span>
+          <span>Control Shares</span>
         </div>
-        <ControlBar value={district.controlValue} factionId={district.controllingFactionId} />
+        <StackedControlBar shares={district.shares} />
+        {/* Share breakdown */}
+        <div className="flex flex-wrap gap-2 mt-2">
+          {CONTROLLABLE_FACTION_IDS.map((factionId) => {
+            const share = district.shares[factionId] ?? 0;
+            if (share === 0) return null;
+            const colors = FACTION_COLORS[factionId];
+            return (
+              <div key={factionId} className="flex items-center gap-1 text-xs">
+                <div className={`w-2 h-2 rounded-full ${colors.solid}`} />
+                <span className={colors.text}>{getFactionShortName(factionId)}: {share}%</span>
+              </div>
+            );
+          })}
+          {(district.shares['uncontrolled'] ?? 0) > 0 && (
+            <div className="flex items-center gap-1 text-xs">
+              <div className="w-2 h-2 rounded-full bg-gray-700" />
+              <span className="text-gray-500">UC: {district.shares['uncontrolled']}%</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* District Traits */}
@@ -230,25 +315,28 @@ export default function MapPage() {
                     </div>
                     <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
                       <div
-                        className={`h-full transition-all duration-500 ${colors.bg.replace('/20', '/60')}`}
+                        className={`h-full transition-all duration-500 ${colors.solid}`}
                         style={{ width: `${faction.percent}%` }}
                       />
                     </div>
                   </div>
                 );
               })}
-              {/* Contested indicator */}
-              {cityControl.contestedPercent > 0 && (
+              {/* Uncontrolled indicator */}
+              {cityControl.uncontrolledPercent > 0 && (
                 <div className="pt-2 border-t border-white/10">
                   <div className="flex items-center justify-between text-xs text-white/50">
-                    <span>Contested districts</span>
-                    <span>{cityControl.contestedPercent}% of city</span>
+                    <span className="flex items-center gap-1">
+                      <div className="w-2 h-2 rounded-full bg-gray-700" />
+                      Uncontrolled territory
+                    </span>
+                    <span>{cityControl.uncontrolledPercent}% of city</span>
                   </div>
                 </div>
               )}
             </div>
             <p className="text-xs text-white/40 mt-3">
-              Contested districts not counted toward faction totals
+              Sum of each faction's shares across all districts
             </p>
           </div>
         )}

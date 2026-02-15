@@ -18,9 +18,14 @@
 import { prisma } from '@/app/lib/db';
 import { districts, getDistrictById, getAdjacentDistrictIds, type DistrictId } from '@/app/data/districts';
 import { controllableFactions, getFactionById, type Faction } from '@/app/data/factions';
-import { getDistrictStates, canFactionControlDistrict, type EncounterOutcome } from '@/app/lib/game-logic/district-state';
+import { getDistrictStates, canFactionControlDistrict, type EncounterOutcome, type DistrictShares, type DistrictLeader } from '@/app/lib/game-logic/district-state';
 import { applyControlModifier } from './applyDistrictModifiers';
 import { createSeededRng, weightedSelect, checkProbability } from './seededRng';
+import {
+  applyControlGain,
+  applyControlLoss,
+  getOrInitDistrictShares,
+} from './districtControlShares';
 
 // ============================================================
 // Types
@@ -32,6 +37,7 @@ export interface WorldReactionUpdate {
   districtId: string;
   districtName: string;
   delta: number;
+  deltaApplied: number;
   previousControlValue: number;
   newControlValue: number;
   previousControllingFactionId: string | null;
@@ -40,6 +46,8 @@ export interface WorldReactionUpdate {
   reason: WorldUpdateReason;
   factionId: string;
   factionName: string;
+  sharesAfter: DistrictShares;
+  leaderAfter: DistrictLeader;
 }
 
 export interface WorldReactionsResult {
@@ -354,32 +362,6 @@ function selectRippleFaction(
 // Helpers
 // ============================================================
 
-/**
- * Determine controlling faction based on control value thresholds.
- * >= 60: faction controls, <= 40: contested (null), otherwise unchanged
- */
-function computeControllingFaction(
-  controlValue: number,
-  pushingFactionId: string,
-  currentControllingFactionId: string | null
-): string | null {
-  if (controlValue >= CONTROL_THRESHOLD_HIGH) {
-    return pushingFactionId;
-  }
-  if (controlValue <= CONTROL_THRESHOLD_LOW) {
-    return null; // Contested
-  }
-  // In the middle zone (41-59), keep current controlling faction
-  return currentControllingFactionId;
-}
-
-/**
- * Clamp a value to [0, 100]
- */
-function clamp(value: number, min: number = 0, max: number = 100): number {
-  return Math.max(min, Math.min(max, value));
-}
-
 // ============================================================
 // Target Selection Logic
 // ============================================================
@@ -597,74 +579,56 @@ export async function applyWorldReactions(
 
     if (targetAdjacentId) {
       rippleDistrictId = targetAdjacentId;
-      const state = stateByDistrict.get(targetAdjacentId);
 
-      if (state) {
-        const previousControlValue = state.controlValue;
-        const previousControllingFactionId = state.controllingFactionId;
+      // Get current shares for comparison
+      const { shares: sharesBefore, leader: leaderBefore } = await getOrInitDistrictShares(characterId, targetAdjacentId);
 
-        // Select which faction the ripple affects (player or third-party spillover)
-        const rippleFaction = selectRippleFaction(playerFactionId, targetAdjacentId, rippleRng);
-        const rippleFactionId = rippleFaction?.id ?? playerFactionId;
+      // Select which faction the ripple affects (player or third-party spillover)
+      const rippleFaction = selectRippleFaction(playerFactionId, targetAdjacentId, rippleRng);
+      const rippleFactionId = rippleFaction?.id ?? playerFactionId;
 
-        // Apply district-specific modifier to the ripple delta
-        const rippleDelta = applyControlModifier(baseRippleDelta, targetAdjacentId, 'ripple');
+      // Apply district-specific modifier to the ripple delta
+      const rippleDelta = applyControlModifier(baseRippleDelta, targetAdjacentId, 'ripple');
 
-        // Apply delta: for success, push toward selected faction
-        // For failure, reduce control (toward contested)
-        let newControlValue: number;
-
-        if (rippleDelta > 0) {
-          // Success: push toward selected faction
-          newControlValue = clamp(previousControlValue + rippleDelta);
-        } else {
-          // Failure: reduce control (toward contested)
-          newControlValue = clamp(previousControlValue + rippleDelta);
-        }
-
-        const newControllingFactionId = computeControllingFaction(
-          newControlValue,
-          rippleFactionId,
-          previousControllingFactionId
-        );
-
-        // Update database
-        await prisma.districtState.update({
-          where: {
-            characterId_districtId: { characterId, districtId: targetAdjacentId },
-          },
-          data: {
-            controlValue: newControlValue,
-            controllingFactionId: newControllingFactionId,
-          },
-        });
-
-        // Get display names
-        const district = getDistrictById(targetAdjacentId);
-        const faction = getFactionById(rippleFactionId);
-        const controllingFaction = newControllingFactionId ? getFactionById(newControllingFactionId) : null;
-
-        result.rippleUpdate = {
-          districtId: targetAdjacentId,
-          districtName: district?.name ?? targetAdjacentId,
-          delta: rippleDelta,
-          previousControlValue,
-          newControlValue,
-          previousControllingFactionId,
-          controllingFactionId: newControllingFactionId,
-          controllingFactionName: controllingFaction?.name ?? null,
-          reason: 'ripple',
-          factionId: rippleFactionId,
-          factionName: faction?.name ?? rippleFactionId,
-        };
-
-        const isSpillover = rippleFactionId !== playerFactionId;
-        console.log(
-          `[WorldReactions] Ripple${isSpillover ? ' (spillover)' : ''}: ${faction?.shortName ?? rippleFactionId} ` +
-          `${rippleDelta > 0 ? '+' : ''}${rippleDelta} in ${district?.name ?? targetAdjacentId}: ` +
-          `${previousControlValue}% → ${newControlValue}%`
-        );
+      // Apply gain or loss using share-based system
+      let shareResult;
+      if (rippleDelta > 0) {
+        // Success: faction gains control
+        shareResult = await applyControlGain(characterId, targetAdjacentId, rippleFactionId, rippleDelta, 'ripple');
+      } else {
+        // Failure: faction loses control
+        shareResult = await applyControlLoss(characterId, targetAdjacentId, rippleFactionId, Math.abs(rippleDelta), 'ripple');
       }
+
+      // Get display names
+      const district = getDistrictById(targetAdjacentId);
+      const faction = getFactionById(rippleFactionId);
+      const controllingFaction = shareResult.leaderAfter.leaderFactionId
+        ? getFactionById(shareResult.leaderAfter.leaderFactionId)
+        : null;
+
+      result.rippleUpdate = {
+        districtId: targetAdjacentId,
+        districtName: district?.name ?? targetAdjacentId,
+        delta: rippleDelta,
+        deltaApplied: shareResult.deltaApplied,
+        previousControlValue: leaderBefore.leaderShare,
+        newControlValue: shareResult.leaderAfter.leaderShare,
+        previousControllingFactionId: leaderBefore.leaderFactionId,
+        controllingFactionId: shareResult.leaderAfter.leaderFactionId,
+        controllingFactionName: controllingFaction?.name ?? null,
+        reason: 'ripple',
+        factionId: rippleFactionId,
+        factionName: faction?.name ?? rippleFactionId,
+        sharesAfter: shareResult.sharesAfter,
+        leaderAfter: shareResult.leaderAfter,
+      };
+
+      const isSpillover = rippleFactionId !== playerFactionId;
+      console.log(
+        `[WorldReactions] Ripple${isSpillover ? ' (spillover)' : ''}: ${faction?.shortName ?? rippleFactionId} ` +
+        `${rippleDelta > 0 ? '+' : ''}${shareResult.deltaApplied} in ${district?.name ?? targetAdjacentId}`
+      );
     }
   }
 
@@ -701,57 +665,41 @@ export async function applyWorldReactions(
     );
 
     if (counterTarget) {
-      const state = stateByDistrict.get(counterTarget);
+      // Get current shares for comparison
+      const { shares: sharesBefore, leader: leaderBefore } = await getOrInitDistrictShares(characterId, counterTarget);
 
-      if (state) {
-        const previousControlValue = state.controlValue;
-        const previousControllingFactionId = state.controllingFactionId;
+      // Apply district-specific modifier to the counter delta
+      const counterDelta = applyControlModifier(COUNTER_DELTA, counterTarget, 'counter');
 
-        // Apply district-specific modifier to the counter delta
-        const counterDelta = applyControlModifier(COUNTER_DELTA, counterTarget, 'counter');
+      // Apply counter gain using share-based system
+      const shareResult = await applyControlGain(characterId, counterTarget, counterFaction.id, counterDelta, 'counter');
 
-        // Apply counter delta toward the counter faction
-        const newControlValue = clamp(previousControlValue + counterDelta);
-        const newControllingFactionId = computeControllingFaction(
-          newControlValue,
-          counterFaction.id,
-          previousControllingFactionId
-        );
+      // Get display names
+      const district = getDistrictById(counterTarget);
+      const controllingFaction = shareResult.leaderAfter.leaderFactionId
+        ? getFactionById(shareResult.leaderAfter.leaderFactionId)
+        : null;
 
-        // Update database
-        await prisma.districtState.update({
-          where: {
-            characterId_districtId: { characterId, districtId: counterTarget },
-          },
-          data: {
-            controlValue: newControlValue,
-            controllingFactionId: newControllingFactionId,
-          },
-        });
+      result.counterUpdate = {
+        districtId: counterTarget,
+        districtName: district?.name ?? counterTarget,
+        delta: counterDelta,
+        deltaApplied: shareResult.deltaApplied,
+        previousControlValue: leaderBefore.leaderShare,
+        newControlValue: shareResult.leaderAfter.leaderShare,
+        previousControllingFactionId: leaderBefore.leaderFactionId,
+        controllingFactionId: shareResult.leaderAfter.leaderFactionId,
+        controllingFactionName: controllingFaction?.name ?? null,
+        reason: 'counter',
+        factionId: counterFaction.id,
+        factionName: counterFaction.name,
+        sharesAfter: shareResult.sharesAfter,
+        leaderAfter: shareResult.leaderAfter,
+      };
 
-        // Get display names
-        const district = getDistrictById(counterTarget);
-        const controllingFaction = newControllingFactionId ? getFactionById(newControllingFactionId) : null;
-
-        result.counterUpdate = {
-          districtId: counterTarget,
-          districtName: district?.name ?? counterTarget,
-          delta: counterDelta,
-          previousControlValue,
-          newControlValue,
-          previousControllingFactionId,
-          controllingFactionId: newControllingFactionId,
-          controllingFactionName: controllingFaction?.name ?? null,
-          reason: 'counter',
-          factionId: counterFaction.id,
-          factionName: counterFaction.name,
-        };
-
-        console.log(
-          `[WorldReactions] Counter (turn ${newTurn}): ${counterFaction.shortName} +${counterDelta} in ${district?.name ?? counterTarget}: ` +
-          `${previousControlValue}% → ${newControlValue}%`
-        );
-      }
+      console.log(
+        `[WorldReactions] Counter (turn ${newTurn}): ${counterFaction.shortName} +${shareResult.deltaApplied} in ${district?.name ?? counterTarget}`
+      );
     }
   }
 

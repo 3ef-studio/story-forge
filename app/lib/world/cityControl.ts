@@ -2,11 +2,11 @@
  * City Control Aggregation
  *
  * Computes city-level control percentages for each controllable faction
- * based on district control values.
+ * based on district control shares.
  */
 
 import { controllableFactions } from '@/app/data/factions';
-import type { DistrictStateWithMetadata } from '@/app/lib/game-logic/district-state';
+import type { DistrictStateWithMetadata, DistrictShares } from '@/app/lib/game-logic/district-state';
 
 // ============================================================
 // Types
@@ -16,16 +16,16 @@ export interface FactionCityControl {
   factionId: string;
   factionName: string;
   factionShortName: string;
-  totalPoints: number;
-  percent: number;
+  totalPoints: number; // Sum of shares across all districts
+  percent: number; // (totalPoints / maxPossiblePoints) * 100
 }
 
 export interface CityControlSummary {
   factions: FactionCityControl[];
-  totalControlledPoints: number;
-  contestedPoints: number;
-  contestedPercent: number;
-  totalAllPoints: number;
+  totalControlledPoints: number; // Sum of all faction shares
+  uncontrolledPoints: number; // Sum of uncontrolled shares
+  uncontrolledPercent: number;
+  totalAllPoints: number; // Always districtCount * 100
 }
 
 // ============================================================
@@ -35,14 +35,12 @@ export interface CityControlSummary {
 /**
  * Compute city-level control for each controllable faction.
  *
- * Algorithm:
- * - For each district with a controllingFactionId that matches a controllable faction:
- *   - Add controlValue to that faction's total
- * - For contested districts (controllingFactionId is null):
- *   - Track separately as "contested"
- * - Compute percentages:
- *   - factionPercent = (factionTotal / totalControlledPoints) * 100
- *   - contestedPercent = (contestedPoints / totalAllPoints) * 100
+ * Algorithm (share-based):
+ * - For each district, sum up each faction's share
+ * - Sum up uncontrolled shares separately
+ * - Total possible points = districtCount * 100
+ * - factionPercent = (factionTotal / totalAllPoints) * 100
+ * - uncontrolledPercent = (uncontrolledTotal / totalAllPoints) * 100
  *
  * @param districtStates - All district states for the current scope
  * @returns CityControlSummary with faction control data
@@ -56,21 +54,24 @@ export function computeCityControl(
     factionTotals[faction.id] = 0;
   }
 
-  let contestedPoints = 0;
-  let totalAllPoints = 0;
+  let uncontrolledPoints = 0;
+  const totalAllPoints = districtStates.length * 100; // Each district contributes 100 total share points
 
-  // Aggregate control values
+  // Aggregate shares from each district
   for (const district of districtStates) {
-    totalAllPoints += district.controlValue;
-
-    if (district.controllingFactionId === null) {
-      // Contested district - not counted toward any faction
-      contestedPoints += district.controlValue;
-    } else if (factionTotals[district.controllingFactionId] !== undefined) {
-      // Controlled by a controllable faction
-      factionTotals[district.controllingFactionId] += district.controlValue;
+    const shares = district.shares;
+    if (!shares) {
+      // Fallback for districts without shares (shouldn't happen after migration)
+      continue;
     }
-    // Districts controlled by non-controllable factions are ignored
+
+    // Add each faction's share
+    for (const factionId of Object.keys(factionTotals)) {
+      factionTotals[factionId] += shares[factionId] ?? 0;
+    }
+
+    // Add uncontrolled share
+    uncontrolledPoints += shares['uncontrolled'] ?? 0;
   }
 
   // Calculate total controlled points (sum of all faction totals)
@@ -83,8 +84,8 @@ export function computeCityControl(
   const factions: FactionCityControl[] = controllableFactions.map((faction) => {
     const totalPoints = factionTotals[faction.id];
     const percent =
-      totalControlledPoints > 0
-        ? Math.round((totalPoints / totalControlledPoints) * 100)
+      totalAllPoints > 0
+        ? Math.round((totalPoints / totalAllPoints) * 100)
         : 0;
 
     return {
@@ -99,17 +100,17 @@ export function computeCityControl(
   // Sort by percent descending for display
   factions.sort((a, b) => b.percent - a.percent);
 
-  // Calculate contested percent (relative to all points)
-  const contestedPercent =
+  // Calculate uncontrolled percent
+  const uncontrolledPercent =
     totalAllPoints > 0
-      ? Math.round((contestedPoints / totalAllPoints) * 100)
+      ? Math.round((uncontrolledPoints / totalAllPoints) * 100)
       : 0;
 
   return {
     factions,
     totalControlledPoints,
-    contestedPoints,
-    contestedPercent,
+    uncontrolledPoints,
+    uncontrolledPercent,
     totalAllPoints,
   };
 }

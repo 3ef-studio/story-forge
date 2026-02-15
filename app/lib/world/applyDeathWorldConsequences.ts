@@ -9,8 +9,9 @@
 import { prisma } from '@/app/lib/db';
 import { getDistrictById } from '@/app/data/districts';
 import { getFactionById } from '@/app/data/factions';
-import { getDistrictStates, canFactionControlDistrict } from '@/app/lib/game-logic/district-state';
+import { getDistrictStates, canFactionControlDistrict, type DistrictShares, type DistrictLeader } from '@/app/lib/game-logic/district-state';
 import { applyControlModifier, applyInstabilityModifier } from './applyDistrictModifiers';
+import { applyControlLoss, getOrInitDistrictShares } from './districtControlShares';
 
 // ============================================================
 // Constants
@@ -31,6 +32,7 @@ export interface DeathWorldUpdate {
   districtId: string;
   districtName: string;
   controlDelta: number;
+  controlDeltaApplied: number;
   previousControlValue: number;
   newControlValue: number;
   previousControllingFactionId: string | null;
@@ -42,6 +44,8 @@ export interface DeathWorldUpdate {
   reason: 'death';
   factionId: string;
   factionName: string;
+  sharesAfter: DistrictShares;
+  leaderAfter: DistrictLeader;
 }
 
 export interface DeathWorldConsequencesResult {
@@ -65,25 +69,6 @@ function clamp(value: number, min: number = 0, max: number = 100): number {
   return Math.max(min, Math.min(max, value));
 }
 
-/**
- * Determine controlling faction based on control value thresholds.
- * >= 60: faction controls, <= 40: contested (null), otherwise unchanged
- */
-function computeControllingFaction(
-  controlValue: number,
-  pushingFactionId: string,
-  currentControllingFactionId: string | null
-): string | null {
-  if (controlValue >= CONTROL_THRESHOLD_HIGH) {
-    return pushingFactionId;
-  }
-  if (controlValue <= CONTROL_THRESHOLD_LOW) {
-    return null; // Contested
-  }
-  // In the middle zone (41-59), keep current controlling faction
-  return currentControllingFactionId;
-}
-
 // ============================================================
 // Main Function
 // ============================================================
@@ -92,7 +77,7 @@ function computeControllingFaction(
  * Apply world consequences when a character dies.
  *
  * Effects:
- * - District control hit: -15 in the encounter's district
+ * - District control hit: -15 in the encounter's district (using share-based system)
  * - Instability spike: +10 in that district
  *
  * @param input - The death context
@@ -122,7 +107,9 @@ export async function applyDeathWorldConsequences(
   // Ensure all district states exist for this character
   await getDistrictStates(characterId);
 
-  // Get the current district state
+  // Get current shares and instability
+  const { shares: sharesBefore, leader: leaderBefore } = await getOrInitDistrictShares(characterId, encounterDistrictId);
+
   const districtState = await prisma.districtState.findUnique({
     where: {
       characterId_districtId: { characterId, districtId: encounterDistrictId },
@@ -134,39 +121,22 @@ export async function applyDeathWorldConsequences(
     return result;
   }
 
-  // Calculate new values
-  const previousControlValue = districtState.controlValue;
   const previousInstability = districtState.instability;
-  const previousControllingFactionId = districtState.controllingFactionId;
 
   // Apply district-specific modifiers to the death deltas
   const controlDelta = applyControlModifier(DEATH_CONTROL_DELTA, encounterDistrictId, 'death');
   const instabilityDelta = applyInstabilityModifier(DEATH_INSTABILITY_DELTA, encounterDistrictId);
 
-  // Apply control hit (negative delta)
-  const newControlValue = clamp(previousControlValue + controlDelta);
+  // Apply control loss using share-based system
+  const shareResult = await applyControlLoss(characterId, encounterDistrictId, playerFactionId, Math.abs(controlDelta), 'death');
 
-  // Apply instability spike
+  // Apply instability spike (separate from share system)
   const newInstability = clamp(previousInstability + instabilityDelta);
-
-  // Determine new controlling faction
-  // Note: For death, we're reducing control, so the current faction may lose control
-  // We use the player's faction as the "pushing" faction, but since delta is negative,
-  // control will decrease. If it drops below 40, it becomes contested.
-  const newControllingFactionId = computeControllingFaction(
-    newControlValue,
-    playerFactionId,
-    previousControllingFactionId
-  );
-
-  // Update the database
   await prisma.districtState.update({
     where: {
       characterId_districtId: { characterId, districtId: encounterDistrictId },
     },
     data: {
-      controlValue: newControlValue,
-      controllingFactionId: newControllingFactionId,
       instability: newInstability,
     },
   });
@@ -174,11 +144,13 @@ export async function applyDeathWorldConsequences(
   // Get display names
   const district = getDistrictById(encounterDistrictId);
   const faction = getFactionById(playerFactionId);
-  const controllingFaction = newControllingFactionId ? getFactionById(newControllingFactionId) : null;
+  const controllingFaction = shareResult.leaderAfter.leaderFactionId
+    ? getFactionById(shareResult.leaderAfter.leaderFactionId)
+    : null;
 
   console.log(
     `[DeathWorld] Death consequences in ${district?.name ?? encounterDistrictId}: ` +
-    `Control ${previousControlValue}% → ${newControlValue}% (${controlDelta}), ` +
+    `Control ${leaderBefore.leaderShare}% → ${shareResult.leaderAfter.leaderShare}% (${shareResult.deltaApplied}), ` +
     `Instability ${previousInstability} → ${newInstability} (+${instabilityDelta})`
   );
 
@@ -186,10 +158,11 @@ export async function applyDeathWorldConsequences(
     districtId: encounterDistrictId,
     districtName: district?.name ?? encounterDistrictId,
     controlDelta,
-    previousControlValue,
-    newControlValue,
-    previousControllingFactionId,
-    controllingFactionId: newControllingFactionId,
+    controlDeltaApplied: shareResult.deltaApplied,
+    previousControlValue: leaderBefore.leaderShare,
+    newControlValue: shareResult.leaderAfter.leaderShare,
+    previousControllingFactionId: leaderBefore.leaderFactionId,
+    controllingFactionId: shareResult.leaderAfter.leaderFactionId,
     controllingFactionName: controllingFaction?.name ?? null,
     instabilityDelta,
     previousInstability,
@@ -197,6 +170,8 @@ export async function applyDeathWorldConsequences(
     reason: 'death',
     factionId: playerFactionId,
     factionName: faction?.name ?? playerFactionId,
+    sharesAfter: shareResult.sharesAfter,
+    leaderAfter: shareResult.leaderAfter,
   };
 
   return result;

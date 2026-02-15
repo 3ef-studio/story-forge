@@ -2,13 +2,25 @@
  * District State Manager
  *
  * Handles persistence and initialization of per-character district control state.
- * This is a minimal, additive system that does NOT modify encounter/combat logic.
+ * Uses share-based multi-faction control system where sum of all shares = 100%.
  */
 
 import { prisma } from '@/app/lib/db';
 import { districts, type DistrictId } from '@/app/data/districts';
 import { controllableFactions, getFactionById } from '@/app/data/factions';
 import { applyControlModifier } from '@/app/lib/world/applyDistrictModifiers';
+import {
+  applyControlGain,
+  applyControlLoss,
+  getOrInitDistrictShares,
+  computeDistrictLeader,
+  type DistrictShares,
+  type DistrictLeader,
+  type ShareUpdateResult,
+} from '@/app/lib/world/districtControlShares';
+
+// Re-export share types for external use
+export type { DistrictShares, DistrictLeader, ShareUpdateResult };
 
 // Types for district state
 export interface DistrictStateRecord {
@@ -18,6 +30,7 @@ export interface DistrictStateRecord {
   controllingFactionId: string | null;
   controlValue: number;
   instability: number;
+  shares?: DistrictShares | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -27,6 +40,8 @@ export interface DistrictStateWithMetadata extends DistrictStateRecord {
   districtIcon: string;
   controllingFactionName: string | null;
   controllingFactionShortName: string | null;
+  shares: DistrictShares;
+  leader: DistrictLeader;
 }
 
 // Default initial state for each district
@@ -41,6 +56,7 @@ const DEFAULT_DISTRICT_STATES: Record<DistrictId, { factionId: string | null; co
 /**
  * Get all district states for a character, initializing if necessary.
  * This is the main entry point for the map screen.
+ * Handles lazy migration from old single-track format to new share-based format.
  */
 export async function getDistrictStates(characterId: string): Promise<DistrictStateWithMetadata[]> {
   // Check if states exist
@@ -56,7 +72,7 @@ export async function getDistrictStates(characterId: string): Promise<DistrictSt
 
   // If partial states exist (shouldn't happen, but handle gracefully)
   if (existingStates.length < districts.length) {
-    const existingIds = new Set(existingStates.map((s: DistrictStateRecord) => s.districtId));
+    const existingIds = new Set(existingStates.map((s) => s.districtId));
     const missingDistricts = districts.filter(d => !existingIds.has(d.id));
 
     for (const district of missingDistricts) {
@@ -75,8 +91,15 @@ export async function getDistrictStates(characterId: string): Promise<DistrictSt
     return getDistrictStates(characterId);
   }
 
-  // Enrich with metadata
-  return existingStates.map((state: DistrictStateRecord) => enrichDistrictState(state));
+  // Enrich with metadata and handle lazy migration to share format
+  const enrichedStates: DistrictStateWithMetadata[] = [];
+
+  for (const state of existingStates) {
+    const enriched = await enrichDistrictStateWithShares(characterId, state);
+    enrichedStates.push(enriched);
+  }
+
+  return enrichedStates;
 }
 
 /**
@@ -116,22 +139,39 @@ export async function getDistrictState(
   });
 
   if (!state) return null;
-  return enrichDistrictState(state);
+  return enrichDistrictStateWithShares(characterId, state);
 }
 
 /**
- * Enrich a raw district state record with metadata from static data.
+ * Enrich a raw district state record with metadata and ensure shares are initialized.
+ * Handles lazy migration from old format to new share-based format.
  */
-function enrichDistrictState(state: DistrictStateRecord): DistrictStateWithMetadata {
+async function enrichDistrictStateWithShares(
+  characterId: string,
+  state: { id: string; characterId: string; districtId: string; controllingFactionId: string | null; controlValue: number; instability: number; shares: unknown; createdAt: Date; updatedAt: Date }
+): Promise<DistrictStateWithMetadata> {
   const district = districts.find(d => d.id === state.districtId);
-  const faction = state.controllingFactionId ? getFactionById(state.controllingFactionId) : null;
+
+  // Get or initialize shares (handles lazy migration)
+  const { shares, leader } = await getOrInitDistrictShares(characterId, state.districtId);
+
+  const faction = leader.leaderFactionId ? getFactionById(leader.leaderFactionId) : null;
 
   return {
-    ...state,
+    id: state.id,
+    characterId: state.characterId,
+    districtId: state.districtId,
+    controllingFactionId: leader.leaderFactionId,
+    controlValue: leader.leaderShare,
+    instability: state.instability,
+    shares,
+    createdAt: state.createdAt,
+    updatedAt: state.updatedAt,
     districtName: district?.name ?? state.districtId,
     districtIcon: district?.icon ?? '?',
     controllingFactionName: faction?.name ?? null,
     controllingFactionShortName: faction?.shortName ?? null,
+    leader,
   };
 }
 
@@ -161,11 +201,15 @@ export interface WorldUpdateResult {
   factionId: string;
   factionName: string;
   delta: number;
+  deltaApplied: number;
   previousControlValue: number;
   newControlValue: number;
   previousControllingFactionId: string | null;
   controllingFactionId: string | null;
   controllingFactionName: string | null;
+  reason: 'primary' | 'ripple' | 'counter' | 'death';
+  sharesAfter: DistrictShares;
+  leaderAfter: DistrictLeader;
 }
 
 /**
@@ -184,28 +228,8 @@ function getControlDelta(outcome: EncounterOutcome): number {
 }
 
 /**
- * Determine controlling faction based on control value thresholds.
- * >= 60: faction controls, <= 40: contested (null), otherwise unchanged
- */
-function computeControllingFaction(
-  controlValue: number,
-  factionId: string,
-  currentControllingFactionId: string | null
-): string | null {
-  if (controlValue >= 60) {
-    return factionId;
-  }
-  if (controlValue <= 40) {
-    return null; // Contested
-  }
-  // In the middle zone (41-59), keep current controlling faction
-  return currentControllingFactionId;
-}
-
-/**
  * Update district state after an encounter resolves.
- *
- * Called once after encounter resolution to update world state based on outcome.
+ * Uses share-based multi-faction control system.
  *
  * @param characterId - The character's ID (scope for district state)
  * @param districtId - The district where the encounter took place
@@ -230,75 +254,46 @@ export async function updateDistrictStateFromEncounter(
     return null;
   }
 
-  // Ensure district state exists (lazy init if needed)
-  let districtState = await prisma.districtState.findUnique({
-    where: {
-      characterId_districtId: { characterId, districtId },
-    },
-  });
+  // Ensure district states exist (lazy init if needed)
+  await getDistrictStates(characterId);
 
-  // If no state exists, initialize all district states for this character
-  if (!districtState) {
-    await getDistrictStates(characterId); // This initializes if needed
-    districtState = await prisma.districtState.findUnique({
-      where: {
-        characterId_districtId: { characterId, districtId },
-      },
-    });
-  }
+  // Get current shares for comparison
+  const { shares: sharesBefore, leader: leaderBefore } = await getOrInitDistrictShares(characterId, districtId);
 
-  // If still no state (shouldn't happen), bail
-  if (!districtState) {
-    console.error(`[DistrictState] Failed to find/create state for district ${districtId}`);
-    return null;
-  }
-
-  // Calculate delta and new control value
-  // Apply district-specific modifier to the base delta
+  // Calculate delta with district-specific modifier
   const baseDelta = getControlDelta(outcome);
   const delta = applyControlModifier(baseDelta, districtId, 'primary');
-  const previousControlValue = districtState.controlValue;
-  const newControlValue = Math.max(0, Math.min(100, previousControlValue + delta));
 
-  // Determine new controlling faction
-  const previousControllingFactionId = districtState.controllingFactionId;
-  const newControllingFactionId = computeControllingFaction(
-    newControlValue,
-    factionId,
-    previousControllingFactionId
-  );
-
-  // Update the database
-  await prisma.districtState.update({
-    where: {
-      characterId_districtId: { characterId, districtId },
-    },
-    data: {
-      controlValue: newControlValue,
-      controllingFactionId: newControllingFactionId,
-    },
-  });
+  // Apply gain or loss based on delta sign
+  let result: ShareUpdateResult;
+  if (delta > 0) {
+    // Success/partial: faction gains control
+    result = await applyControlGain(characterId, districtId, factionId, delta, 'primary');
+  } else {
+    // Failure: faction loses control
+    result = await applyControlLoss(characterId, districtId, factionId, Math.abs(delta), 'primary');
+  }
 
   // Get display names for the response
-  const district = districts.find(d => d.id === districtId);
   const faction = getFactionById(factionId);
-  const controllingFaction = newControllingFactionId ? getFactionById(newControllingFactionId) : null;
-
-  console.log(
-    `[DistrictState] ${district?.name ?? districtId}: ${previousControlValue}% → ${newControlValue}% (${delta > 0 ? '+' : ''}${delta}) | ` +
-    `Control: ${previousControllingFactionId ?? 'contested'} → ${newControllingFactionId ?? 'contested'}`
-  );
+  const controllingFaction = result.leaderAfter.leaderFactionId
+    ? getFactionById(result.leaderAfter.leaderFactionId)
+    : null;
 
   return {
     districtId,
-    districtName: district?.name ?? districtId,
+    districtName: result.districtName,
     factionId,
     factionName: faction?.name ?? factionId,
     delta,
-    previousControlValue,
-    newControlValue,
-    previousControllingFactionId,
-    controllingFactionId: newControllingFactionId,
+    deltaApplied: result.deltaApplied,
+    previousControlValue: leaderBefore.leaderShare,
+    newControlValue: result.leaderAfter.leaderShare,
+    previousControllingFactionId: leaderBefore.leaderFactionId,
+    controllingFactionId: result.leaderAfter.leaderFactionId,
     controllingFactionName: controllingFaction?.name ?? null,
+    reason: 'primary',
+    sharesAfter: result.sharesAfter,
+    leaderAfter: result.leaderAfter,
   };
 }
