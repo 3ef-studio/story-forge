@@ -70,6 +70,10 @@ import {
   DEATH_INSTABILITY_DELTA,
 } from '@/app/lib/world/applyDeathWorldConsequences';
 import {
+  runEscalationCheck,
+  type EscalationState,
+} from '@/app/lib/world/escalationAndVictory';
+import {
   applyWoundedState,
   decrementWoundedCounter,
   type WoundedStateResult,
@@ -1433,6 +1437,15 @@ export async function POST(request: Request) {
       }
     }
 
+    // --- Escalation & Victory Check ---
+    // Run after all world updates to check for tier changes and victory conditions
+    let escalationState: EscalationState | null = null;
+    try {
+      escalationState = await runEscalationCheck(character.id);
+    } catch (escalationError) {
+      console.error('[Escalation] Failed to run escalation check:', escalationError);
+    }
+
     // Follow-up generation and persistence is now done atomically inside the transaction above
 
     return NextResponse.json({
@@ -1494,6 +1507,17 @@ export async function POST(request: Request) {
         encountersRemaining: woundedResult.encountersRemaining,
       } : undefined,
       deathWorldUpdate: deathWorldResult?.deathUpdate ?? undefined,
+      // Escalation and victory state
+      escalation: escalationState ? {
+        worldTurn: escalationState.worldTurn,
+        factionTiers: escalationState.factionTiers,
+        victory: escalationState.victoryState.victory,
+        winnerFactionId: escalationState.victoryState.winnerFactionId,
+        winnerFactionName: escalationState.victoryState.winnerFactionName,
+        winStreakFactionId: escalationState.victoryState.winStreakFactionId,
+        winStreakCount: escalationState.victoryState.winStreakCount,
+        wonAtTurn: escalationState.victoryState.wonAtTurn,
+      } : undefined,
     });
   } catch (error) {
     console.error('Encounter resolution error:', error);

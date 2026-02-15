@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, MapPin, Shield, AlertTriangle, Info } from 'lucide-react';
+import { ArrowLeft, MapPin, Shield, AlertTriangle, Info, Trophy, TrendingUp, Star } from 'lucide-react';
 import { getDistrictTraits } from '@/app/data/districtModifiers';
 
 interface DistrictShares {
@@ -45,6 +45,24 @@ interface CityControlSummary {
   uncontrolledPoints: number;
   uncontrolledPercent: number;
   totalAllPoints: number;
+}
+
+interface FactionTierInfo {
+  factionId: string;
+  factionName: string;
+  cityShare: number;
+  tier: 0 | 1 | 2 | 3;
+}
+
+interface EscalationData {
+  worldTurn: number;
+  factionTiers: FactionTierInfo[];
+  victory: boolean;
+  winnerFactionId: string | null;
+  winnerFactionName: string | null;
+  winStreakFactionId: string | null;
+  winStreakCount: number;
+  wonAtTurn: number | null;
 }
 
 // Faction colors for visual distinction
@@ -207,10 +225,19 @@ function DistrictCard({ district }: { district: DistrictState }) {
   );
 }
 
+// Tier labels and styles
+const TIER_LABELS: Record<number, { label: string; color: string }> = {
+  0: { label: 'Minor', color: 'text-gray-400' },
+  1: { label: 'Rising', color: 'text-yellow-400' },
+  2: { label: 'Major', color: 'text-orange-400' },
+  3: { label: 'Dominant', color: 'text-red-400' },
+};
+
 export default function MapPage() {
   const router = useRouter();
   const [districtStates, setDistrictStates] = useState<DistrictState[]>([]);
   const [cityControl, setCityControl] = useState<CityControlSummary | null>(null);
+  const [escalation, setEscalation] = useState<EscalationData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -235,6 +262,7 @@ export default function MapPage() {
       const data = await response.json();
       setDistrictStates(data.districtStates);
       setCityControl(data.cityControl ?? null);
+      setEscalation(data.escalation ?? null);
     } catch (err) {
       console.error('Error fetching district states:', err);
       setError(err instanceof Error ? err.message : 'An error occurred');
@@ -337,6 +365,82 @@ export default function MapPage() {
             </div>
             <p className="text-xs text-white/40 mt-3">
               Sum of each faction's shares across all districts
+            </p>
+          </div>
+        )}
+
+        {/* Victory Banner (if game is won) */}
+        {escalation?.victory && (
+          <div className="mb-6 p-4 rounded-xl bg-yellow-500/20 border border-yellow-500/50">
+            <div className="flex items-center gap-3">
+              <Trophy className="w-8 h-8 text-yellow-400" />
+              <div>
+                <h2 className="text-lg font-bold text-yellow-400">Victory!</h2>
+                <p className="text-yellow-200/80">
+                  {escalation.winnerFactionName} has taken control of the city on turn {escalation.wonAtTurn}.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Win Streak Tracker (if a faction is close to winning) */}
+        {escalation && !escalation.victory && escalation.winStreakFactionId && escalation.winStreakCount > 0 && (
+          <div className="mb-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
+            <div className="flex items-center gap-3">
+              <TrendingUp className="w-6 h-6 text-amber-400" />
+              <div className="flex-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-amber-400">Domination Streak</span>
+                  <span className="text-sm text-amber-300">{escalation.winStreakCount}/2 turns</span>
+                </div>
+                <p className="text-xs text-amber-200/60 mt-1">
+                  {(() => {
+                    const faction = escalation.factionTiers.find(f => f.factionId === escalation.winStreakFactionId);
+                    return faction?.factionName ?? escalation.winStreakFactionId;
+                  })()} leads all districts with &gt;70% share
+                </p>
+                <div className="mt-2 w-full h-2 bg-amber-900/30 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-amber-400 transition-all duration-500"
+                    style={{ width: `${(escalation.winStreakCount / 2) * 100}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Faction Tiers */}
+        {escalation && escalation.factionTiers.length > 0 && (
+          <div className="mb-6 p-4 rounded-xl bg-white/5 border border-white/10">
+            <div className="flex items-center gap-2 mb-4">
+              <Star className="w-4 h-4 text-white/60" />
+              <h2 className="text-sm font-medium text-white/60">Faction Power Tiers</h2>
+              <span className="text-xs text-white/40 ml-auto">Turn {escalation.worldTurn}</span>
+            </div>
+            <div className="space-y-2">
+              {escalation.factionTiers.map((faction) => {
+                const colors = getFactionColors(faction.factionId);
+                const tierInfo = TIER_LABELS[faction.tier];
+                return (
+                  <div key={faction.factionId} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${colors.solid}`} />
+                      <span className={`text-sm ${colors.text}`}>{faction.factionName}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-white/50">{faction.cityShare.toFixed(1)}%</span>
+                      <span className={`text-xs font-medium ${tierInfo.color}`}>
+                        {tierInfo.label}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="text-xs text-white/40 mt-3">
+              Tier affects counter-moves (higher tier = stronger responses) and ripple bias
             </p>
           </div>
         )}

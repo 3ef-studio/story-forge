@@ -1092,6 +1092,22 @@ export default function GamePage() {
           duration: 4000,
         });
       }
+
+      // Check for victory condition
+      if (data.escalation?.victory) {
+        setTimeout(() => {
+          addToast({
+            type: 'success',
+            title: 'Victory!',
+            message: `${data.escalation.winnerFactionName} has taken control of the city!`,
+            duration: 8000,
+          });
+          // Give the user a moment to see the toast, then redirect
+          setTimeout(() => {
+            router.push('/victory');
+          }, 3000);
+        }, 1000);
+      }
     } catch (err) {
       console.error('Resolve error:', err);
       setError('An error occurred');

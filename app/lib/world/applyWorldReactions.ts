@@ -25,7 +25,15 @@ import {
   applyControlGain,
   applyControlLoss,
   getOrInitDistrictShares,
+  getAllDistrictShares,
 } from './districtControlShares';
+import {
+  computeFactionTiers,
+  getFactionTierById,
+  getCounterDeltaModifier,
+  getRippleFavorChance,
+  type FactionTierInfo,
+} from './escalationAndVictory';
 
 // ============================================================
 // Types
@@ -53,6 +61,7 @@ export interface WorldReactionUpdate {
 export interface WorldReactionsResult {
   rippleUpdate: WorldReactionUpdate | null;
   counterUpdate: WorldReactionUpdate | null;
+  factionTiers: FactionTierInfo[];
 }
 
 export interface ApplyWorldReactionsInput {
@@ -320,23 +329,27 @@ function selectCounterFactionWithThirdParty(
 /**
  * Select which faction the ripple effect benefits/harms.
  *
- * 70% chance: player faction
- * 30% chance: a third faction (selected by affinity/weight)
+ * Base chance: 70% player faction, 30% third faction
+ * Tier-based: Tier 2 = 80% player, Tier 3 = 85% player
+ *
+ * @param rippleFavorChance - chance that ripple benefits player (0.70, 0.80, or 0.85)
  */
 function selectRippleFaction(
   playerFactionId: string,
   targetDistrictId: string,
-  rng: () => number
+  rng: () => number,
+  rippleFavorChance: number = 0.70
 ): Faction | null {
   const playerFaction = getFactionById(playerFactionId);
   if (!playerFaction) return null;
 
-  // Check if spillover occurs
-  if (!checkProbability(RIPPLE_SPILLOVER_CHANCE, rng)) {
-    return playerFaction; // 70% case: player faction
+  // Check if spillover occurs (1 - rippleFavorChance = spillover chance)
+  const spilloverChance = 1 - rippleFavorChance;
+  if (!checkProbability(spilloverChance, rng)) {
+    return playerFaction; // Player faction gets the ripple
   }
 
-  // 30% case: select a third faction
+  // Spillover case: select a third faction
   const thirdPartyCandidates = controllableFactions.filter(f => f.id !== playerFactionId);
   if (thirdPartyCandidates.length === 0) return playerFaction;
 
@@ -353,7 +366,7 @@ function selectRippleFaction(
 
   const selected = weightedSelect(thirdPartyCandidates, weights, rng);
   if (selected) {
-    console.log(`[WorldReactions] Ripple spillover to ${selected.shortName} in ${district?.name ?? targetDistrictId}`);
+    console.log(`[WorldReactions] Ripple spillover to ${selected.shortName} in ${district?.name ?? targetDistrictId} (spillover chance: ${Math.round(spilloverChance * 100)}%)`);
   }
   return selected ?? playerFaction;
 }
@@ -513,9 +526,15 @@ export async function applyWorldReactions(
 ): Promise<WorldReactionsResult> {
   const { characterId, encounterDistrictId, playerFactionId, outcome } = input;
 
+  // Compute faction tiers for tier-based effects (ripple bias, counter modifier)
+  const districtSharesData = await getAllDistrictShares(characterId);
+  const districtSharesMap = new Map(districtSharesData.map(d => [d.districtId, d.shares]));
+  const factionTiers = computeFactionTiers(districtSharesMap);
+
   const result: WorldReactionsResult = {
     rippleUpdate: null,
     counterUpdate: null,
+    factionTiers,
   };
 
   // If character is not in a faction, no world reactions
@@ -527,6 +546,10 @@ export async function applyWorldReactions(
   if (!canFactionControlDistrict(playerFactionId)) {
     return result;
   }
+
+  // Get player tier for ripple bias
+  const playerTier = getFactionTierById(playerFactionId, factionTiers);
+  const rippleFavorChance = getRippleFavorChance(playerTier);
 
   // Get or create world state for this character scope
   const worldState = await getWorldState(characterId);
@@ -584,7 +607,7 @@ export async function applyWorldReactions(
       const { shares: sharesBefore, leader: leaderBefore } = await getOrInitDistrictShares(characterId, targetAdjacentId);
 
       // Select which faction the ripple affects (player or third-party spillover)
-      const rippleFaction = selectRippleFaction(playerFactionId, targetAdjacentId, rippleRng);
+      const rippleFaction = selectRippleFaction(playerFactionId, targetAdjacentId, rippleRng, rippleFavorChance);
       const rippleFactionId = rippleFaction?.id ?? playerFactionId;
 
       // Apply district-specific modifier to the ripple delta
@@ -669,7 +692,16 @@ export async function applyWorldReactions(
       const { shares: sharesBefore, leader: leaderBefore } = await getOrInitDistrictShares(characterId, counterTarget);
 
       // Apply district-specific modifier to the counter delta
-      const counterDelta = applyControlModifier(COUNTER_DELTA, counterTarget, 'counter');
+      const baseCounterDelta = applyControlModifier(COUNTER_DELTA, counterTarget, 'counter');
+
+      // Add tier-based modifier: Tier 1 +1, Tier 2 +2, Tier 3 +3
+      const counterFactionTier = getFactionTierById(counterFaction.id, factionTiers);
+      const tierModifier = getCounterDeltaModifier(counterFactionTier);
+      const counterDelta = baseCounterDelta + tierModifier;
+
+      if (tierModifier > 0) {
+        console.log(`[WorldReactions] Counter tier bonus: ${counterFaction.shortName} tier ${counterFactionTier} adds +${tierModifier}`);
+      }
 
       // Apply counter gain using share-based system
       const shareResult = await applyControlGain(characterId, counterTarget, counterFaction.id, counterDelta, 'counter');

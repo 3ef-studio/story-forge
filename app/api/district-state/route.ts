@@ -11,6 +11,7 @@ import { auth } from '@/app/lib/auth';
 import { prisma } from '@/app/lib/db';
 import { getDistrictStates } from '@/app/lib/game-logic/district-state';
 import { computeCityControl } from '@/app/lib/world/cityControl';
+import { getEscalationState } from '@/app/lib/world/escalationAndVictory';
 
 export async function GET() {
   try {
@@ -36,10 +37,23 @@ export async function GET() {
     // Compute city-level control summary
     const cityControl = computeCityControl(districtStates);
 
+    // Get escalation state (tiers and victory tracking)
+    const escalationState = await getEscalationState(character.id);
+
     return NextResponse.json({
       success: true,
       districtStates,
       cityControl,
+      escalation: escalationState ? {
+        worldTurn: escalationState.worldTurn,
+        factionTiers: escalationState.factionTiers,
+        victory: escalationState.victoryState.victory,
+        winnerFactionId: escalationState.victoryState.winnerFactionId,
+        winnerFactionName: escalationState.victoryState.winnerFactionName,
+        winStreakFactionId: escalationState.victoryState.winStreakFactionId,
+        winStreakCount: escalationState.victoryState.winStreakCount,
+        wonAtTurn: escalationState.victoryState.wonAtTurn,
+      } : null,
     });
   } catch (error) {
     console.error('[DistrictState API] Error:', error);

@@ -287,13 +287,18 @@ model DistrictState {
   @@map("district_states")
 }
 
-// World State (turn counter and cooldown tracking per character scope)
+// World State (turn counter, cooldown tracking, and victory state per character scope)
 model WorldState {
   id                   String    @id @default(uuid()) @db.Uuid
   scopeId              String    @unique @map("scope_id") @db.Uuid // characterId for per-character world state
   worldTurn            Int       @default(0) @map("world_turn")
   lastCounterFactionId String?   @map("last_counter_faction_id")
   lastCounterTurn      Int?      @map("last_counter_turn")
+  // Victory tracking
+  winnerFactionId      String?   @map("winner_faction_id") // Faction that won the city
+  wonAtTurn            Int?      @map("won_at_turn") // Turn when victory was achieved
+  winStreakFactionId   String?   @map("win_streak_faction_id") // Faction currently meeting win conditions
+  winStreakCount       Int       @default(0) @map("win_streak_count") // Consecutive turns meeting conditions
   createdAt            DateTime  @default(now()) @map("created_at")
   updatedAt            DateTime  @updatedAt @map("updated_at")
 
