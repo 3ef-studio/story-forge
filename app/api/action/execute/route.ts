@@ -136,14 +136,17 @@ export async function POST(request: Request) {
     await incrementThreadAging(character.id);
 
     // Check cooldown (normalize stored IDs for legacy compatibility)
-    const existingCooldown = character.actionCooldowns.find(
-      (cd) => normalizeActionId(cd.actionId) === actionId && cd.expiresAt > new Date()
-    );
-    if (existingCooldown) {
-      return NextResponse.json(
-        { error: 'Action is on cooldown' },
-        { status: 400 }
+    // Skip cooldown check for follow-up actions - they don't share cooldowns with their parent action
+    if (!isFollowUp) {
+      const existingCooldown = character.actionCooldowns.find(
+        (cd) => normalizeActionId(cd.actionId) === actionId && cd.expiresAt > new Date()
       );
+      if (existingCooldown) {
+        return NextResponse.json(
+          { error: 'Action is on cooldown' },
+          { status: 400 }
+        );
+      }
     }
 
     // Build attribute map using utility
@@ -216,8 +219,11 @@ export async function POST(request: Request) {
     }
 
     // Check district compatibility
+    // Skip district check for follow-up actions - they're contextual to their origin encounter
+    // and should be executable regardless of current district
     const currentDistrict = character.currentDistrict ?? 'downtown';
     if (
+      !isFollowUp &&
       !isActionGlobal(action.id, action.category) &&
       !isActionAvailableInDistrict(action.locationTypes, currentDistrict)
     ) {

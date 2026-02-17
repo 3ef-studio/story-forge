@@ -350,7 +350,7 @@ export const actions: Action[] = [
       'civilian_witness'
     ],
     difficultyRange: [3, 7],
-    likelyFactions: ['guardian_initiative', 'vigilante_network', 'metro_police'],
+    likelyFactions: ['syndicate', 'vigilante_network', 'metro_police'],
     narrativeContext: 'Player engages in acts of vandalism, making a statement against authority',
     locationTypes: ['public_spaces', 'government_buildings', 'transportation_hubs'],
     baseXPReward: 30,
