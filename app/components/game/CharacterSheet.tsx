@@ -3,13 +3,14 @@
 import { useState, useEffect } from 'react';
 import { Progress } from '@/app/components/ui/progress';
 import { Badge } from '@/app/components/ui/badge';
-import { getOriginById } from '@/app/data/origins';
+import { getOriginById } from '@/app/data/new-origins';
 import { getPowerById, calculateXPForLevel } from '@/app/data/powers';
 import { getFactionById } from '@/app/data/factions';
 import { getFactionState, getFactionStateLabel, getFactionStateColor, type FactionState } from '@/app/lib/world/faction-state';
 import { getAttributeById } from '@/app/data/attributes';
 import { Heart, Zap, Star, Shield, Brain, Eye, Footprints, Sparkles, AlertTriangle, ChevronDown, Swords } from 'lucide-react';
 import { IntentMeter } from './IntentMeter';
+import { AlignmentBadge } from './AlignmentBadge';
 
 interface CharacterSheetProps {
   character: {
@@ -28,6 +29,8 @@ interface CharacterSheetProps {
     leverage?: { control: number; stability: number; position: number };
     heat?: number;
     intentScore?: number;
+    patronDeityId?: string | null;
+    alignmentValue?: number | null;
     attributes: Record<string, number>;
     powers: Array<{ powerId: string; level: number; xp: number }>;
     factions: Record<string, number>;
@@ -243,6 +246,16 @@ export function CharacterSheet({ character }: CharacterSheetProps) {
           {character.intentScore !== undefined && (
             <div className="pt-3 px-1 border-t border-white/10 mt-2">
               <IntentMeter score={character.intentScore} showScore />
+            </div>
+          )}
+
+          {/* Deity Alignment */}
+          {character.patronDeityId && character.alignmentValue !== undefined && character.alignmentValue !== null && (
+            <div className="pt-3 px-1 border-t border-white/10 mt-2">
+              <AlignmentBadge
+                alignmentValue={character.alignmentValue}
+                patronDeityId={character.patronDeityId}
+              />
             </div>
           )}
         </div>

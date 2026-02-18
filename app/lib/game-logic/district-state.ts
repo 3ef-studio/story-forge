@@ -35,6 +35,13 @@ export interface DistrictStateRecord {
   updatedAt: Date;
 }
 
+export interface DistrictInfluence {
+  radiance: number;
+  stability: number;
+  entropy: number;
+  doubt: number;
+}
+
 export interface DistrictStateWithMetadata extends DistrictStateRecord {
   districtName: string;
   districtIcon: string;
@@ -42,6 +49,8 @@ export interface DistrictStateWithMetadata extends DistrictStateRecord {
   controllingFactionShortName: string | null;
   shares: DistrictShares;
   leader: DistrictLeader;
+  // Ideological influence (MVP)
+  influence: DistrictInfluence;
 }
 
 // Default initial state for each district
@@ -148,7 +157,21 @@ export async function getDistrictState(
  */
 async function enrichDistrictStateWithShares(
   characterId: string,
-  state: { id: string; characterId: string; districtId: string; controllingFactionId: string | null; controlValue: number; instability: number; shares: unknown; createdAt: Date; updatedAt: Date }
+  state: {
+    id: string;
+    characterId: string;
+    districtId: string;
+    controllingFactionId: string | null;
+    controlValue: number;
+    instability: number;
+    shares: unknown;
+    influenceRadiance: number;
+    influenceStability: number;
+    influenceEntropy: number;
+    influenceDoubt: number;
+    createdAt: Date;
+    updatedAt: Date;
+  }
 ): Promise<DistrictStateWithMetadata> {
   const district = districts.find(d => d.id === state.districtId);
 
@@ -172,6 +195,13 @@ async function enrichDistrictStateWithShares(
     controllingFactionName: faction?.name ?? null,
     controllingFactionShortName: faction?.shortName ?? null,
     leader,
+    // Ideological influence (MVP)
+    influence: {
+      radiance: state.influenceRadiance ?? 25,
+      stability: state.influenceStability ?? 25,
+      entropy: state.influenceEntropy ?? 25,
+      doubt: state.influenceDoubt ?? 25,
+    },
   };
 }
 

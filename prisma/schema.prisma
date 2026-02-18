@@ -53,6 +53,9 @@ model Character {
   intentScore                 Int                  @default(0) @map("intent_score") // -100 (villain) to +100 (hero)
   pendingFollowUps            Json?                @map("pending_follow_ups") // FollowUpAction[]
   followUpHistory             Json?                @map("follow_up_history") // FollowUpHistory
+  // Deity/Alignment system (MVP)
+  patronDeityId               String?              @map("patron_deity_id") // null for non-divine origins
+  alignmentValue              Int?                 @map("alignment_value") // 0-100, null for non-divine origins
   createdAt                   DateTime             @default(now()) @map("created_at")
   updatedAt                   DateTime             @updatedAt @map("updated_at")
 
@@ -279,6 +282,11 @@ model DistrictState {
   controlValue         Int       @default(50) @map("control_value") // 0-100 (legacy, now derived from leader share)
   instability          Int       @default(0) // 0-100
   shares               Json?     // { "uncontrolled": 100, "factionId": 0, ... } - sum always equals 100
+  // Ideological influence meters (MVP)
+  influenceRadiance    Int       @default(25) @map("influence_radiance") // 0-100
+  influenceStability   Int       @default(25) @map("influence_stability") // 0-100
+  influenceEntropy     Int       @default(25) @map("influence_entropy") // 0-100
+  influenceDoubt       Int       @default(25) @map("influence_doubt") // 0-100
   createdAt            DateTime  @default(now()) @map("created_at")
   updatedAt            DateTime  @updatedAt @map("updated_at")
 

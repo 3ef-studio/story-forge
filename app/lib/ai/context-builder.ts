@@ -1,6 +1,6 @@
 // lib/ai/context-builder.ts
 import { prisma } from '@/app/lib/db'
-import { getOriginById } from '@/app/data/origins'
+import { getOriginById } from '@/app/data/new-origins'
 import { getPowerById } from '@/app/data/powers'
 import { getFactionById, getReputationDescriptor } from '@/app/data/factions'
 import { getActionById } from '@/app/data/actions'

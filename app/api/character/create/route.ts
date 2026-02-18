@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/app/lib/auth';
 import { prisma } from '@/app/lib/db';
-import { getOriginById, initializeCharacterFromOrigin } from '@/app/data/origins';
+import { getOriginById, initializeCharacterFromOrigin, getDeityById, type DeityId } from '@/app/data/new-origins';
 import { factions } from '@/app/data/factions';
 import { attributes } from '@/app/data/attributes';
 import { initializeGoalsForNewCharacter } from '@/app/lib/game-logic/goal-manager';
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { name, originId, extraPowerId, archetypeId } = body;
+    const { name, originId, extraPowerId, archetypeId, deityId } = body;
 
     // Validation
     if (!name || name.length < 3 || name.length > 30) {
@@ -46,6 +46,32 @@ export async function POST(request: Request) {
         { error: 'Invalid origin selected' },
         { status: 400 }
       );
+    }
+
+    // Validate deity if required
+    let validatedDeityId: DeityId | null = null;
+    if (origin.requiresDeitySelection) {
+      if (!deityId) {
+        return NextResponse.json(
+          { error: 'This origin requires a patron deity selection' },
+          { status: 400 }
+        );
+      }
+      const deity = getDeityById(deityId);
+      if (!deity) {
+        return NextResponse.json(
+          { error: 'Invalid deity selected' },
+          { status: 400 }
+        );
+      }
+      // Verify deity is available for this origin
+      if (!origin.deityOptions?.includes(deityId)) {
+        return NextResponse.json(
+          { error: 'Selected deity is not available for this origin' },
+          { status: 400 }
+        );
+      }
+      validatedDeityId = deityId;
     }
 
     // Validate extra power
@@ -108,15 +134,15 @@ export async function POST(request: Request) {
       );
     }
 
-    // Initialize character data from origin
-    const characterData = initializeCharacterFromOrigin(origin, name);
+    // Initialize character data from origin (with deity support)
+    const characterData = initializeCharacterFromOrigin(origin, name, validatedDeityId ?? undefined);
 
     // Combine origin powers with extra power (dedupe)
     const allPowerIds = [...new Set([...characterData.powers, extraPowerId])];
 
     // Create character and all related data in a transaction
     const character = await prisma.$transaction(async (tx) => {
-      // Create the character
+      // Create the character with deity/alignment support
       const newCharacter = await tx.character.create({
         data: {
           userId: session.user.id,
@@ -130,6 +156,9 @@ export async function POST(request: Request) {
           currentEnergy: 100,
           maxEnergy: 100,
           money: 0,
+          // Deity/Alignment fields
+          patronDeityId: characterData.patronDeityId,
+          alignmentValue: characterData.alignmentValue,
         },
       });
 

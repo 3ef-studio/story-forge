@@ -181,6 +181,9 @@ export async function GET() {
         followUps: parsePendingFollowUps(character.pendingFollowUps),
         factionId: character.factionId,
         intentScore: character.intentScore ?? 0,
+        // Deity/Alignment system (MVP)
+        patronDeityId: character.patronDeityId,
+        alignmentValue: character.alignmentValue,
       },
     });
   } catch (error) {

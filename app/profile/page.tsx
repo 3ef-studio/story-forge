@@ -5,12 +5,13 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Badge } from '@/app/components/ui/badge';
 import { Progress } from '@/app/components/ui/progress';
-import { getOriginById } from '@/app/data/origins';
+import { getOriginById } from '@/app/data/new-origins';
 import { getPowerById } from '@/app/data/powers';
 import { getFactionById, getAttitudeLevel, getReputationDescriptor, controllableFactions } from '@/app/data/factions';
 import { getAttributeById } from '@/app/data/attributes';
 import { ArrowLeft, User, Zap, Users, ScrollText, Trash2, Shield, UserPlus, LogOut } from 'lucide-react';
 import { IntentMeter } from '@/app/components/game/IntentMeter';
+import { AlignmentBadge } from '@/app/components/game/AlignmentBadge';
 
 interface CharacterData {
   id: string;
@@ -25,6 +26,8 @@ interface CharacterData {
   maxEnergy: number;
   money: number;
   intentScore: number;
+  patronDeityId: string | null;
+  alignmentValue: number | null;
   attributes: Record<string, number>;
   powers: Array<{ powerId: string; level: number; xp: number; timesUsed: number }>;
   factions: Record<string, number>;
@@ -231,6 +234,17 @@ export default function ProfilePage() {
             <div className="mt-4 pt-4 border-t border-white/10">
               <IntentMeter score={character.intentScore} showScore />
             </div>
+
+            {/* Deity Alignment */}
+            {character.patronDeityId && character.alignmentValue !== null && (
+              <div className="mt-4 pt-4 border-t border-white/10">
+                <AlignmentBadge
+                  alignmentValue={character.alignmentValue}
+                  patronDeityId={character.patronDeityId}
+                  showDetails
+                />
+              </div>
+            )}
           </div>
         </div>
 

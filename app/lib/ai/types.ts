@@ -1,5 +1,5 @@
 // lib/ai/types.ts
-import type { Origin } from '@/app/data/origins'
+import type { Origin } from '@/app/data/new-origins'
 import type { Power } from '@/app/data/powers'
 import type { Faction } from '@/app/data/factions'
 import type { Action } from '@/app/data/actions'

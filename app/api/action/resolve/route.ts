@@ -58,6 +58,19 @@ import {
   type WorldUpdateResult,
 } from '@/app/lib/game-logic/district-state';
 import {
+  applyAlignmentDelta,
+  updateAlignmentValue,
+  inferActionTags,
+  getAlignmentModifiers,
+  type AlignmentDeltaInput,
+} from '@/app/lib/game-logic/alignment';
+import {
+  applyDistrictInfluence,
+  computeInfluenceDelta,
+  type InfluenceContext,
+} from '@/app/lib/game-logic/district-influence';
+import { getDeityById, getOriginById } from '@/app/data/new-origins';
+import {
   applyWorldReactions,
   type WorldReactionUpdate,
   type WorldReactionsResult,
@@ -992,6 +1005,74 @@ export async function POST(request: Request) {
     console.log(`[Heat] sourceActionId=${sourceActionId} actionId=${rawActionId} effective=${effectiveActionId} followUp=${isFollowUp} heat ${heatUpdate.previousHeat}→${heatUpdate.newHeat}`);
     logHeatUpdate(character.id, heatUpdate);
 
+    // --- Alignment update (MVP) ---
+    // Compute alignment delta based on choice behavior and apply to player
+    let alignmentUpdate: { delta: number; newValue: number | null } | null = null;
+    if (character.alignmentValue !== null && character.patronDeityId) {
+      const deity = getDeityById(character.patronDeityId);
+      const origin = getOriginById(character.originId);
+      const driftRate = origin?.alignmentProfile?.driftRate ?? 1.0;
+
+      // Infer action tags from choice text and context
+      const actionTags = inferActionTags({
+        choiceText: choice.text,
+        approachType: approach,
+        powerUsed: validPrepSelection?.type === 'power' ? validPrepSelection.powerId : undefined,
+      });
+
+      // Determine if collateral/deception occurred (infer from tags and outcome)
+      const collateral = actionTags.includes('collateral_damage') || actionTags.includes('property_destruction');
+      const deceptionUsed = actionTags.includes('deception') || actionTags.includes('manipulation');
+      const protectedCivilians = actionTags.includes('protect_civilians');
+      const actedLawfully = actionTags.includes('lawful');
+
+      const alignmentInput: AlignmentDeltaInput = {
+        actionTags,
+        outcome: isSuccess ? 'success' : isPartial ? 'partial' : 'failure',
+        collateral,
+        deceptionUsed,
+        playerProtectedCivilians: protectedCivilians,
+        playerActedLawfully: actedLawfully,
+      };
+
+      const delta = applyAlignmentDelta(alignmentInput, deity ?? null, driftRate);
+      const newValue = updateAlignmentValue(character.alignmentValue, delta);
+
+      alignmentUpdate = { delta, newValue };
+
+      if (process.env.NODE_ENV === 'development' && delta !== 0) {
+        console.log(`[Alignment] char=${character.id} | deity=${character.patronDeityId} | ${character.alignmentValue}→${newValue} (${delta > 0 ? '+' : ''}${delta})`);
+      }
+    }
+
+    // --- District Influence update (MVP) ---
+    // Update ideological influence based on encounter behavior
+    const influenceContext: InfluenceContext = {
+      actionTags: inferActionTags({
+        choiceText: choice.text,
+        approachType: approach,
+      }),
+      outcome: isSuccess ? 'success' : isPartial ? 'partial' : 'failure',
+      collateral: false, // Will be set based on tags
+      deceptionUsed: false,
+      originId: character.originId,
+      deityId: character.patronDeityId as import('@/app/data/new-origins').DeityId | null,
+    };
+    // Set collateral/deception based on inferred tags
+    influenceContext.collateral = influenceContext.actionTags.includes('collateral_damage') || influenceContext.actionTags.includes('property_destruction');
+    influenceContext.deceptionUsed = influenceContext.actionTags.includes('deception') || influenceContext.actionTags.includes('manipulation');
+    influenceContext.protectedCivilians = influenceContext.actionTags.includes('protect_civilians');
+    influenceContext.actedLawfully = influenceContext.actionTags.includes('lawful');
+
+    // Compute delta (don't apply to DB yet, do it in transaction)
+    const influenceDelta = computeInfluenceDelta(influenceContext);
+    if (process.env.NODE_ENV === 'development') {
+      const nonZero = Object.entries(influenceDelta).filter(([, v]) => v !== 0);
+      if (nonZero.length > 0) {
+        console.log(`[Influence] district=${character.currentDistrict} | delta=${JSON.stringify(influenceDelta)}`);
+      }
+    }
+
     // Determine used powers from choice AND prep phase (needed for goal tracking and follow-up generation)
     // Include: 1) powers required by the choice, 2) power selected in prep phase
     const usedPowerIds: string[] = [
@@ -1097,11 +1178,42 @@ export async function POST(request: Request) {
           leverageControl: leverageUpdate.finalLeverage.control,
           leverageStability: leverageUpdate.finalLeverage.stability,
           leveragePosition: leverageUpdate.finalLeverage.position,
+          // Alignment update (MVP)
+          ...(alignmentUpdate !== null ? { alignmentValue: alignmentUpdate.newValue } : {}),
           // Atomic follow-up persistence: write follow-ups and history in same transaction
           pendingFollowUps: precomputedFollowUps.length > 0 ? JSON.parse(JSON.stringify(precomputedFollowUps)) : Prisma.DbNull,
           ...(precomputedHistory !== null ? { followUpHistory: JSON.parse(JSON.stringify(precomputedHistory)) } : {}),
         },
       });
+
+      // District influence update (MVP)
+      const currentDistrict = character.currentDistrict ?? 'downtown';
+      const districtState = await tx.districtState.findUnique({
+        where: {
+          characterId_districtId: {
+            characterId: character.id,
+            districtId: currentDistrict,
+          },
+        },
+      });
+
+      if (districtState) {
+        // Apply influence delta
+        await tx.districtState.update({
+          where: {
+            characterId_districtId: {
+              characterId: character.id,
+              districtId: currentDistrict,
+            },
+          },
+          data: {
+            influenceRadiance: Math.max(0, Math.min(100, districtState.influenceRadiance + (influenceDelta.radiance ?? 0))),
+            influenceStability: Math.max(0, Math.min(100, districtState.influenceStability + (influenceDelta.stability ?? 0))),
+            influenceEntropy: Math.max(0, Math.min(100, districtState.influenceEntropy + (influenceDelta.entropy ?? 0))),
+            influenceDoubt: Math.max(0, Math.min(100, districtState.influenceDoubt + (influenceDelta.doubt ?? 0))),
+          },
+        });
+      }
 
       const attributeGrowth = result.attributeGrowth ?? [];
 

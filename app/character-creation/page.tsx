@@ -7,22 +7,42 @@ import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
 import { Badge } from '@/app/components/ui/badge';
-import { origins, type Origin } from '@/app/data/origins';
+import { origins, deities, type Origin, type Deity, type DeityId } from '@/app/data/new-origins';
 import { getPowerById, getStarterPowers, type Power } from '@/app/data/powers';
 import { archetypes, type CharacterArchetype } from '@/app/data/archetypes';
-import { ChevronLeft, ChevronRight, Check } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Check, Sun, Shield, Flame, Eye } from 'lucide-react';
 
-type Step = 'origin' | 'power' | 'archetype' | 'name';
+type Step = 'origin' | 'deity' | 'power' | 'archetype' | 'name';
+
+// Deity visual configurations
+const DEITY_ICONS: Record<DeityId, typeof Sun> = {
+  aurelion: Sun,
+  thal_vara: Shield,
+  typhos: Flame,
+  nyx_mora: Eye,
+};
+
+const DEITY_COLORS: Record<DeityId, { ring: string; bg: string; text: string }> = {
+  aurelion: { ring: 'ring-yellow-500', bg: 'bg-yellow-50', text: 'text-yellow-600' },
+  thal_vara: { ring: 'ring-blue-500', bg: 'bg-blue-50', text: 'text-blue-600' },
+  typhos: { ring: 'ring-red-500', bg: 'bg-red-50', text: 'text-red-600' },
+  nyx_mora: { ring: 'ring-purple-500', bg: 'bg-purple-50', text: 'text-purple-600' },
+};
 
 export default function CharacterCreationPage() {
   const router = useRouter();
   const [step, setStep] = useState<Step>('origin');
   const [selectedOrigin, setSelectedOrigin] = useState<Origin | null>(null);
+  const [selectedDeity, setSelectedDeity] = useState<Deity | null>(null);
   const [selectedPower, setSelectedPower] = useState<Power | null>(null);
   const [selectedArchetype, setSelectedArchetype] = useState<CharacterArchetype | null>(null);
   const [characterName, setCharacterName] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Check if selected origin requires deity selection
+  const requiresDeity = selectedOrigin?.requiresDeitySelection ?? false;
+  const availableDeities = selectedOrigin?.deityOptions?.map(id => deities.find(d => d.id === id)).filter(Boolean) as Deity[] ?? [];
 
   // Get available starter powers (excluding those already granted by origin)
   const availablePowers = getStarterPowers().filter(
@@ -31,10 +51,16 @@ export default function CharacterCreationPage() {
 
   const handleOriginSelect = (origin: Origin) => {
     setSelectedOrigin(origin);
-    // Reset power selection if origin changes
+    // Reset deity and power selection if origin changes
+    setSelectedDeity(null);
     if (selectedPower && origin.startingPowers.includes(selectedPower.id)) {
       setSelectedPower(null);
     }
+    setError('');
+  };
+
+  const handleDeitySelect = (deity: Deity) => {
+    setSelectedDeity(deity);
     setError('');
   };
 
@@ -52,6 +78,17 @@ export default function CharacterCreationPage() {
     if (step === 'origin') {
       if (!selectedOrigin) {
         setError('Please select an origin');
+        return;
+      }
+      // If origin requires deity selection, go to deity step
+      if (selectedOrigin.requiresDeitySelection) {
+        setStep('deity');
+      } else {
+        setStep('power');
+      }
+    } else if (step === 'deity') {
+      if (!selectedDeity) {
+        setError('Please select a patron deity');
         return;
       }
       setStep('power');
@@ -72,7 +109,15 @@ export default function CharacterCreationPage() {
   };
 
   const handleBack = () => {
-    if (step === 'power') setStep('origin');
+    if (step === 'deity') setStep('origin');
+    else if (step === 'power') {
+      // If origin requires deity, go back to deity, otherwise origin
+      if (selectedOrigin?.requiresDeitySelection) {
+        setStep('deity');
+      } else {
+        setStep('origin');
+      }
+    }
     else if (step === 'archetype') setStep('power');
     else if (step === 'name') setStep('archetype');
     setError('');
@@ -84,6 +129,12 @@ export default function CharacterCreationPage() {
 
     if (!selectedOrigin || !selectedPower || !selectedArchetype) {
       setError('Please complete all selections');
+      return;
+    }
+
+    // Validate deity if required
+    if (selectedOrigin.requiresDeitySelection && !selectedDeity) {
+      setError('Please select a patron deity');
       return;
     }
 
@@ -103,6 +154,7 @@ export default function CharacterCreationPage() {
           originId: selectedOrigin.id,
           extraPowerId: selectedPower.id,
           archetypeId: selectedArchetype.id,
+          deityId: selectedDeity?.id ?? null,
         }),
       });
 
@@ -122,14 +174,23 @@ export default function CharacterCreationPage() {
     }
   };
 
-  const stepNumber = step === 'origin' ? 1 : step === 'power' ? 2 : step === 'archetype' ? 3 : 4;
+  // Dynamic step labels based on whether deity is required
+  const stepLabels = requiresDeity
+    ? ['Origin', 'Patron', 'Power', 'Archetype', 'Name']
+    : ['Origin', 'Power', 'Archetype', 'Name'];
+
+  const stepNumber = requiresDeity
+    ? (step === 'origin' ? 1 : step === 'deity' ? 2 : step === 'power' ? 3 : step === 'archetype' ? 4 : 5)
+    : (step === 'origin' ? 1 : step === 'power' ? 2 : step === 'archetype' ? 3 : 4);
+
+  const totalSteps = stepLabels.length;
 
   return (
     <div className="min-h-screen bg-gray-100 py-8 px-4">
       <div className="max-w-6xl mx-auto">
         {/* Progress Indicator */}
         <div className="flex items-center justify-center mb-8 gap-2">
-          {['Origin', 'Power', 'Archetype', 'Name'].map((label, index) => (
+          {stepLabels.map((label, index) => (
             <div key={label} className="flex items-center">
               <div
                 className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
@@ -147,7 +208,7 @@ export default function CharacterCreationPage() {
               }`}>
                 {label}
               </span>
-              {index < 3 && (
+              {index < totalSteps - 1 && (
                 <div className={`w-8 sm:w-12 h-0.5 mx-2 ${
                   index + 1 < stepNumber ? 'bg-green-500' : 'bg-gray-200'
                 }`} />
@@ -222,7 +283,86 @@ export default function CharacterCreationPage() {
           </>
         )}
 
-        {/* Step 2: Extra Power Selection */}
+        {/* Step 2: Deity Selection (conditional) */}
+        {step === 'deity' && (
+          <>
+            <div className="text-center mb-8">
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">Choose Your Patron</h1>
+              <p className="text-gray-600">Your {selectedOrigin?.name} requires a divine covenant. Which power do you serve?</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+              {availableDeities.map((deity) => {
+                const Icon = DEITY_ICONS[deity.id];
+                const colors = DEITY_COLORS[deity.id];
+                return (
+                  <Card
+                    key={deity.id}
+                    className={`cursor-pointer transition-all hover:shadow-lg ${
+                      selectedDeity?.id === deity.id
+                        ? `ring-2 ${colors.ring} ${colors.bg}`
+                        : 'hover:bg-gray-50'
+                    }`}
+                    onClick={() => handleDeitySelect(deity)}
+                  >
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${colors.bg}`}>
+                          <Icon className={`h-6 w-6 ${colors.text}`} />
+                        </div>
+                        <div>
+                          <CardTitle className="text-lg">{deity.name}</CardTitle>
+                          <CardDescription className="text-sm italic">{deity.title}</CardDescription>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-gray-600 mb-3">{deity.description}</p>
+                      <div className="space-y-2">
+                        <div>
+                          <span className="text-xs font-medium text-green-700">Favors: </span>
+                          <span className="text-xs text-gray-500">{deity.values.slice(0, 3).join(', ')}</span>
+                        </div>
+                        <div>
+                          <span className="text-xs font-medium text-red-700">Forbids: </span>
+                          <span className="text-xs text-gray-500">{deity.forbiddenActions.slice(0, 3).join(', ')}</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+
+            {selectedDeity && (
+              <Card className="mb-8">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    {(() => {
+                      const Icon = DEITY_ICONS[selectedDeity.id];
+                      const colors = DEITY_COLORS[selectedDeity.id];
+                      return <Icon className={`h-5 w-5 ${colors.text}`} />;
+                    })()}
+                    {selectedDeity.name} — {selectedDeity.title}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-gray-700">{selectedDeity.description}</p>
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <h4 className="font-semibold text-yellow-800 mb-2">The Covenant</h4>
+                    <p className="text-sm text-yellow-700">
+                      Acting in accordance with {selectedDeity.name}&apos;s values will strengthen your connection,
+                      granting power and favor. But betray their principles, and your abilities will falter.
+                      At low alignment, advanced powers may fail entirely.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </>
+        )}
+
+        {/* Step 3: Extra Power Selection */}
         {step === 'power' && (
           <>
             <div className="text-center mb-8">
@@ -366,11 +506,24 @@ export default function CharacterCreationPage() {
                 <CardTitle>Character Summary</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className={`grid gap-4 text-sm ${selectedDeity ? 'grid-cols-3' : 'grid-cols-2'}`}>
                   <div>
                     <span className="text-gray-500">Origin:</span>
                     <p className="font-medium">{selectedOrigin?.name}</p>
                   </div>
+                  {selectedDeity && (
+                    <div>
+                      <span className="text-gray-500">Patron:</span>
+                      <p className="font-medium flex items-center gap-1">
+                        {(() => {
+                          const Icon = DEITY_ICONS[selectedDeity.id];
+                          const colors = DEITY_COLORS[selectedDeity.id];
+                          return <Icon className={`h-4 w-4 ${colors.text}`} />;
+                        })()}
+                        {selectedDeity.name}
+                      </p>
+                    </div>
+                  )}
                   <div>
                     <span className="text-gray-500">Archetype:</span>
                     <p className="font-medium">{selectedArchetype?.name}</p>
