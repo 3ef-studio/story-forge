@@ -167,9 +167,9 @@ export const factions: Faction[] = [
     name: 'The Guardian Initiative',
     shortName: 'Guardians',
     description:
-      'Government-backed organization of registered powered individuals dedicated to public safety',
+      'Registered powered guardians aligned (knowingly or not) with the Cosmic Compact—public-facing heroes who defend structure, memory, and life.',
     ideology:
-      'With great power comes great responsibility. Powered individuals must be accountable and serve the public good.',
+      'Existence is precious. Power must be wielded with accountability to protect civilians and preserve the city’s fragile order against unraveling forces.',
     alignment: 'lawful',
     morality: 'good',
     isPlayable: true,
@@ -359,9 +359,9 @@ export const factions: Faction[] = [
     name: 'The Nihilist Collective',
     shortName: 'Nihilists',
     description:
-      'A destructive movement that believes the city deserves collapse and rebirth through chaos',
+      'A destructive movement increasingly influenced by the Entropy Alliance—cells that preach collapse, ruin, and the return of all things to zero.',
     ideology:
-      'Order is a lie. Heroes are a mask. The city must burn so something real can rise from the ashes.',
+      'Existence is a painful mistake. Order is a cage. The city must be broken so the silence beneath reality can reclaim it.',
     alignment: 'chaotic',
     morality: 'evil',
     isPlayable: true,
@@ -537,7 +537,201 @@ export const factions: Faction[] = [
       positive: 'Favorable coverage',
       veryPositive: 'Media darling'
     }
-  }
+  },
+
+
+  // === Cosmic Conflict Factions (New) ===
+  {
+    id: 'cosmic_compact',
+    name: 'The Cosmic Compact',
+    shortName: 'Compact',
+    description:
+      'A hidden covenant of guardians and patrons who preserve the structure of reality—form, memory, and light as barriers against the void.',
+    ideology:
+      'Preservation. Existence is a fragile garden surrounded by darkness. Law and clarifying light are sacred tools to defend hope and consequence.',
+    alignment: 'lawful',
+    morality: 'good',
+    isPlayable: true,
+    category: 'power',
+    canControlDistricts: true,
+    startingReputation: 0,
+    values: ['preservation', 'hope', 'structure', 'memory', 'civic protection', 'accountability'],
+    opposedTo: ['nihilism', 'entropy', 'recklessness', 'mass_deception', 'collateral_damage'],
+    goals: [
+      'stabilize districts',
+      'protect civilians and infrastructure',
+      'expose deception and corruption',
+      'contain entropy outbreaks',
+      'recruit disciplined champions and regulated allies'
+    ],
+    responseThresholds: {
+      hostile: -35,
+      suspicious: -10,
+      neutral: 0,
+      friendly: 35,
+      allied: 70
+    },
+    encounterLikelihood: 0.35,
+    powerLevel: 8,
+    territories: ['government_quarter', 'civic_center', 'financial_district'],
+    resources: ['sanctums', 'relics', 'training networks', 'ritual wards', 'public trust'],
+    allies: ['guardian_initiative', 'metro_police', 'city_government', 'media_corporations'],
+    rivals: ['bma'],
+    enemies: ['entropy_alliance', 'nihilist_collective'],
+    recruitmentPitch:
+      'Stand for tomorrow. Uphold the Compact, defend the city, and keep the darkness outside the gate.',
+    reputationDescriptors: {
+      veryNegative: 'Void-tainted threat',
+      negative: 'Unstable element',
+      neutral: 'Unproven powered',
+      positive: 'Trusted defender',
+      veryPositive: 'Oathbound guardian'
+    }
+  },
+
+  {
+    id: 'entropy_alliance',
+    name: 'The Entropy Alliance',
+    shortName: 'Entropy',
+    description:
+      'A clandestine coalition of unravelers who believe existence is a mistake—working to return the universe to zero through ruin and madness.',
+    ideology:
+      'Nihilism. Truth is a lie and order is a cage. Break the architecture of reality until the void’s silence wins.',
+    alignment: 'chaotic',
+    morality: 'evil',
+    isPlayable: true,
+    category: 'power',
+    canControlDistricts: true,
+    startingReputation: 0,
+    values: ['collapse', 'ruin', 'madness', 'freedom from consequence', 'fear', 'despair'],
+    opposedTo: ['hope', 'law', 'stability', 'clarity', 'public_trust'],
+    goals: [
+      'increase district entropy',
+      'shatter symbols of order',
+      'spread paranoia and despair',
+      'corrupt or break champions',
+      'open breaches for void influence'
+    ],
+    responseThresholds: {
+      hostile: -20,
+      suspicious: -5,
+      neutral: 0,
+      friendly: 20,
+      allied: 45
+    },
+    encounterLikelihood: 0.32,
+    powerLevel: 9,
+    territories: ['industrial_zone', 'old_town', 'dockyards', 'undercity'],
+    resources: ['cult cells', 'blackmail', 'anomaly caches', 'panic networks'],
+    allies: ['nihilist_collective', 'black_market', 'street_gangs'],
+    rivals: ['syndicate'],
+    enemies: ['cosmic_compact', 'guardian_initiative', 'metro_police'],
+    recruitmentPitch:
+      'Stop pretending the city can be saved. Help us end the lie—and listen to the silence beneath everything.',
+    reputationDescriptors: {
+      veryNegative: 'Marked for unraveling',
+      negative: 'Useful pawn',
+      neutral: 'Uncommitted',
+      positive: 'Initiate of collapse',
+      veryPositive: 'Chosen unraveler'
+    }
+  },
+
+  {
+    id: 'bma',
+    name: 'Bureau of Metahuman Affairs',
+    shortName: 'BMA',
+    description:
+      'A federal-grade agency that audits powered activity, enforces registration, and imposes containment protocols when districts destabilize.',
+    ideology:
+      'Stability through oversight. Power must be measured, regulated, and contained. If gods exist, they are a threat vector to be managed.',
+    alignment: 'lawful',
+    morality: 'neutral',
+    isPlayable: true,
+    category: 'institution',
+    canControlDistricts: false,
+    startingReputation: 0,
+    values: ['compliance', 'risk management', 'public order', 'containment', 'accountability'],
+    opposedTo: ['unregistered_powers', 'collateral_damage', 'vigilante_justice', 'district_instability'],
+    goals: [
+      'track powered individuals',
+      'reduce collateral incidents',
+      'contain anomalies',
+      'impose emergency lockdowns',
+      'develop countermeasures to divine influence'
+    ],
+    responseThresholds: {
+      hostile: -50,
+      suspicious: -15,
+      neutral: 0,
+      friendly: 25,
+      allied: 55
+    },
+    encounterLikelihood: 0.28,
+    powerLevel: 6,
+    territories: ['government_quarter', 'commercial_district', 'transit_hubs'],
+    resources: ['surveillance', 'containment tech', 'legal authority', 'strike teams'],
+    allies: ['city_government', 'metro_police'],
+    rivals: ['guardian_initiative', 'cosmic_compact'],
+    enemies: ['entropy_alliance', 'black_market'],
+    recruitmentPitch:
+      'Get registered. Get resourced. Do the job right and keep the city stable—without the mythic theatrics.',
+    reputationDescriptors: {
+      veryNegative: 'Detain on contact',
+      negative: 'Flagged risk subject',
+      neutral: 'On the books',
+      positive: 'Cleared operator',
+      veryPositive: 'Trusted auditor'
+    }
+  },
+
+  {
+    id: 'paradox_institute',
+    name: 'The Paradox Institute',
+    shortName: 'Paradox',
+    description:
+      'A covert research network studying divine residues, shards, and district anomalies—seeking to manufacture repeatable power.',
+    ideology:
+      'Knowledge is leverage. Gods are energy patterns. If the universe has rules, they can be reverse-engineered—even if it breaks people.',
+    alignment: 'neutral',
+    morality: 'neutral',
+    isPlayable: true,
+    category: 'institution',
+    canControlDistricts: false,
+    startingReputation: 0,
+    values: ['discovery', 'experimentation', 'power replication', 'secrecy', 'progress'],
+    opposedTo: ['censorship', 'ignorance', 'regulation', 'moral_absolutism'],
+    goals: [
+      'harvest anomaly signatures',
+      'create synthetic shards',
+      'map ideological influence',
+      'monetize or weaponize breakthroughs'
+    ],
+    responseThresholds: {
+      hostile: -45,
+      suspicious: -10,
+      neutral: 0,
+      friendly: 30,
+      allied: 65
+    },
+    encounterLikelihood: 0.22,
+    powerLevel: 7,
+    territories: ['university_row', 'industrial_zone', 'undercity'],
+    resources: ['labs', 'prototype tech', 'field operatives', 'data archives'],
+    allies: ['black_market'],
+    rivals: ['bma', 'city_government'],
+    enemies: ['cosmic_compact', 'entropy_alliance'],
+    recruitmentPitch:
+      'Bring us samples. Bring us data. We’ll give you power that doesn’t require praying for permission.',
+    reputationDescriptors: {
+      veryNegative: 'Security threat',
+      negative: 'Unreliable asset',
+      neutral: 'Unknown variable',
+      positive: 'Valued contributor',
+      veryPositive: 'Inner-circle researcher'
+    }
+  },
+
 ]
 
 // Convenience subsets
@@ -665,4 +859,64 @@ export function calculateReputationImpact(
   }
 
   return cascadeChanges
+}
+
+// ============================================================
+// Faction ID Aliases (Migration Safety)
+// ============================================================
+
+/**
+ * Map old/legacy faction IDs to current canonical IDs.
+ * Use normalizeFactionId() to resolve aliases at load time.
+ */
+export const FACTION_ID_ALIASES: Record<string, string> = {
+  // Add legacy mappings here if needed
+  // Example: 'old_faction_name': 'new_faction_name',
+}
+
+/**
+ * Normalize a faction ID by resolving legacy aliases.
+ * Use this when loading faction IDs from saved data.
+ */
+export function normalizeFactionId(factionId: string): string {
+  return FACTION_ID_ALIASES[factionId] ?? factionId
+}
+
+/**
+ * Check if a faction ID is valid (exists in factions array).
+ */
+export function isValidFactionId(factionId: string): boolean {
+  const normalized = normalizeFactionId(factionId)
+  return factions.some(f => f.id === normalized)
+}
+
+/**
+ * Get all valid faction IDs (for validation/debugging).
+ */
+export function getAllFactionIds(): string[] {
+  return factions.map(f => f.id)
+}
+
+// Dev-only: Validate faction IDs at module load time
+if (process.env.NODE_ENV === 'development') {
+  const factionIds = new Set(factions.map(f => f.id))
+
+  // Validate cross-references in allies/rivals/enemies
+  for (const faction of factions) {
+    for (const allyId of faction.allies) {
+      if (!factionIds.has(allyId)) {
+        console.warn(`[Factions] Invalid ally ID "${allyId}" in faction "${faction.id}"`)
+      }
+    }
+    for (const rivalId of faction.rivals) {
+      if (!factionIds.has(rivalId)) {
+        console.warn(`[Factions] Invalid rival ID "${rivalId}" in faction "${faction.id}"`)
+      }
+    }
+    for (const enemyId of faction.enemies) {
+      if (!factionIds.has(enemyId)) {
+        console.warn(`[Factions] Invalid enemy ID "${enemyId}" in faction "${faction.id}"`)
+      }
+    }
+  }
 }

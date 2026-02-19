@@ -71,12 +71,14 @@ const FACTION_COLORS: Record<string, { bg: string; border: string; text: string;
   vigilante_network: { bg: 'bg-purple-500/20', border: 'border-purple-500/50', text: 'text-purple-400', solid: 'bg-purple-500' },
   syndicate: { bg: 'bg-red-500/20', border: 'border-red-500/50', text: 'text-red-400', solid: 'bg-red-500' },
   nihilist_collective: { bg: 'bg-orange-500/20', border: 'border-orange-500/50', text: 'text-orange-400', solid: 'bg-orange-500' },
+  cosmic_compact: { bg: 'bg-yellow-500/20', border: 'border-yellow-500/50', text: 'text-yellow-400', solid: 'bg-yellow-500' },
+  entropy_alliance: { bg: 'bg-emerald-500/20', border: 'border-emerald-500/50', text: 'text-emerald-400', solid: 'bg-emerald-500' },
   neutral: { bg: 'bg-gray-500/20', border: 'border-gray-500/50', text: 'text-gray-400', solid: 'bg-gray-600' },
   uncontrolled: { bg: 'bg-gray-700/20', border: 'border-gray-700/50', text: 'text-gray-500', solid: 'bg-gray-700' },
 };
 
 // Controllable faction IDs in display order
-const CONTROLLABLE_FACTION_IDS = ['guardian_initiative', 'vigilante_network', 'syndicate', 'nihilist_collective'];
+const CONTROLLABLE_FACTION_IDS = ['guardian_initiative', 'vigilante_network', 'syndicate', 'nihilist_collective', 'cosmic_compact', 'entropy_alliance'];
 
 function getFactionColors(factionId: string | null) {
   if (!factionId) return FACTION_COLORS.neutral;
@@ -89,6 +91,8 @@ function getFactionShortName(factionId: string): string {
     vigilante_network: 'VN',
     syndicate: 'SYN',
     nihilist_collective: 'NC',
+    cosmic_compact: 'CC',
+    entropy_alliance: 'EA',
     uncontrolled: 'UC',
   };
   return names[factionId] ?? factionId.slice(0, 3).toUpperCase();

@@ -19,6 +19,8 @@ const FACTION_COLORS: Record<string, { bg: string; border: string; text: string;
   vigilante_network: { bg: 'from-purple-900 to-purple-950', border: 'border-purple-500', text: 'text-purple-400', glow: 'shadow-purple-500/50' },
   syndicate: { bg: 'from-red-900 to-red-950', border: 'border-red-500', text: 'text-red-400', glow: 'shadow-red-500/50' },
   nihilist_collective: { bg: 'from-orange-900 to-orange-950', border: 'border-orange-500', text: 'text-orange-400', glow: 'shadow-orange-500/50' },
+  cosmic_compact: { bg: 'from-yellow-900 to-yellow-950', border: 'border-yellow-500', text: 'text-yellow-400', glow: 'shadow-yellow-500/50' },
+  entropy_alliance: { bg: 'from-emerald-900 to-emerald-950', border: 'border-emerald-500', text: 'text-emerald-400', glow: 'shadow-emerald-500/50' },
 };
 
 const FACTION_SLOGANS: Record<string, string> = {
@@ -26,6 +28,8 @@ const FACTION_SLOGANS: Record<string, string> = {
   vigilante_network: 'By any means necessary. The streets are ours.',
   syndicate: 'Power flows to those who seize it. The city belongs to the Syndicate.',
   nihilist_collective: 'Order crumbles. Chaos reigns supreme.',
+  cosmic_compact: 'Light endures. The garden is protected.',
+  entropy_alliance: 'Silence wins. The unraveling is complete.',
 };
 
 function getFactionStyle(factionId: string | null) {

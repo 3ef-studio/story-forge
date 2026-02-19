@@ -72,12 +72,14 @@ export const districts: District[] = [
     tags: ['finance', 'media', 'government', 'police', 'high_visibility'],
     adjacent: ['midtown', 'industrial', 'waterfront'],
     factionAffinities: {
-      // playable factions
+      // playable power factions
       guardian_initiative: 0.25,
       vigilante_network: 0.10,
       syndicate: -0.05,
       nihilist_collective: -0.10,
-      // non-playable pressure can be modeled elsewhere; kept here only if useful
+      cosmic_compact: 0.20,
+      entropy_alliance: -0.15,
+      // non-playable/institution factions
       metro_police: 0.20,
       city_government: 0.20,
       media_corporations: 0.15,
@@ -105,6 +107,8 @@ export const districts: District[] = [
       vigilante_network: 0.05,
       guardian_initiative: -0.05,
       nihilist_collective: 0.10,
+      cosmic_compact: -0.05,
+      entropy_alliance: 0.15,
       black_market: 0.15,
       street_gangs: 0.10,
     },
@@ -129,6 +133,8 @@ export const districts: District[] = [
       vigilante_network: 0.05,
       guardian_initiative: -0.05,
       nihilist_collective: 0.05,
+      cosmic_compact: -0.05,
+      entropy_alliance: 0.10,
       black_market: 0.25,
       street_gangs: 0.10,
     },
@@ -154,6 +160,8 @@ export const districts: District[] = [
       nihilist_collective: 0.20,
       syndicate: 0.10,
       guardian_initiative: 0.00,
+      cosmic_compact: 0.05,
+      entropy_alliance: 0.20,
       civilian_population: 0.20,
       street_gangs: 0.20,
     },
@@ -180,6 +188,8 @@ export const districts: District[] = [
       vigilante_network: 0.15,
       syndicate: 0.00,
       nihilist_collective: -0.05,
+      cosmic_compact: 0.15,
+      entropy_alliance: -0.10,
       civilian_population: 0.20,
       media_corporations: 0.05,
     },

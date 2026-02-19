@@ -76,8 +76,10 @@ VALID FACTION IDS:
 - guardian_initiative
 - black_market
 - nihilist_collective
-- underground_resistance
-- corporate_alliance
+- cosmic_compact
+- entropy_alliance
+- bma
+- paradox_institute
 
 VALID ATTRIBUTE IDS:
 - strength, agility, endurance, intelligence, perception, willpower, charisma, stealth
