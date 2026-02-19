@@ -55,6 +55,8 @@ interface OutcomeDisplayProps {
   resolution?: ResolutionData;
   powerProgression?: PowerProgressionData;
   conflictResult?: ConflictResultData;
+  patronReaction?: string | null;
+  patronIcon?: string;
   onContinue: () => void;
 }
 
@@ -74,7 +76,7 @@ const POWER_BAR_COLORS: Record<string, string> = {
   defensive: 'bg-cyan-500',
 };
 
-export function OutcomeDisplay({ outcome, resolution, powerProgression, conflictResult, onContinue }: OutcomeDisplayProps) {
+export function OutcomeDisplay({ outcome, resolution, powerProgression, conflictResult, patronReaction, patronIcon, onContinue }: OutcomeDisplayProps) {
   const [showContent, setShowContent] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const shouldReduceMotion = useReducedMotion();
@@ -169,6 +171,13 @@ export function OutcomeDisplay({ outcome, resolution, powerProgression, conflict
           <p className="text-base sm:text-lg text-white/90 leading-relaxed max-w-prose">
             {outcome.description}
           </p>
+          {/* Patron Reaction */}
+          {patronReaction && (
+            <p className="mt-3 pt-3 border-t border-white/10 text-sm text-white/70 italic flex items-center gap-2">
+              {patronIcon && <span>{patronIcon}</span>}
+              <span>{patronReaction}</span>
+            </p>
+          )}
         </div>
 
         

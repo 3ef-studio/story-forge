@@ -61,6 +61,8 @@ import {
   logLeverageSpend,
 } from '@/app/lib/game-logic/leverage';
 import type { FollowUpAction } from '@/app/lib/game-logic/follow-up-actions';
+import { getPatronReaction, getPatronIcon } from '@/app/lib/game-logic/patron-reaction';
+import type { DeityId } from '@/app/data/new-origins';
 
 type GameState = 'idle' | 'executing' | 'encounter' | 'conflict' | 'resolving' | 'outcome';
 
@@ -155,6 +157,8 @@ interface CharacterData {
   heat?: number;
   actionCounter?: number;
   followUps?: FollowUpAction[];
+  patronDeityId?: string | null;
+  alignmentValue?: number | null;
 }
 
 interface OutcomeResult {
@@ -1435,6 +1439,12 @@ export default function GamePage() {
               resolution={currentResolution ?? undefined}
               powerProgression={currentPowerProgression ?? undefined}
               conflictResult={conflictResult ?? undefined}
+              patronReaction={getPatronReaction({
+                patron: character.patronDeityId as DeityId | null,
+                outcome: currentResolution?.outcome ?? (currentOutcome.success ? 'success' : 'failure'),
+                seed: character.actionCounter ?? Date.now(),
+              })}
+              patronIcon={character.patronDeityId ? getPatronIcon(character.patronDeityId as DeityId) : undefined}
               onContinue={handleContinue}
             />
           </motion.div>
