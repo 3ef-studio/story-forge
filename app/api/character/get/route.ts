@@ -11,6 +11,7 @@ import { computeEnergyRegen } from '@/app/lib/game-logic/energy-regen';
 import { generateRivalForCharacter } from '@/app/lib/game-logic/rival-generator';
 import { PERSONALITY_LABELS, PERSONALITY_DESCRIPTIONS, type RivalPersonality } from '@/app/data/rivals';
 import { parsePendingFollowUps } from '@/app/lib/game-logic/follow-up-actions';
+import { parseConsumables } from '@/app/lib/game-logic/consumables';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -184,6 +185,8 @@ export async function GET() {
         // Deity/Alignment system (MVP)
         patronDeityId: character.patronDeityId,
         alignmentValue: character.alignmentValue,
+        // Consumables (MVP)
+        consumables: parseConsumables((character as { consumables?: unknown }).consumables),
       },
     });
   } catch (error) {

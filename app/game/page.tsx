@@ -63,6 +63,7 @@ import {
 import type { FollowUpAction } from '@/app/lib/game-logic/follow-up-actions';
 import { getPatronReaction, getPatronIcon } from '@/app/lib/game-logic/patron-reaction';
 import type { DeityId } from '@/app/data/new-origins';
+import type { ConsumableItem } from '@/app/lib/game-logic/consumables';
 
 type GameState = 'idle' | 'executing' | 'encounter' | 'conflict' | 'resolving' | 'outcome';
 
@@ -159,6 +160,7 @@ interface CharacterData {
   followUps?: FollowUpAction[];
   patronDeityId?: string | null;
   alignmentValue?: number | null;
+  consumables?: ConsumableItem[];
 }
 
 interface OutcomeResult {
@@ -240,6 +242,8 @@ export default function GamePage() {
   const [leverage, setLeverage] = useState<LeverageState>(emptyLeverage());
   // Tracks how much leverage was spent during the current conflict (reset per encounter)
   const [leverageSpent, setLeverageSpent] = useState<LeverageState>(emptyLeverage());
+  // Selected consumable to use for the current encounter
+  const [selectedConsumableId, setSelectedConsumableId] = useState<string | null>(null);
 
   // Mobile tab state
   const [mobileTab, setMobileTab] = useState<MobileTab>('scene');
@@ -944,6 +948,8 @@ export default function GamePage() {
           conflictOutcome,
           leverageSpent,
           turnTimeline,
+          // Consumable to use for this encounter
+          consumableId: selectedConsumableId ?? undefined,
           // Opponent identity for telemetry
           opponentIdentity: conflictState.opponentIdentity ? {
             kind: conflictState.opponentIdentity.kind,
@@ -1005,8 +1011,12 @@ export default function GamePage() {
           currentXp: prev.currentXp + (data.outcome.xpGained ?? 0),
           level: data.leveledUp ? data.newLevel : prev.level,
           leverage: data.leverage ?? prev.leverage,
+          consumables: data.consumables ?? prev.consumables,
         };
       });
+
+      // Clear selected consumable after resolution
+      setSelectedConsumableId(null);
 
       setGameState('outcome');
 
@@ -1398,6 +1408,9 @@ export default function GamePage() {
               characterEnergy={character.currentEnergy}
               characterPowers={character.powers}
               focusResult={focusResult}
+              consumables={character.consumables ?? []}
+              selectedConsumableId={selectedConsumableId}
+              onSelectConsumable={setSelectedConsumableId}
             />
           </motion.div>
         );

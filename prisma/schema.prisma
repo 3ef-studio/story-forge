@@ -56,6 +56,8 @@ model Character {
   // Deity/Alignment system (MVP)
   patronDeityId               String?              @map("patron_deity_id") // null for non-divine origins
   alignmentValue              Int?                 @map("alignment_value") // 0-100, null for non-divine origins
+  // Consumables (MVP) - max 2 items per player
+  consumables                 Json                 @default("[]") // [{id, type, createdAt}]
   createdAt                   DateTime             @default(now()) @map("created_at")
   updatedAt                   DateTime             @updatedAt @map("updated_at")
 

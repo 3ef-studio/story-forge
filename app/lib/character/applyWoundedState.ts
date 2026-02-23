@@ -196,3 +196,37 @@ export async function getWoundedState(
 export function getWoundedDifficultyModifier(isWounded: boolean): number {
   return isWounded ? WOUNDED_HEAT_PENALTY : 0;
 }
+
+// ============================================================
+// Clear Wounded State (e.g., from Med Injector consumable)
+// ============================================================
+
+/**
+ * Immediately clear wounded state from a character.
+ * Used by consumables like Med Injector to remove wounded status.
+ *
+ * @param characterId - The character's ID
+ * @returns true if wounded state was cleared, false if not wounded
+ */
+export async function clearWoundedState(characterId: string): Promise<boolean> {
+  // Note: Using type assertion for new schema fields until migration is run
+  const character = await prisma.character.findUnique({
+    where: { id: characterId },
+  }) as { isWounded?: boolean } | null;
+
+  if (!character || !character.isWounded) {
+    return false;
+  }
+
+  await prisma.character.update({
+    where: { id: characterId },
+    data: {
+      isWounded: false,
+      woundedEncountersRemaining: 0,
+      woundedAtActionCounter: null,
+    } as Record<string, unknown>,
+  });
+
+  console.log(`[WoundedState] Character ${characterId} wounded state cleared by consumable.`);
+  return true;
+}

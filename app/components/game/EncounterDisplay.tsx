@@ -11,6 +11,7 @@ import type { ResolutionPreview, PrepSelection } from '@/app/lib/game-logic/comb
 import { AnimatedCard } from '@/app/components/ui/AnimatedCard';
 import { AnimatedChoiceCard } from '@/app/components/ui/AnimatedChoiceCard';
 import { LoadingSigil } from '@/app/components/ui/LoadingSigil';
+import { type ConsumableItem, CONSUMABLE_DEFINITIONS, MAX_CONSUMABLES } from '@/app/lib/game-logic/consumables';
 
 interface EncounterChoice {
   id: string;
@@ -61,6 +62,9 @@ interface EncounterDisplayProps {
   characterEnergy?: number;
   characterPowers?: CharacterPower[];
   focusResult?: FocusResultDisplay;
+  consumables?: ConsumableItem[];
+  selectedConsumableId?: string | null;
+  onSelectConsumable?: (id: string | null) => void;
 }
 
 /** Format leverage type for display */
@@ -115,8 +119,14 @@ export function EncounterDisplay({
   characterEnergy = 100,
   characterPowers = [],
   focusResult,
+  consumables = [],
+  selectedConsumableId = null,
+  onSelectConsumable,
 }: EncounterDisplayProps) {
   const [prepSelection, setPrepSelection] = useState<PrepSelection | null>(null);
+
+  // Find the selected consumable for display
+  const selectedConsumable = consumables.find(c => c.id === selectedConsumableId);
 
   const handleChoiceClick = (choiceId: string) => {
     onSelectChoice(choiceId, prepSelection);
@@ -171,6 +181,64 @@ export function EncounterDisplay({
             </div>
           );
         })()}
+
+        {/* Consumables Panel (MVP) */}
+        {consumables.length > 0 && (
+          <div className="space-y-2">
+            <h4 className="font-semibold text-white/70 text-sm uppercase tracking-wide">Items</h4>
+            <div className="flex gap-2">
+              {consumables.map((item) => {
+                const def = CONSUMABLE_DEFINITIONS[item.type];
+                const isSelected = item.id === selectedConsumableId;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => onSelectConsumable?.(isSelected ? null : item.id)}
+                    disabled={isResolving}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border transition-all ${
+                      isSelected
+                        ? 'bg-amber-500/20 border-amber-500/50 ring-1 ring-amber-400/30'
+                        : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20'
+                    } ${isResolving ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    <span className="text-lg">{def.icon}</span>
+                    <div className="text-left">
+                      <div className="text-sm font-medium text-white/90">{def.name}</div>
+                      <div className="text-xs text-white/50">{def.description}</div>
+                    </div>
+                  </button>
+                );
+              })}
+              {/* Empty slots */}
+              {Array.from({ length: MAX_CONSUMABLES - consumables.length }).map((_, i) => (
+                <div
+                  key={`empty-${i}`}
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl border border-dashed border-white/10 opacity-30"
+                >
+                  <span className="text-lg">-</span>
+                  <div className="text-left">
+                    <div className="text-sm font-medium text-white/50">Empty</div>
+                    <div className="text-xs text-white/30">No item</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* Selected consumable confirmation */}
+            {selectedConsumable && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                <span className="text-sm text-amber-300">
+                  Using {CONSUMABLE_DEFINITIONS[selectedConsumable.type].name} on this encounter
+                </span>
+                <button
+                  onClick={() => onSelectConsumable?.(null)}
+                  className="ml-auto text-xs text-white/50 hover:text-white/80 underline"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Prep Phase */}
         <PrepPhase

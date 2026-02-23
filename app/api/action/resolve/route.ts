@@ -89,10 +89,24 @@ import {
 import {
   applyWoundedState,
   decrementWoundedCounter,
+  clearWoundedState,
   type WoundedStateResult,
   WOUNDED_ENCOUNTERS_DURATION,
   WOUNDED_HEAT_PENALTY,
 } from '@/app/lib/character/applyWoundedState';
+import {
+  parseConsumables,
+  findConsumable,
+  removeConsumable,
+  canReceiveConsumable,
+  createConsumable,
+  addConsumable,
+  getRandomConsumableType,
+  getConsumableInfo,
+  CONSUMABLE_DROP_CHANCE,
+  type ConsumableItem,
+  type ConsumableType,
+} from '@/app/lib/game-logic/consumables';
 
 // Type for outcome result with optional fields
 type OutcomeResult = {
@@ -458,6 +472,8 @@ type ResolveActionBody = {
   resolutionOutcomeOverride?: ResolutionOutcomeOverride;
   conflictOutcome?: ConflictOutcomePayload;
   leverageSpent?: LeverageState;
+  /** Consumable ID to use for this encounter */
+  consumableId?: string;
   // Telemetry fields
   turnTimeline?: TurnTimelineEntry[];
   opponentIdentity?: OpponentIdentityPayload;
@@ -497,7 +513,8 @@ function isResolveActionBody(value: unknown): value is ResolveActionBody {
     (v.focusMode === undefined || v.focusMode === null || (typeof v.focusMode === 'string' && VALID_FOCUS_MODES.includes(v.focusMode as FocusModeValue))) &&
     (v.focusModifier === undefined || (typeof v.focusModifier === 'number' && Number.isFinite(v.focusModifier))) &&
     (v.resolutionOutcomeOverride === undefined || (typeof v.resolutionOutcomeOverride === 'string' && VALID_OUTCOME_OVERRIDES.includes(v.resolutionOutcomeOverride as ResolutionOutcomeOverride))) &&
-    (v.conflictOutcome === undefined || (typeof v.conflictOutcome === 'object' && v.conflictOutcome !== null && ['victory', 'defeat', 'stalemate'].includes((v.conflictOutcome as Record<string, unknown>).result as string)))
+    (v.conflictOutcome === undefined || (typeof v.conflictOutcome === 'object' && v.conflictOutcome !== null && ['victory', 'defeat', 'stalemate'].includes((v.conflictOutcome as Record<string, unknown>).result as string))) &&
+    (v.consumableId === undefined || typeof v.consumableId === 'string')
   );
 }
 
@@ -523,7 +540,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { encounterId, choiceId, threadId, actionId: rawActionId, sourceActionId, locationType, npcId, prepSelection, rivalPresent, focusMode: rawFocusMode, focusModifier: rawFocusModifier, resolutionOutcomeOverride, conflictOutcome, turnTimeline, opponentIdentity, gambitResult } = rawBody;
+    const { encounterId, choiceId, threadId, actionId: rawActionId, sourceActionId, locationType, npcId, prepSelection, rivalPresent, focusMode: rawFocusMode, focusModifier: rawFocusModifier, resolutionOutcomeOverride, conflictOutcome, turnTimeline, opponentIdentity, gambitResult, consumableId } = rawBody;
     // Use sourceActionId (the original action ID from execute, e.g., fup_xyz) for heat detection
     // Fall back to rawActionId for backward compatibility
     const effectiveActionId = sourceActionId ?? rawActionId;
@@ -619,6 +636,45 @@ export async function POST(request: Request) {
           lastEnergyRegenAt: regenResult.newLastEnergyRegenAt,
         },
       });
+    }
+
+    // --- Consumable validation and effect setup ---
+    // Parse character's consumables and validate the requested consumable if any
+    const characterConsumables = parseConsumables((character as { consumables?: unknown }).consumables);
+    let usedConsumable: ConsumableItem | null = null;
+    let consumableRollBonus = 0;
+    let consumableHeatDelta = 0;
+    let consumableIgnoreHeat = false;
+    let consumableXpModifier = 1.0;
+    let consumableClearsWounded = false;
+
+    if (consumableId) {
+      usedConsumable = findConsumable(characterConsumables, consumableId) ?? null;
+      if (!usedConsumable) {
+        return NextResponse.json(
+          { error: 'Consumable not found in inventory' },
+          { status: 400 }
+        );
+      }
+
+      // Apply consumable effects based on type
+      switch (usedConsumable.type) {
+        case 'stim_patch':
+          consumableRollBonus = 2;
+          consumableHeatDelta = 1;
+          break;
+        case 'med_injector':
+          consumableClearsWounded = true;
+          break;
+        case 'signal_scrambler':
+          consumableIgnoreHeat = true;
+          consumableXpModifier = 0.75;
+          break;
+      }
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[Consumable] Using ${usedConsumable.type}: rollBonus=${consumableRollBonus}, heatDelta=${consumableHeatDelta}, ignoreHeat=${consumableIgnoreHeat}, xpMod=${consumableXpModifier}`);
+      }
     }
 
     // Build attribute map
@@ -743,6 +799,11 @@ export async function POST(request: Request) {
 
     // Compute server-side resolution as fallback (used when no mini-game was played)
     const woundedPenalty = isWounded ? WOUNDED_HEAT_PENALTY : 0;
+    // Include consumable roll bonus in power level bonus (they stack)
+    const totalBonusWithConsumable = totalPowerLevelBonus + consumableRollBonus;
+    const totalBonusLabel = consumableRollBonus > 0
+      ? (totalPowerLevelLabel ? `${totalPowerLevelLabel} + Stim` : 'Stim Patch')
+      : totalPowerLevelLabel;
     const diceRollResolution = resolveEncounter({
       difficulty: encounter.difficulty,
       approach,
@@ -751,8 +812,8 @@ export async function POST(request: Request) {
       repByFaction: factionReputations,
       encounterTags: encounter.narrativeTags,
       involvedFactions: encounter.requiredFactions,
-      powerLevelBonus: totalPowerLevelBonus,
-      powerLevelLabel: totalPowerLevelLabel,
+      powerLevelBonus: totalBonusWithConsumable,
+      powerLevelLabel: totalBonusLabel,
       npcInfluenceBonus,
       npcInfluenceLabel,
       focusBonus: focusModifier,
@@ -878,9 +939,9 @@ export async function POST(request: Request) {
       ? outcome.successResult
       : outcome.failureResult;
 
-    // Calculate effective XP (partial gets 50%)
+    // Calculate effective XP (partial gets 50%, signal scrambler gets 75%)
     const xpMultiplier = isPartial ? 0.5 : 1.0;
-    const effectiveXpGain = Math.floor(baseResult.xpGain * xpMultiplier);
+    const effectiveXpGain = Math.floor(baseResult.xpGain * xpMultiplier * consumableXpModifier);
 
     // Build NPC influence flavor line
     let npcFlavorLine = '';
@@ -995,14 +1056,30 @@ export async function POST(request: Request) {
     // isRest: normalizeActionId(effectiveActionId) === 'rest_recover' or 'rest'
     const normalizedEffective = effectiveActionId ? normalizeActionId(effectiveActionId) : undefined;
     const isRest = normalizedEffective === 'rest_recover' || normalizedEffective === 'rest';
-    const heatUpdate = computeHeatUpdate({
+    const baseHeatUpdate = computeHeatUpdate({
       currentHeat: character.heat ?? 0,
       actionId: actionId,
       newActionCounter: leverageUpdate.newActionCounter,
       isFollowUp,
       isRest,
     });
-    console.log(`[Heat] sourceActionId=${sourceActionId} actionId=${rawActionId} effective=${effectiveActionId} followUp=${isFollowUp} heat ${heatUpdate.previousHeat}→${heatUpdate.newHeat}`);
+
+    // Apply consumable heat effects:
+    // - signal_scrambler: ignore heat gain from this encounter (keep previous heat)
+    // - stim_patch: +1 heat
+    let finalNewHeat = baseHeatUpdate.newHeat;
+    if (consumableIgnoreHeat) {
+      // Signal scrambler: ignore heat gain, keep at previous value
+      finalNewHeat = baseHeatUpdate.previousHeat;
+    }
+    // Add stim patch heat delta (stacks with other effects)
+    finalNewHeat = Math.max(0, Math.min(10, finalNewHeat + consumableHeatDelta));
+
+    const heatUpdate = {
+      ...baseHeatUpdate,
+      newHeat: finalNewHeat,
+    };
+    console.log(`[Heat] sourceActionId=${sourceActionId} actionId=${rawActionId} effective=${effectiveActionId} followUp=${isFollowUp} heat ${heatUpdate.previousHeat}→${heatUpdate.newHeat}${consumableIgnoreHeat ? ' (scrambler)' : ''}${consumableHeatDelta > 0 ? ` (+${consumableHeatDelta} stim)` : ''}`);
     logHeatUpdate(character.id, heatUpdate);
 
     // --- Alignment update (MVP) ---
@@ -1079,6 +1156,27 @@ export async function POST(request: Request) {
       ...(choice.requiredPowers ?? []),
       ...(prepPowerId ? [prepPowerId] : []),
     ];
+
+    // --- Consumable inventory update: compute new consumables array ---
+    // Remove used consumable and potentially add a drop on success
+    let updatedConsumables = [...characterConsumables];
+    let consumableDrop: ConsumableItem | null = null;
+
+    // Remove used consumable
+    if (usedConsumable) {
+      updatedConsumables = removeConsumable(updatedConsumables, usedConsumable.id);
+    }
+
+    // Roll for consumable drop on success (10% chance)
+    if ((isSuccess || isPartial) && canReceiveConsumable(updatedConsumables)) {
+      if (Math.random() < CONSUMABLE_DROP_CHANCE) {
+        consumableDrop = createConsumable(getRandomConsumableType());
+        updatedConsumables = addConsumable(updatedConsumables, consumableDrop);
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`[Consumable] Drop: ${consumableDrop.type} (now have ${updatedConsumables.length})`);
+        }
+      }
+    }
 
     // --- Pre-compute follow-up generation BEFORE transaction for atomic persistence ---
     // This ensures follow-up state is written in the same transaction as other character updates,
@@ -1180,6 +1278,10 @@ export async function POST(request: Request) {
           leveragePosition: leverageUpdate.finalLeverage.position,
           // Alignment update (MVP)
           ...(alignmentUpdate !== null ? { alignmentValue: alignmentUpdate.newValue } : {}),
+          // Consumables update: remove used, add drop
+          consumables: JSON.parse(JSON.stringify(updatedConsumables)),
+          // Med injector clears wounded state
+          ...(consumableClearsWounded && isWounded ? { isWounded: false, woundedEncountersRemaining: 0 } : {}),
           // Atomic follow-up persistence: write follow-ups and history in same transaction
           pendingFollowUps: precomputedFollowUps.length > 0 ? JSON.parse(JSON.stringify(precomputedFollowUps)) : Prisma.DbNull,
           ...(precomputedHistory !== null ? { followUpHistory: JSON.parse(JSON.stringify(precomputedHistory)) } : {}),
@@ -1600,6 +1702,25 @@ export async function POST(request: Request) {
       },
       leverage: leverageUpdate.finalLeverage,
       heat: heatUpdate.newHeat,
+      // Consumable effects
+      consumableUsed: usedConsumable ? {
+        id: usedConsumable.id,
+        type: usedConsumable.type,
+        name: getConsumableInfo(usedConsumable.type).name,
+        effects: {
+          rollBonus: consumableRollBonus,
+          heatDelta: consumableHeatDelta,
+          ignoreHeat: consumableIgnoreHeat,
+          xpModifier: consumableXpModifier,
+          clearsWounded: consumableClearsWounded,
+        },
+      } : undefined,
+      consumableDrop: consumableDrop ? {
+        id: consumableDrop.id,
+        type: consumableDrop.type,
+        name: getConsumableInfo(consumableDrop.type).name,
+      } : undefined,
+      consumables: updatedConsumables,
       powerProgression: powerProgression ? {
         powerId: powerProgression.powerId,
         powerName: powerProgression.powerName,
