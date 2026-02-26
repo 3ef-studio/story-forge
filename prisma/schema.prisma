@@ -58,6 +58,9 @@ model Character {
   alignmentValue              Int?                 @map("alignment_value") // 0-100, null for non-divine origins
   // Consumables (MVP) - max 2 items per player
   consumables                 Json                 @default("[]") // [{id, type, createdAt}]
+  // Store (MVP) - 3 offers that refresh every 3 encounters
+  storeOffer                  Json                 @default("[]") @map("store_offer") // [{id, type, price}]
+  storeRefreshCounter         Int                  @default(0) @map("store_refresh_counter")
   createdAt                   DateTime             @default(now()) @map("created_at")
   updatedAt                   DateTime             @updatedAt @map("updated_at")
 

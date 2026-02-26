@@ -25,6 +25,7 @@ import { ActionSelector } from '@/app/components/game/ActionSelector';
 import { EncounterDisplay } from '@/app/components/game/EncounterDisplay';
 import { OutcomeDisplay } from '@/app/components/game/OutcomeDisplay';
 import { ActiveGoalsPanel, type GoalRecord } from '@/app/components/game/ActiveGoalsPanel';
+import { StorePanel } from '@/app/components/game/StorePanel';
 import { GoalChoiceModal, type GoalChoice } from '@/app/components/game/GoalChoiceModal';
 import { StatusStrip } from '@/app/components/game/StatusStrip';
 import { MobileTabBar, type MobileTab } from '@/app/components/game/MobileTabBar';
@@ -64,6 +65,8 @@ import type { FollowUpAction } from '@/app/lib/game-logic/follow-up-actions';
 import { getPatronReaction, getPatronIcon } from '@/app/lib/game-logic/patron-reaction';
 import type { DeityId } from '@/app/data/new-origins';
 import type { ConsumableItem } from '@/app/lib/game-logic/consumables';
+import type { StoreOffer } from '@/app/lib/game-logic/store';
+import { CONSUMABLE_DEFINITIONS } from '@/app/lib/game-logic/consumables';
 
 type GameState = 'idle' | 'executing' | 'encounter' | 'conflict' | 'resolving' | 'outcome';
 
@@ -161,6 +164,8 @@ interface CharacterData {
   patronDeityId?: string | null;
   alignmentValue?: number | null;
   consumables?: ConsumableItem[];
+  storeOffer?: StoreOffer[];
+  storeRefreshCounter?: number;
 }
 
 interface OutcomeResult {
@@ -1012,6 +1017,8 @@ export default function GamePage() {
           level: data.leveledUp ? data.newLevel : prev.level,
           leverage: data.leverage ?? prev.leverage,
           consumables: data.consumables ?? prev.consumables,
+          storeOffer: data.storeOffer ?? prev.storeOffer,
+          storeRefreshCounter: data.storeRefreshCounter ?? prev.storeRefreshCounter,
         };
       });
 
@@ -1172,6 +1179,55 @@ export default function GamePage() {
     setLeverageSpent(emptyLeverage());
     setGameState('idle');
     await fetchCharacter();
+  };
+
+  const handleStorePurchase = async (offerId: string) => {
+    try {
+      const response = await fetch('/api/store/purchase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ offerId }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        addToast({
+          type: 'error',
+          title: 'Purchase Failed',
+          message: data.error || 'Failed to purchase item',
+          duration: 3000,
+        });
+        return;
+      }
+
+      // Update character state with new data
+      setCharacter((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          money: data.money,
+          consumables: data.consumables,
+          storeOffer: data.storeOffer,
+          storeRefreshCounter: data.storeRefreshCounter,
+        };
+      });
+
+      addToast({
+        type: 'success',
+        title: 'Item Purchased!',
+        message: `Bought ${CONSUMABLE_DEFINITIONS[data.purchased.type as keyof typeof CONSUMABLE_DEFINITIONS].name}`,
+        duration: 2000,
+      });
+    } catch (err) {
+      console.error('Purchase error:', err);
+      addToast({
+        type: 'error',
+        title: 'Error',
+        message: 'An error occurred during purchase',
+        duration: 3000,
+      });
+    }
   };
 
   const handleLevelUpAttributeSelect = async (attributeId: string) => {
@@ -1798,6 +1854,15 @@ export default function GamePage() {
                     </div>
                   )}
 
+                  {/* Store panel */}
+                  <StorePanel
+                    money={character.money}
+                    storeOffer={character.storeOffer ?? []}
+                    storeRefreshCounter={character.storeRefreshCounter ?? 0}
+                    consumables={character.consumables ?? []}
+                    onPurchase={handleStorePurchase}
+                  />
+
                   {/* Story log */}
                   <div className="panel-glass p-3">
                     <h3 className="text-sm font-semibold text-white/80 mb-3">Recent Events</h3>
@@ -1812,10 +1877,17 @@ export default function GamePage() {
         {/* DESKTOP LAYOUT (>= sm) */}
         <div className="hidden sm:block px-4 py-4">
           <div className="grid grid-cols-12 gap-4">
-            {/* Left Sidebar - Character Sheet & Goals */}
+            {/* Left Sidebar - Character Sheet, Goals & Store */}
             <aside className="col-span-4 lg:col-span-3 space-y-4">
               <CharacterSheet character={character} />
               <ActiveGoalsPanel goals={activeGoals} completedGoals={completedGoals} />
+              <StorePanel
+                money={character.money}
+                storeOffer={character.storeOffer ?? []}
+                storeRefreshCounter={character.storeRefreshCounter ?? 0}
+                consumables={character.consumables ?? []}
+                onPurchase={handleStorePurchase}
+              />
             </aside>
 
             {/* Center - Scene */}

@@ -12,6 +12,7 @@ import { generateRivalForCharacter } from '@/app/lib/game-logic/rival-generator'
 import { PERSONALITY_LABELS, PERSONALITY_DESCRIPTIONS, type RivalPersonality } from '@/app/data/rivals';
 import { parsePendingFollowUps } from '@/app/lib/game-logic/follow-up-actions';
 import { parseConsumables } from '@/app/lib/game-logic/consumables';
+import { parseStoreOffer, maybeRefreshStore } from '@/app/lib/game-logic/store';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -187,6 +188,26 @@ export async function GET() {
         alignmentValue: character.alignmentValue,
         // Consumables (MVP)
         consumables: parseConsumables((character as { consumables?: unknown }).consumables),
+        // Store (MVP) - initialize if empty
+        ...(() => {
+          const currentOffer = parseStoreOffer((character as { storeOffer?: unknown }).storeOffer);
+          const currentCounter = (character as { storeRefreshCounter?: number }).storeRefreshCounter ?? 0;
+          const storeState = maybeRefreshStore(currentOffer, currentCounter);
+          // If store needed refresh, update DB (fire-and-forget)
+          if (storeState.shouldRefresh) {
+            prisma.character.update({
+              where: { id: character.id },
+              data: {
+                storeOffer: JSON.parse(JSON.stringify(storeState.newOffer)),
+                storeRefreshCounter: storeState.newCounter,
+              },
+            }).catch(err => console.error('[Store] Failed to initialize store:', err));
+          }
+          return {
+            storeOffer: storeState.newOffer,
+            storeRefreshCounter: storeState.newCounter,
+          };
+        })(),
       },
     });
   } catch (error) {

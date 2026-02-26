@@ -107,6 +107,11 @@ import {
   type ConsumableItem,
   type ConsumableType,
 } from '@/app/lib/game-logic/consumables';
+import {
+  parseStoreOffer,
+  maybeRefreshStore,
+  decrementRefreshCounter,
+} from '@/app/lib/game-logic/store';
 
 // Type for outcome result with optional fields
 type OutcomeResult = {
@@ -1178,6 +1183,16 @@ export async function POST(request: Request) {
       }
     }
 
+    // --- Store refresh logic: decrement counter and refresh if needed ---
+    const currentStoreOffer = parseStoreOffer((character as { storeOffer?: unknown }).storeOffer);
+    const currentStoreCounter = (character as { storeRefreshCounter?: number }).storeRefreshCounter ?? 0;
+    const newStoreCounter = decrementRefreshCounter(currentStoreCounter);
+    const storeRefresh = maybeRefreshStore(currentStoreOffer, newStoreCounter);
+
+    if (process.env.NODE_ENV === 'development' && storeRefresh.shouldRefresh) {
+      console.log(`[Store] Refreshed store with ${storeRefresh.newOffer.length} offers`);
+    }
+
     // --- Pre-compute follow-up generation BEFORE transaction for atomic persistence ---
     // This ensures follow-up state is written in the same transaction as other character updates,
     // preventing race conditions where a server crash could leave stale follow-ups or duplicate entries
@@ -1280,6 +1295,9 @@ export async function POST(request: Request) {
           ...(alignmentUpdate !== null ? { alignmentValue: alignmentUpdate.newValue } : {}),
           // Consumables update: remove used, add drop
           consumables: JSON.parse(JSON.stringify(updatedConsumables)),
+          // Store update: decrement counter and refresh if needed
+          storeOffer: JSON.parse(JSON.stringify(storeRefresh.newOffer)),
+          storeRefreshCounter: storeRefresh.newCounter,
           // Med injector clears wounded state
           ...(consumableClearsWounded && isWounded ? { isWounded: false, woundedEncountersRemaining: 0 } : {}),
           // Atomic follow-up persistence: write follow-ups and history in same transaction
@@ -1721,6 +1739,9 @@ export async function POST(request: Request) {
         name: getConsumableInfo(consumableDrop.type).name,
       } : undefined,
       consumables: updatedConsumables,
+      // Store state
+      storeOffer: storeRefresh.newOffer,
+      storeRefreshCounter: storeRefresh.newCounter,
       powerProgression: powerProgression ? {
         powerId: powerProgression.powerId,
         powerName: powerProgression.powerName,
