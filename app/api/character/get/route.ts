@@ -208,6 +208,10 @@ export async function GET() {
             storeRefreshCounter: storeState.newCounter,
           };
         })(),
+        // Fight Club (PvP)
+        pvpRating: (character as { pvpRating?: number }).pvpRating ?? 1000,
+        pvpWins: (character as { pvpWins?: number }).pvpWins ?? 0,
+        pvpLosses: (character as { pvpLosses?: number }).pvpLosses ?? 0,
       },
     });
   } catch (error) {

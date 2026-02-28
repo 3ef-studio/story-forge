@@ -61,10 +61,17 @@ model Character {
   // Store (MVP) - 3 offers that refresh every 3 encounters
   storeOffer                  Json                 @default("[]") @map("store_offer") // [{id, type, price}]
   storeRefreshCounter         Int                  @default(0) @map("store_refresh_counter")
+  // Fight Club (PvP) - Elo-based rating system
+  pvpRating                   Int                  @default(1000) @map("pvp_rating")
+  pvpWins                     Int                  @default(0) @map("pvp_wins")
+  pvpLosses                   Int                  @default(0) @map("pvp_losses")
+  pvpMatches                  Int                  @default(0) @map("pvp_matches")
   createdAt                   DateTime             @default(now()) @map("created_at")
   updatedAt                   DateTime             @updatedAt @map("updated_at")
 
   user               User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pvpMatchesAsAttacker PvpMatch[]          @relation("PvpMatchAttacker")
+  pvpMatchesAsDefender PvpMatch[]          @relation("PvpMatchDefender")
   attributes         CharacterAttribute[]
   powers             CharacterPower[]
   factionReputations FactionReputation[]
@@ -387,4 +394,40 @@ model EncounterRun {
   @@index([encounterType])
   @@index([difficultyTier])
   @@map("encounter_runs")
+}
+
+// PvP Match records (Fight Club)
+enum PvpMatchMode {
+  RANKED
+  UNRANKED
+}
+
+enum PvpMatchResult {
+  WIN
+  LOSS
+}
+
+model PvpMatch {
+  id                    String         @id @default(uuid()) @db.Uuid
+  mode                  PvpMatchMode
+  attackerCharacterId   String         @map("attacker_character_id") @db.Uuid
+  defenderCharacterId   String         @map("defender_character_id") @db.Uuid
+  attackerRatingBefore  Int            @map("attacker_rating_before")
+  defenderRatingBefore  Int            @map("defender_rating_before")
+  attackerRatingAfter   Int            @map("attacker_rating_after")
+  defenderRatingAfter   Int            @map("defender_rating_after")
+  ratingDeltaAttacker   Int            @map("rating_delta_attacker") // 0 for unranked
+  result                PvpMatchResult // WIN or LOSS from attacker's perspective
+  transcriptJson        Json           @map("transcript_json") // Full combat log
+  createdAt             DateTime       @default(now()) @map("created_at")
+
+  attackerCharacter Character @relation("PvpMatchAttacker", fields: [attackerCharacterId], references: [id], onDelete: Cascade)
+  defenderCharacter Character @relation("PvpMatchDefender", fields: [defenderCharacterId], references: [id], onDelete: Cascade)
+
+  // Indexes for cooldown lookup and queries
+  @@index([attackerCharacterId, defenderCharacterId, mode, createdAt])
+  @@index([mode, createdAt])
+  @@index([attackerCharacterId, createdAt])
+  @@index([defenderCharacterId, createdAt])
+  @@map("pvp_matches")
 }

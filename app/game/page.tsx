@@ -26,6 +26,7 @@ import { EncounterDisplay } from '@/app/components/game/EncounterDisplay';
 import { OutcomeDisplay } from '@/app/components/game/OutcomeDisplay';
 import { ActiveGoalsPanel, type GoalRecord } from '@/app/components/game/ActiveGoalsPanel';
 import { StorePanel } from '@/app/components/game/StorePanel';
+import { FightClubPanel } from '@/app/components/game/FightClubPanel';
 import { GoalChoiceModal, type GoalChoice } from '@/app/components/game/GoalChoiceModal';
 import { StatusStrip } from '@/app/components/game/StatusStrip';
 import { MobileTabBar, type MobileTab } from '@/app/components/game/MobileTabBar';
@@ -67,6 +68,7 @@ import type { DeityId } from '@/app/data/new-origins';
 import type { ConsumableItem } from '@/app/lib/game-logic/consumables';
 import type { StoreOffer } from '@/app/lib/game-logic/store';
 import { CONSUMABLE_DEFINITIONS } from '@/app/lib/game-logic/consumables';
+import type { CombatantSnapshot, PvpMode, PvpResolveResult } from '@/app/lib/game-logic/pvp/types';
 
 type GameState = 'idle' | 'executing' | 'encounter' | 'conflict' | 'resolving' | 'outcome';
 
@@ -166,6 +168,10 @@ interface CharacterData {
   consumables?: ConsumableItem[];
   storeOffer?: StoreOffer[];
   storeRefreshCounter?: number;
+  // Fight Club (PvP)
+  pvpRating?: number;
+  pvpWins?: number;
+  pvpLosses?: number;
 }
 
 interface OutcomeResult {
@@ -242,6 +248,15 @@ export default function GamePage() {
   const [conflictResult, setConflictResult] = useState<ConflictResult | null>(null);
   const [pendingChoiceId, setPendingChoiceId] = useState<string | null>(null);
   const [pendingPrepSelection, setPendingPrepSelection] = useState<PrepSelection | null>(null);
+
+  // PvP Fight Club state
+  const [pvpMatchContext, setPvpMatchContext] = useState<{
+    matchId: string;
+    mode: PvpMode;
+    attacker: CombatantSnapshot;
+    defender: CombatantSnapshot;
+  } | null>(null);
+  const [lastPvpResult, setLastPvpResult] = useState<PvpResolveResult | null>(null);
 
   // Leverage state — synced from character on load / resolve response, display-only during conflict
   const [leverage, setLeverage] = useState<LeverageState>(emptyLeverage());
@@ -1163,6 +1178,128 @@ export default function GamePage() {
     }
   };
 
+  // ============================================================
+  // PvP Fight Club Handlers
+  // ============================================================
+
+  const handlePvpMatchFound = (data: {
+    matchId: string;
+    mode: PvpMode;
+    attacker: CombatantSnapshot;
+    defender: CombatantSnapshot;
+  }) => {
+    // Store match context
+    setPvpMatchContext(data);
+    setLastPvpResult(null);
+
+    // Initialize conflict with defender as opponent
+    const difficulty = Math.min(10, Math.max(1, data.defender.level));
+
+    const conflict = initConflict({
+      encounterCategory: 'combat',
+      encounterDifficulty: difficulty,
+      npcTags: ['pvp', 'fighter'],
+      playerLabel: data.attacker.characterName,
+      opponentLabel: data.defender.characterName,
+      playerBuild: data.attacker.build,
+      opponentIdentity: {
+        id: data.defender.characterId,
+        kind: 'npc' as const,
+        name: data.defender.characterName,
+        archetype: 'enforcer' as const,
+        threatTier: Math.ceil(data.defender.level / 3),
+        mechanics: {
+          startingResourceBonus: data.defender.level >= 10 ? { stability: 1 } : {},
+          moveBonuses: {},
+        },
+      },
+      leverage: emptyLeverage(),
+      heat: 0,
+    });
+
+    setConflictState(conflict);
+    setGameState('conflict');
+  };
+
+  const handlePvpConflictContinue = async () => {
+    if (!conflictState || !pvpMatchContext) return;
+
+    const result = evaluateOutcome(conflictState);
+    setConflictResult(result);
+
+    // Build turn timeline
+    const turnTimeline = result.conflictLog.map((entry) => ({
+      turn: entry.turn,
+      playerMove: entry.playerMove,
+      opponentMove: entry.opponentMove,
+    }));
+
+    setGameState('resolving');
+
+    try {
+      const response = await fetch('/api/pvp/resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          matchId: pvpMatchContext.matchId,
+          conflictResult: {
+            outcome: result.outcome,
+            turnsPlayed: result.turnsPlayed,
+            playerFinalResources: result.playerFinalResources,
+            opponentFinalResources: result.opponentFinalResources,
+          },
+          turnTimeline,
+        }),
+      });
+
+      const data: PvpResolveResult = await response.json();
+
+      setLastPvpResult(data);
+
+      // Update character ratings if successful
+      if (data.success && data.newRating !== undefined) {
+        setCharacter(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            pvpRating: data.newRating,
+            pvpWins: data.result === 'WIN' ? (prev.pvpWins ?? 0) + 1 : prev.pvpWins,
+            pvpLosses: data.result === 'LOSS' ? (prev.pvpLosses ?? 0) + 1 : prev.pvpLosses,
+          };
+        });
+      }
+
+      // Show toast
+      if (data.success) {
+        addToast({
+          type: data.result === 'WIN' ? 'success' : 'error',
+          title: data.result === 'WIN' ? 'Victory!' : 'Defeat',
+          message: data.ratingDelta !== undefined
+            ? `Rating ${data.ratingDelta >= 0 ? '+' : ''}${data.ratingDelta}`
+            : 'Unranked match',
+          duration: 3000,
+        });
+      }
+
+      // Clear PvP state and return to idle
+      setPvpMatchContext(null);
+      setConflictState(null);
+      setConflictResult(null);
+      setGameState('idle');
+    } catch (err) {
+      console.error('PvP resolve error:', err);
+      setLastPvpResult({ success: false, error: 'Failed to resolve match' });
+      setPvpMatchContext(null);
+      setConflictState(null);
+      setConflictResult(null);
+      setGameState('idle');
+    }
+  };
+
+  const handlePvpResultDismissed = () => {
+    setLastPvpResult(null);
+  };
+
   const handleContinue = async () => {
     setCurrentEncounter(null);
     setEncounterChoices([]);
@@ -1487,7 +1624,7 @@ export default function GamePage() {
               leverage={leverage}
               onPlayerMove={handleConflictMove}
               onLeverageSpend={handleLeverageSpend}
-              onContinue={handleConflictContinue}
+              onContinue={pvpMatchContext ? handlePvpConflictContinue : handleConflictContinue}
             />
           </motion.div>
         );
@@ -1863,6 +2000,25 @@ export default function GamePage() {
                     onPurchase={handleStorePurchase}
                   />
 
+                  {/* Fight Club panel */}
+                  <FightClubPanel
+                    characterLevel={character.level}
+                    currentEnergy={character.currentEnergy}
+                    pvpRating={character.pvpRating ?? 1000}
+                    pvpWins={character.pvpWins ?? 0}
+                    pvpLosses={character.pvpLosses ?? 0}
+                    onEnergyChange={(delta) => {
+                      setCharacter((prev) => prev ? { ...prev, currentEnergy: prev.currentEnergy + delta } : null);
+                    }}
+                    onRatingChange={(newRating, wins, losses) => {
+                      setCharacter((prev) => prev ? { ...prev, pvpRating: newRating, pvpWins: wins, pvpLosses: losses } : null);
+                    }}
+                    onMatchFound={handlePvpMatchFound}
+                    isPvpConflictActive={!!pvpMatchContext}
+                    lastPvpResult={lastPvpResult}
+                    onResultDismissed={handlePvpResultDismissed}
+                  />
+
                   {/* Story log */}
                   <div className="panel-glass p-3">
                     <h3 className="text-sm font-semibold text-white/80 mb-3">Recent Events</h3>
@@ -1887,6 +2043,23 @@ export default function GamePage() {
                 storeRefreshCounter={character.storeRefreshCounter ?? 0}
                 consumables={character.consumables ?? []}
                 onPurchase={handleStorePurchase}
+              />
+              <FightClubPanel
+                characterLevel={character.level}
+                currentEnergy={character.currentEnergy}
+                pvpRating={character.pvpRating ?? 1000}
+                pvpWins={character.pvpWins ?? 0}
+                pvpLosses={character.pvpLosses ?? 0}
+                onEnergyChange={(delta) => {
+                  setCharacter((prev) => prev ? { ...prev, currentEnergy: prev.currentEnergy + delta } : null);
+                }}
+                onRatingChange={(newRating, wins, losses) => {
+                  setCharacter((prev) => prev ? { ...prev, pvpRating: newRating, pvpWins: wins, pvpLosses: losses } : null);
+                }}
+                onMatchFound={handlePvpMatchFound}
+                isPvpConflictActive={!!pvpMatchContext}
+                lastPvpResult={lastPvpResult}
+                onResultDismissed={handlePvpResultDismissed}
               />
             </aside>
 
