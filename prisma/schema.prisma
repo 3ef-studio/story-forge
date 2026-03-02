@@ -82,6 +82,7 @@ model Character {
   consequenceThreads ConsequenceThread[]
   knownNPCs          CharacterNPC[]
   rival              Rival?
+  dungeonSessions    DungeonSession[]
 
   @@map("characters")
 }
@@ -430,4 +431,126 @@ model PvpMatch {
   @@index([attackerCharacterId, createdAt])
   @@index([defenderCharacterId, createdAt])
   @@map("pvp_matches")
+}
+
+// ============================================================
+// Dungeon System
+// ============================================================
+
+enum DungeonNodeType {
+  CHAMBER
+  CORRIDOR
+  JUNCTION
+  BOSS
+  STAIRS
+  SECRET
+}
+
+enum DungeonEdgeType {
+  OPEN
+  LOCKED
+  SECRET
+}
+
+enum DungeonContentType {
+  COMBAT
+  ELITE
+  TRAP
+  EVENT
+  TREASURE
+}
+
+enum DungeonNodeState {
+  UNVISITED
+  VISITED
+  CLEARED
+}
+
+enum DungeonSessionState {
+  ACTIVE
+  COMPLETED
+  FAILED
+}
+
+// A dungeon floor within a district
+model DungeonFloor {
+  id         String   @id @default(uuid()) @db.Uuid
+  districtId String   @map("district_id") // matches DistrictId from districts.ts
+  depth      Int      @default(1) // floor depth (1 = first floor)
+  width      Int      @default(800) // minimap width in units
+  height     Int      @default(600) // minimap height in units
+  seed       Int      // generation seed for reproducibility
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  nodes    DungeonNode[]
+  edges    DungeonEdge[]
+  sessions DungeonSession[]
+
+  @@unique([districtId, depth])
+  @@index([districtId])
+  @@map("dungeon_floors")
+}
+
+// A node (room) in the dungeon graph
+model DungeonNode {
+  id          String              @id @default(uuid()) @db.Uuid
+  floorId     String              @map("floor_id") @db.Uuid
+  type        DungeonNodeType
+  x           Int                 // minimap x position
+  y           Int                 // minimap y position
+  width       Int                 @default(80) // room width for minimap
+  height      Int                 @default(60) // room height for minimap
+  contentType DungeonContentType? @map("content_type") // null for empty rooms
+  isBoss      Boolean             @default(false) @map("is_boss") // marks boss encounters
+  label       String?             // optional room name/label
+
+  floor      DungeonFloor  @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  edgesFrom  DungeonEdge[] @relation("EdgeFrom")
+  edgesTo    DungeonEdge[] @relation("EdgeTo")
+
+  @@index([floorId])
+  @@index([floorId, type])
+  @@map("dungeon_nodes")
+}
+
+// An edge (connection) between nodes
+model DungeonEdge {
+  id         String          @id @default(uuid()) @db.Uuid
+  floorId    String          @map("floor_id") @db.Uuid
+  fromNodeId String          @map("from_node_id") @db.Uuid
+  toNodeId   String          @map("to_node_id") @db.Uuid
+  type       DungeonEdgeType @default(OPEN)
+
+  floor    DungeonFloor @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  fromNode DungeonNode  @relation("EdgeFrom", fields: [fromNodeId], references: [id], onDelete: Cascade)
+  toNode   DungeonNode  @relation("EdgeTo", fields: [toNodeId], references: [id], onDelete: Cascade)
+
+  @@unique([fromNodeId, toNodeId])
+  @@index([floorId])
+  @@index([fromNodeId])
+  @@index([toNodeId])
+  @@map("dungeon_edges")
+}
+
+// A player's active dungeon session
+model DungeonSession {
+  id                String              @id @default(uuid()) @db.Uuid
+  characterId       String              @map("character_id") @db.Uuid
+  districtId        String              @map("district_id")
+  floorId           String              @map("floor_id") @db.Uuid
+  currentNodeId     String              @map("current_node_id") @db.Uuid
+  discoveredNodeIds String[]            @default([]) @map("discovered_node_ids") // UUIDs of discovered nodes
+  discoveredEdgeIds String[]            @default([]) @map("discovered_edge_ids") // UUIDs of discovered edges
+  clearedNodeIds    String[]            @default([]) @map("cleared_node_ids") // UUIDs of cleared nodes
+  state             DungeonSessionState @default(ACTIVE)
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+
+  character Character    @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  floor     DungeonFloor @relation(fields: [floorId], references: [id], onDelete: Cascade)
+
+  @@index([characterId, state])
+  @@index([characterId, districtId])
+  @@index([floorId])
+  @@map("dungeon_sessions")
 }

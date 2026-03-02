@@ -42,7 +42,7 @@ import type { Action } from '@/app/data/actions';
 import type { DistrictId } from '@/app/data/districts';
 import type { EncounterTemplate } from '@/app/data/encounter-templates';
 import { getLocationBackground } from '@/app/lib/game-logic/location-backgrounds';
-import { LogOut, User, HelpCircle, Menu, X, Sparkles, Trophy, ArrowUp, Users, MapIcon, AlertCircle } from 'lucide-react';
+import { LogOut, User, HelpCircle, Menu, X, Sparkles, Trophy, ArrowUp, Users, MapIcon, AlertCircle, DoorOpen } from 'lucide-react';
 import { previewEncounterResolution, inferApproachFromText, resolveGambitFromPreview, assignDistinctGambits } from '@/app/lib/game-logic/combat/resolve-encounter';
 import type { ResolutionPreview, PrepSelection, GambitResult } from '@/app/lib/game-logic/combat/types';
 import { ConflictPane } from '@/app/components/game/ConflictPane';
@@ -277,6 +277,7 @@ export default function GamePage() {
   // Double-submit prevention and loading state flags
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isChangingDistrict, setIsChangingDistrict] = useState(false);
+  const [isDungeonLoading, setIsDungeonLoading] = useState(false);
   // Follow-up failure warning
   const [followUpWarning, setFollowUpWarning] = useState<string | null>(null);
 
@@ -369,6 +370,44 @@ export default function GamePage() {
       setIsChangingDistrict(false);
     }
   }, [addToast, isChangingDistrict]);
+
+  const handleEnterDungeon = useCallback(async () => {
+    if (!character?.currentDistrict || isDungeonLoading || gameState !== 'idle') return;
+    setIsDungeonLoading(true);
+
+    try {
+      const response = await fetch('/api/dungeon/enter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ districtId: character.currentDistrict }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        addToast({
+          type: 'error',
+          title: 'Cannot Enter Dungeon',
+          message: data.error || 'Failed to enter dungeon',
+          duration: 3000,
+        });
+        return;
+      }
+
+      // Navigate to dungeon page
+      router.push('/dungeon');
+    } catch (err) {
+      console.error('Dungeon entry error:', err);
+      addToast({
+        type: 'error',
+        title: 'Error',
+        message: 'An error occurred entering the dungeon',
+        duration: 3000,
+      });
+    } finally {
+      setIsDungeonLoading(false);
+    }
+  }, [character?.currentDistrict, isDungeonLoading, gameState, addToast, router]);
 
   const fetchCharacter = useCallback(async () => {
     try {
@@ -1714,6 +1753,17 @@ export default function GamePage() {
               <Button
                 size="sm"
                 variant="ghost"
+                onClick={() => router.push('/dungeon')}
+                className="hidden sm:flex text-white/70 hover:text-white hover:bg-white/10"
+              >
+                <DoorOpen className="h-4 w-4 mr-1" />
+                Dungeon
+              </Button>
+            </motion.div>
+            <motion.div whileHover={prefersReducedMotion ? {} : { scale: 1.02 }} whileTap={prefersReducedMotion ? {} : { scale: 0.98 }}>
+              <Button
+                size="sm"
+                variant="ghost"
                 onClick={() => router.push('/help')}
                 className="hidden sm:flex text-white/70 hover:text-white hover:bg-white/10"
               >
@@ -1840,6 +1890,23 @@ export default function GamePage() {
                 variant="ghost"
                 className="w-full justify-start text-white/70 hover:text-white hover:bg-white/10"
                 onClick={() => {
+                  router.push('/dungeon');
+                  setMobileMenuOpen(false);
+                }}
+              >
+                <DoorOpen className="h-4 w-4 mr-2" />
+                Dungeon
+              </Button>
+            </motion.div>
+            <motion.div
+              initial={prefersReducedMotion ? {} : { y: -10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.17 }}
+            >
+              <Button
+                variant="ghost"
+                className="w-full justify-start text-white/70 hover:text-white hover:bg-white/10"
+                onClick={() => {
                   router.push('/help');
                   setMobileMenuOpen(false);
                 }}
@@ -1937,6 +2004,8 @@ export default function GamePage() {
                     activeGoals={activeGoals}
                     currentDistrict={character.currentDistrict}
                     onDistrictChange={handleDistrictChange}
+                    onEnterDungeon={handleEnterDungeon}
+                    dungeonLoading={isDungeonLoading}
                     compact
                     hideHeader
                   />
@@ -2122,6 +2191,8 @@ export default function GamePage() {
                 activeGoals={activeGoals}
                 currentDistrict={character.currentDistrict}
                 onDistrictChange={handleDistrictChange}
+                onEnterDungeon={handleEnterDungeon}
+                dungeonLoading={isDungeonLoading}
               />
             </aside>
           </div>

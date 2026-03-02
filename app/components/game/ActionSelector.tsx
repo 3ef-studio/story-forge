@@ -23,6 +23,8 @@ interface ActionSelectorProps {
   activeGoals?: GoalRecord[];
   currentDistrict?: DistrictId;
   onDistrictChange?: (districtId: DistrictId) => void;
+  onEnterDungeon?: () => void;
+  dungeonLoading?: boolean;
   compact?: boolean;
   hideHeader?: boolean;
 }
@@ -80,6 +82,8 @@ export function ActionSelector({
   activeGoals = [],
   currentDistrict,
   onDistrictChange,
+  onEnterDungeon,
+  dungeonLoading = false,
   compact = false,
   hideHeader = false,
 }: ActionSelectorProps) {
@@ -404,6 +408,8 @@ export function ActionSelector({
       currentDistrict={currentDistrict}
       onDistrictChange={onDistrictChange}
       disabled={disabled}
+      onEnterDungeon={onEnterDungeon}
+      dungeonLoading={dungeonLoading}
     />
   ) : null;
 

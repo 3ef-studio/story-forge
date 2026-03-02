@@ -2,18 +2,22 @@
 
 import { useState } from 'react';
 import { districts, type DistrictId } from '@/app/data/districts';
-import { MapPin, ChevronDown } from 'lucide-react';
+import { MapPin, ChevronDown, DoorOpen } from 'lucide-react';
 
 interface DistrictSelectorProps {
   currentDistrict: DistrictId;
   onDistrictChange: (districtId: DistrictId) => void;
   disabled?: boolean;
+  onEnterDungeon?: () => void;
+  dungeonLoading?: boolean;
 }
 
 export function DistrictSelector({
   currentDistrict,
   onDistrictChange,
   disabled = false,
+  onEnterDungeon,
+  dungeonLoading = false,
 }: DistrictSelectorProps) {
   const [open, setOpen] = useState(false);
 
@@ -21,22 +25,43 @@ export function DistrictSelector({
 
   return (
     <div className="relative">
-      <button
-        onClick={() => !disabled && setOpen(!open)}
-        disabled={disabled}
-        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition-colors w-full sm:w-auto ${
-          disabled
-            ? 'bg-white/5 border-white/10 text-white/30 cursor-not-allowed'
-            : open
-            ? 'bg-blue-500/20 border-blue-400/40 text-blue-300'
-            : 'bg-white/10 border-white/15 text-white/80 hover:border-white/25 hover:bg-white/15'
-        }`}
-      >
-        <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
-        <span className="flex-shrink-0">{current?.icon}</span>
-        <span className="font-medium truncate">{current?.name ?? 'Downtown'}</span>
-        <ChevronDown className={`h-3.5 w-3.5 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => !disabled && setOpen(!open)}
+          disabled={disabled}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition-colors flex-1 sm:flex-initial ${
+            disabled
+              ? 'bg-white/5 border-white/10 text-white/30 cursor-not-allowed'
+              : open
+              ? 'bg-blue-500/20 border-blue-400/40 text-blue-300'
+              : 'bg-white/10 border-white/15 text-white/80 hover:border-white/25 hover:bg-white/15'
+          }`}
+        >
+          <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
+          <span className="flex-shrink-0">{current?.icon}</span>
+          <span className="font-medium truncate">{current?.name ?? 'Downtown'}</span>
+          <ChevronDown className={`h-3.5 w-3.5 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+        </button>
+
+        {/* Enter Dungeon Button */}
+        {onEnterDungeon && (
+          <button
+            onClick={onEnterDungeon}
+            disabled={disabled || dungeonLoading}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm transition-colors ${
+              disabled || dungeonLoading
+                ? 'bg-white/5 border-white/10 text-white/30 cursor-not-allowed'
+                : 'bg-purple-500/20 border-purple-500/40 text-purple-300 hover:bg-purple-500/30 hover:border-purple-500/50'
+            }`}
+            title="Enter the dungeon in this district"
+          >
+            <DoorOpen className="h-3.5 w-3.5 flex-shrink-0" />
+            <span className="hidden sm:inline font-medium">
+              {dungeonLoading ? 'Entering...' : 'Dungeon'}
+            </span>
+          </button>
+        )}
+      </div>
 
       {open && (
         <>
