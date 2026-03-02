@@ -9,6 +9,7 @@
  * - Search for secrets
  * - Minimap visualization
  * - Abandon option
+ * - Combat encounters resolved via the resource fracture conflict system
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -18,6 +19,20 @@ import { Button } from '@/app/components/ui/button';
 import { AnimatedCard } from '@/app/components/ui/AnimatedCard';
 import { LoadingSigil } from '@/app/components/ui/LoadingSigil';
 import { useToast } from '@/app/components/ui/toast';
+import { ConflictPane } from '@/app/components/game/ConflictPane';
+import {
+  initConflict,
+  executeTurn,
+  evaluateOutcome,
+} from '@/app/lib/game-logic/conflict/engine';
+import type { ConflictState, MoveId } from '@/app/lib/game-logic/conflict/types';
+import {
+  type LeverageState,
+  type LeverageSpend,
+  emptyLeverage,
+  spendLeverage,
+} from '@/app/lib/game-logic/leverage';
+import { resolveOpponentIdentity } from '@/app/lib/game-logic/conflict/opponent-identity';
 import {
   ArrowLeft,
   DoorOpen,
@@ -31,7 +46,6 @@ import {
   MapPin,
   CheckCircle,
   Eye,
-  Lock,
 } from 'lucide-react';
 
 // ============================================================
@@ -124,6 +138,15 @@ interface SearchResult {
   error?: string;
 }
 
+interface CharacterSnapshot {
+  name: string;
+  level: number;
+  attributes: Record<string, number>;
+  powers: Array<{ powerId: string; level: number }>;
+  heat: number;
+  leverage: LeverageState;
+}
+
 // ============================================================
 // Node Type Info
 // ============================================================
@@ -144,6 +167,9 @@ const CONTENT_TYPE_INFO: Record<string, { icon: React.ReactNode; label: string; 
   event: { icon: <MessageSquare className="w-4 h-4" />, label: 'Event', color: 'text-blue-400' },
   treasure: { icon: <Gem className="w-4 h-4" />, label: 'Treasure', color: 'text-emerald-400' },
 };
+
+// Encounter types that use the conflict system
+const COMBAT_ENCOUNTER_TYPES = new Set(['combat', 'elite']);
 
 // ============================================================
 // Minimap Component
@@ -302,11 +328,18 @@ export default function DungeonPage() {
 
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<DungeonStatusResponse | null>(null);
+  const [character, setCharacter] = useState<CharacterSnapshot | null>(null);
   const [isMoving, setIsMoving] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [isAbandoning, setIsAbandoning] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
   const [lastSearchResult, setLastSearchResult] = useState<SearchResult | null>(null);
+
+  // Conflict (resource fracture) state
+  const [conflictState, setConflictState] = useState<ConflictState | null>(null);
+  const [leverage, setLeverage] = useState<LeverageState>(emptyLeverage());
+  const [pendingEncounterNodeId, setPendingEncounterNodeId] = useState<string | null>(null);
+  const [isResolvingConflict, setIsResolvingConflict] = useState(false);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -333,9 +366,74 @@ export default function DungeonPage() {
     }
   }, [router, addToast]);
 
+  // Load dungeon status + character snapshot on mount
   useEffect(() => {
     fetchStatus();
+    fetch('/api/character/get')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.character) {
+          setCharacter({
+            name: data.character.name,
+            level: data.character.level,
+            attributes: data.character.attributes ?? {},
+            powers: data.character.powers ?? [],
+            heat: data.character.heat ?? 0,
+            leverage: data.character.leverage ?? emptyLeverage(),
+          });
+          setLeverage(data.character.leverage ?? emptyLeverage());
+        }
+      })
+      .catch(() => {/* character data is optional for dungeon display */});
   }, [fetchStatus]);
+
+  // ── Conflict handlers ──────────────────────────────────────
+
+  const handleConflictMove = (moveId: MoveId) => {
+    if (!conflictState || conflictState.ended) return;
+    setConflictState(executeTurn(conflictState, moveId));
+  };
+
+  const handleLeverageSpend = (spend: LeverageSpend) => {
+    if (!conflictState) return;
+    const newLeverage = spendLeverage(leverage, spend.leverageType);
+    if (!newLeverage) return;
+    setLeverage(newLeverage);
+    setConflictState({ ...conflictState, armedLeverage: spend, leverage: newLeverage });
+  };
+
+  const handleConflictContinue = async () => {
+    if (!conflictState || !pendingEncounterNodeId) return;
+    setIsResolvingConflict(true);
+
+    const result = evaluateOutcome(conflictState);
+    const playerWon = result.outcome !== 'opponent_victory';
+
+    if (playerWon) {
+      // Clear the dungeon node
+      await fetch('/api/dungeon/clear-node', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nodeId: pendingEncounterNodeId }),
+      });
+    } else {
+      addToast({
+        type: 'warning',
+        title: 'Defeated!',
+        message: 'The enemy holds the room. Try a different path.',
+        duration: 4000,
+      });
+    }
+
+    // Reset conflict state and refresh dungeon
+    setConflictState(null);
+    setPendingEncounterNodeId(null);
+    setIsResolvingConflict(false);
+
+    await fetchStatus();
+  };
+
+  // ── Movement ───────────────────────────────────────────────
 
   const handleMove = async (targetNodeId: string) => {
     if (isMoving) return;
@@ -363,27 +461,73 @@ export default function DungeonPage() {
 
       const moveResult: MoveResult = data.move;
 
-      // Check for encounter
       if (moveResult.encounter) {
         const enc = moveResult.encounter;
         const contentInfo = CONTENT_TYPE_INFO[enc.type] || { label: enc.type, color: 'text-white' };
-        addToast({
-          type: enc.isBoss ? 'warning' : 'info',
-          title: enc.isBoss ? 'Boss Encounter!' : 'Encounter!',
-          message: `You found: ${contentInfo.label}`,
-          duration: 4000,
-        });
+        const isCombat = COMBAT_ENCOUNTER_TYPES.has(enc.type) || enc.isBoss;
 
-        // Clear the node after encounter (MVP: auto-clear)
-        await fetch('/api/dungeon/clear-node', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nodeId: enc.nodeId }),
-        });
+        if (isCombat) {
+          // Resolve via the resource fracture conflict system
+          const depth = status?.session?.depth ?? 1;
+          const difficulty = enc.isBoss ? depth + 4 : enc.type === 'elite' ? depth + 2 : depth;
+
+          const tags = enc.isBoss
+            ? ['hostile', 'dungeon', 'boss', 'elite']
+            : enc.type === 'elite'
+              ? ['hostile', 'dungeon', 'elite']
+              : ['hostile', 'dungeon'];
+
+          const opponentIdentity = resolveOpponentIdentity({
+            encounterCategory: 'combat',
+            encounterDifficulty: difficulty,
+            encounterTags: tags,
+          });
+
+          const conflict = initConflict({
+            encounterCategory: 'combat',
+            encounterDifficulty: difficulty,
+            npcTags: tags,
+            playerLabel: character?.name ?? 'You',
+            opponentLabel: opponentIdentity.name,
+            opponentIdentity,
+            heat: character?.heat ?? 0,
+            leverage,
+            playerBuild: character
+              ? {
+                  level: character.level,
+                  attributes: character.attributes,
+                  powers: character.powers,
+                }
+              : undefined,
+          });
+
+          setPendingEncounterNodeId(enc.nodeId);
+          setConflictState(conflict);
+
+          addToast({
+            type: enc.isBoss ? 'warning' : 'info',
+            title: enc.isBoss ? 'Boss Battle!' : 'Combat!',
+            message: `${contentInfo.label} — ${opponentIdentity.name} blocks your path!`,
+            duration: 4000,
+          });
+        } else {
+          // Non-combat encounter: show toast and auto-clear
+          addToast({
+            type: 'info',
+            title: contentInfo.label,
+            message: `You encountered: ${contentInfo.label}`,
+            duration: 3000,
+          });
+          await fetch('/api/dungeon/clear-node', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nodeId: enc.nodeId }),
+          });
+          await fetchStatus();
+        }
+      } else {
+        await fetchStatus();
       }
-
-      // Refresh status
-      await fetchStatus();
     } catch (err) {
       console.error('Move error:', err);
       addToast({
@@ -396,6 +540,8 @@ export default function DungeonPage() {
       setIsMoving(false);
     }
   };
+
+  // ── Search ─────────────────────────────────────────────────
 
   const handleSearch = async () => {
     if (isSearching) return;
@@ -444,7 +590,6 @@ export default function DungeonPage() {
         });
       }
 
-      // Refresh status to update minimap
       await fetchStatus();
     } catch (err) {
       console.error('Search error:', err);
@@ -458,6 +603,8 @@ export default function DungeonPage() {
       setIsSearching(false);
     }
   };
+
+  // ── Abandon ────────────────────────────────────────────────
 
   const handleAbandon = async () => {
     if (isAbandoning) return;
@@ -504,6 +651,8 @@ export default function DungeonPage() {
     }
   };
 
+  // ── Complete ───────────────────────────────────────────────
+
   const handleComplete = async () => {
     if (isCompleting) return;
     setIsCompleting(true);
@@ -546,7 +695,8 @@ export default function DungeonPage() {
     }
   };
 
-  // Loading state
+  // ── Render ─────────────────────────────────────────────────
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center">
@@ -555,7 +705,6 @@ export default function DungeonPage() {
     );
   }
 
-  // No active session
   if (!status?.hasActiveSession || !status.session || !status.minimap) {
     return (
       <div className="min-h-screen bg-gray-950 text-white">
@@ -585,11 +734,12 @@ export default function DungeonPage() {
   }
 
   const { session, minimap, availableMoves = [], hasAdjacentSecrets, isComplete } = status;
-
-  // Find current node
   const currentNode = minimap.nodes.find((n) => n.isCurrent);
   const nodeInfo = currentNode ? NODE_TYPE_INFO[currentNode.type] : null;
   const contentInfo = currentNode?.contentType ? CONTENT_TYPE_INFO[currentNode.contentType] : null;
+
+  // While in a conflict, block navigation
+  const inConflict = conflictState !== null;
 
   return (
     <div className="min-h-screen bg-gray-950 text-white pb-24">
@@ -609,7 +759,7 @@ export default function DungeonPage() {
             variant="ghost"
             size="sm"
             onClick={handleAbandon}
-            disabled={isAbandoning}
+            disabled={isAbandoning || inConflict}
             className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
           >
             <LogOut className="w-4 h-4 mr-1" />
@@ -620,7 +770,7 @@ export default function DungeonPage() {
 
       <main className="max-w-4xl mx-auto px-4 py-4 space-y-4">
         {/* Completion Banner */}
-        {isComplete && (
+        {isComplete && !inConflict && (
           <AnimatedCard variant="panel" className="bg-green-500/20 border border-green-500/40 p-4 rounded-xl">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -641,115 +791,143 @@ export default function DungeonPage() {
           </AnimatedCard>
         )}
 
+        {/* Combat — Resource Fracture Conflict Pane */}
+        {inConflict && conflictState && (
+          <AnimatedCard variant="panel" className="panel-glass rounded-xl overflow-hidden">
+            <div className="px-4 pt-4 pb-2 flex items-center gap-2">
+              <Swords className="w-5 h-5 text-red-400" />
+              <h3 className="font-semibold text-red-400">Combat Encounter</h3>
+            </div>
+            <div className="px-4 pb-4">
+              <ConflictPane
+                state={conflictState}
+                leverage={leverage}
+                onPlayerMove={handleConflictMove}
+                onLeverageSpend={handleLeverageSpend}
+                onContinue={handleConflictContinue}
+              />
+            </div>
+            {isResolvingConflict && (
+              <div className="px-4 pb-4 text-sm text-white/50 text-center">
+                Resolving encounter...
+              </div>
+            )}
+          </AnimatedCard>
+        )}
+
         {/* Current Room */}
-        <AnimatedCard variant="panel" className="panel-glass p-4 rounded-xl">
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-lg bg-white/10 ${nodeInfo?.color || 'text-white'}`}>
-                {nodeInfo?.icon || <MapPin className="w-5 h-5" />}
+        {!inConflict && (
+          <AnimatedCard variant="panel" className="panel-glass p-4 rounded-xl">
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg bg-white/10 ${nodeInfo?.color || 'text-white'}`}>
+                  {nodeInfo?.icon || <MapPin className="w-5 h-5" />}
+                </div>
+                <div>
+                  <h2 className="font-semibold text-lg">{nodeInfo?.label || 'Unknown Room'}</h2>
+                  {currentNode?.label && (
+                    <p className="text-sm text-white/50">{currentNode.label}</p>
+                  )}
+                </div>
               </div>
-              <div>
-                <h2 className="font-semibold text-lg">{nodeInfo?.label || 'Unknown Room'}</h2>
-                {currentNode?.label && (
-                  <p className="text-sm text-white/50">{currentNode.label}</p>
-                )}
-              </div>
-            </div>
-            {contentInfo && currentNode?.state !== 'CLEARED' && (
-              <div className={`flex items-center gap-1 px-2 py-1 rounded-lg bg-white/10 ${contentInfo.color}`}>
-                {contentInfo.icon}
-                <span className="text-sm">{contentInfo.label}</span>
-              </div>
-            )}
-            {currentNode?.state === 'CLEARED' && (
-              <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-green-500/20 text-green-400">
-                <CheckCircle className="w-4 h-4" />
-                <span className="text-sm">Cleared</span>
-              </div>
-            )}
-          </div>
-
-          {/* Search Result */}
-          {lastSearchResult && (
-            <div className={`p-3 rounded-lg mb-4 ${lastSearchResult.discovered ? 'bg-yellow-500/20 border border-yellow-500/30' : 'bg-white/5'}`}>
-              <p className="text-sm">
-                {lastSearchResult.discovered ? (
-                  <span className="text-yellow-400">You found a hidden passage!</span>
-                ) : (
-                  <span className="text-white/60">
-                    {lastSearchResult.rollResult !== undefined
-                      ? `Search result: ${lastSearchResult.rollResult} (using ${lastSearchResult.statUsed}) vs DC ${lastSearchResult.target}`
-                      : 'Nothing found.'}
-                  </span>
-                )}
-              </p>
-            </div>
-          )}
-
-          {/* Actions */}
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={handleSearch}
-              disabled={isSearching || isMoving}
-              className="flex-1 border-white/20 text-black hover:bg-white/10"
-            >
-              <Search className="w-4 h-4 mr-2" />
-              {isSearching ? 'Searching...' : 'Search'}
-              {hasAdjacentSecrets && !isSearching && (
-                <span className="ml-2 px-1.5 py-0.5 text-xs bg-yellow-500/30 text-yellow-400 rounded">!</span>
+              {contentInfo && currentNode?.state !== 'CLEARED' && (
+                <div className={`flex items-center gap-1 px-2 py-1 rounded-lg bg-white/10 ${contentInfo.color}`}>
+                  {contentInfo.icon}
+                  <span className="text-sm">{contentInfo.label}</span>
+                </div>
               )}
-            </Button>
-          </div>
-        </AnimatedCard>
+              {currentNode?.state === 'CLEARED' && (
+                <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-green-500/20 text-green-400">
+                  <CheckCircle className="w-4 h-4" />
+                  <span className="text-sm">Cleared</span>
+                </div>
+              )}
+            </div>
+
+            {/* Search Result */}
+            {lastSearchResult && (
+              <div className={`p-3 rounded-lg mb-4 ${lastSearchResult.discovered ? 'bg-yellow-500/20 border border-yellow-500/30' : 'bg-white/5'}`}>
+                <p className="text-sm">
+                  {lastSearchResult.discovered ? (
+                    <span className="text-yellow-400">You found a hidden passage!</span>
+                  ) : (
+                    <span className="text-white/60">
+                      {lastSearchResult.rollResult !== undefined
+                        ? `Search result: ${lastSearchResult.rollResult} (using ${lastSearchResult.statUsed}) vs DC ${lastSearchResult.target}`
+                        : 'Nothing found.'}
+                    </span>
+                  )}
+                </p>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={handleSearch}
+                disabled={isSearching || isMoving}
+                className="flex-1 border-white/20 text-black hover:bg-white/10"
+              >
+                <Search className="w-4 h-4 mr-2" />
+                {isSearching ? 'Searching...' : 'Search'}
+                {hasAdjacentSecrets && !isSearching && (
+                  <span className="ml-2 px-1.5 py-0.5 text-xs bg-yellow-500/30 text-yellow-400 rounded">!</span>
+                )}
+              </Button>
+            </div>
+          </AnimatedCard>
+        )}
 
         {/* Minimap */}
         <AnimatedCard variant="panel" className="panel-glass p-4 rounded-xl">
           <h3 className="font-semibold text-white/80 mb-3">Map</h3>
           <DungeonMinimap
             minimap={minimap}
-            availableMoves={availableMoves}
-            onNodeClick={handleMove}
+            availableMoves={inConflict ? [] : availableMoves}
+            onNodeClick={inConflict ? undefined : handleMove}
           />
         </AnimatedCard>
 
-        {/* Available Moves */}
-        <AnimatedCard variant="panel" className="panel-glass p-4 rounded-xl">
-          <h3 className="font-semibold text-white/80 mb-3">Exits</h3>
-          {availableMoves.length === 0 ? (
-            <p className="text-sm text-white/40">No available exits from this room.</p>
-          ) : (
-            <div className="grid grid-cols-2 gap-2">
-              {availableMoves.map((move) => {
-                const moveNode = minimap.nodes.find((n) => n.id === move.nodeId);
-                const moveNodeInfo = NODE_TYPE_INFO[move.type] || { label: move.type, icon: <DoorOpen className="w-4 h-4" />, color: 'text-white' };
-                const moveContentInfo = moveNode?.contentType ? CONTENT_TYPE_INFO[moveNode.contentType] : null;
+        {/* Available Moves — hidden during combat */}
+        {!inConflict && (
+          <AnimatedCard variant="panel" className="panel-glass p-4 rounded-xl">
+            <h3 className="font-semibold text-white/80 mb-3">Exits</h3>
+            {availableMoves.length === 0 ? (
+              <p className="text-sm text-white/40">No available exits from this room.</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {availableMoves.map((move) => {
+                  const moveNode = minimap.nodes.find((n) => n.id === move.nodeId);
+                  const moveNodeInfo = NODE_TYPE_INFO[move.type] || { label: move.type, icon: <DoorOpen className="w-4 h-4" />, color: 'text-white' };
+                  const moveContentInfo = moveNode?.contentType ? CONTENT_TYPE_INFO[moveNode.contentType] : null;
 
-                return (
-                  <Button
-                    key={move.nodeId}
-                    variant="outline"
-                    onClick={() => handleMove(move.nodeId)}
-                    disabled={isMoving}
-                    className={`justify-start border-white/20 text-black hover:bg-white/10 ${move.isSecret ? 'border-yellow-500/40' : ''}`}
-                  >
-                    <span className={moveNodeInfo.color}>{moveNodeInfo.icon}</span>
-                    <span className="ml-2 flex-1 text-left">
-                      {moveNodeInfo.label}
-                      {move.isSecret && <Eye className="w-3 h-3 inline ml-1 text-yellow-400" />}
-                    </span>
-                    {moveContentInfo && moveNode?.state !== 'CLEARED' && (
-                      <span className={`ml-2 ${moveContentInfo.color}`}>{moveContentInfo.icon}</span>
-                    )}
-                    {moveNode?.state === 'CLEARED' && (
-                      <CheckCircle className="w-4 h-4 ml-2 text-green-400" />
-                    )}
-                  </Button>
-                );
-              })}
-            </div>
-          )}
-        </AnimatedCard>
+                  return (
+                    <Button
+                      key={move.nodeId}
+                      variant="outline"
+                      onClick={() => handleMove(move.nodeId)}
+                      disabled={isMoving}
+                      className={`justify-start border-white/20 text-black hover:bg-white/10 ${move.isSecret ? 'border-yellow-500/40' : ''}`}
+                    >
+                      <span className={moveNodeInfo.color}>{moveNodeInfo.icon}</span>
+                      <span className="ml-2 flex-1 text-left">
+                        {moveNodeInfo.label}
+                        {move.isSecret && <Eye className="w-3 h-3 inline ml-1 text-yellow-400" />}
+                      </span>
+                      {moveContentInfo && moveNode?.state !== 'CLEARED' && (
+                        <span className={`ml-2 ${moveContentInfo.color}`}>{moveContentInfo.icon}</span>
+                      )}
+                      {moveNode?.state === 'CLEARED' && (
+                        <CheckCircle className="w-4 h-4 ml-2 text-green-400" />
+                      )}
+                    </Button>
+                  );
+                })}
+              </div>
+            )}
+          </AnimatedCard>
+        )}
       </main>
     </div>
   );
