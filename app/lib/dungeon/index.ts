@@ -46,3 +46,16 @@ export {
 
 // Minimap
 export { buildMinimapDTO, buildFullFloorMap } from './minimap';
+
+// Trap system
+export {
+  getTrapDifficulty,
+  perceptionCheck,
+  disarmCheck,
+  triggerTrap,
+  disarmTrap,
+  retreatFromTrap,
+  TRAP_DIFFICULTY_VALUES,
+  TRAP_DAMAGE,
+} from './trap';
+export type { TrapDifficulty, TrapCheckResult, TrapActionResult } from './trap';

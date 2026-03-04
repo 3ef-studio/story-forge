@@ -111,6 +111,39 @@ interface DungeonStatusResponse {
   error?: string;
 }
 
+type TrapDifficulty = 'EASY' | 'NORMAL' | 'HARD';
+
+interface TrapCheckResult {
+  success: boolean;
+  roll: number;
+  attributeValue: number;
+  total: number;
+  difficulty: number;
+}
+
+interface TrapActionResult {
+  success: boolean;
+  error?: string;
+  action: 'trigger' | 'disarm' | 'retreat';
+  disarmSuccess?: boolean;
+  damageTaken?: number;
+  newHp?: number;
+  difficulty: TrapDifficulty;
+  check?: TrapCheckResult;
+}
+
+interface TrapEncounterState {
+  nodeId: string;
+  difficulty: TrapDifficulty;
+  difficultyValue: number;
+  detected: boolean;
+  perceptionRoll: number;
+  perceptionTotal: number;
+  previousNodeId: string;
+  // Set after the player acts
+  result?: TrapActionResult;
+}
+
 interface MoveResult {
   success: boolean;
   newNodeId?: string;
@@ -119,6 +152,11 @@ interface MoveResult {
     type: string;
     isBoss: boolean;
     nodeId: string;
+    trapDifficulty?: TrapDifficulty;
+    trapDetected?: boolean;
+    trapPerceptionRoll?: number;
+    trapPerceptionTotal?: number;
+    trapDifficultyValue?: number;
   } | null;
   discoveredNodes?: string[];
   discoveredEdges?: string[];
@@ -341,6 +379,10 @@ export default function DungeonPage() {
   const [pendingEncounterNodeId, setPendingEncounterNodeId] = useState<string | null>(null);
   const [isResolvingConflict, setIsResolvingConflict] = useState(false);
 
+  // Trap encounter state
+  const [trapEncounter, setTrapEncounter] = useState<TrapEncounterState | null>(null);
+  const [isTrapActing, setIsTrapActing] = useState(false);
+
   const fetchStatus = useCallback(async () => {
     try {
       const response = await fetch('/api/dungeon/status');
@@ -433,12 +475,66 @@ export default function DungeonPage() {
     await fetchStatus();
   };
 
+  // ── Trap Handlers ──────────────────────────────────────────
+
+  const handleTrapAction = async (
+    action: 'trigger' | 'disarm' | 'retreat',
+    trap: TrapEncounterState
+  ) => {
+    if (isTrapActing) return;
+    setIsTrapActing(true);
+
+    try {
+      const body =
+        action === 'retreat'
+          ? { action, previousNodeId: trap.previousNodeId }
+          : { action, nodeId: trap.nodeId, difficulty: trap.difficulty };
+
+      const response = await fetch('/api/dungeon/trap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        addToast({ type: 'error', title: 'Trap Error', message: data.error || 'Trap action failed', duration: 3000 });
+        return;
+      }
+
+      const result: TrapActionResult = data.result;
+
+      // Show result on the panel, then refresh status
+      setTrapEncounter((prev) => (prev ? { ...prev, result } : null));
+
+      if (action === 'retreat') {
+        addToast({ type: 'info', title: 'You Retreated', message: 'You carefully backed away from the trap.', duration: 3000 });
+        setTrapEncounter(null);
+      } else if (action === 'disarm' && result.disarmSuccess) {
+        addToast({ type: 'success', title: 'Trap Disarmed!', message: `Roll: ${result.check?.total} vs DC ${result.check?.difficulty} — safe passage.`, duration: 4000 });
+      } else if (result.damageTaken && result.damageTaken > 0) {
+        addToast({ type: 'warning', title: 'Trap Triggered!', message: `You took ${result.damageTaken} HP damage! HP: ${result.newHp}`, duration: 4000 });
+      }
+
+      await fetchStatus();
+    } catch (err) {
+      console.error('Trap action error:', err);
+      addToast({ type: 'error', title: 'Error', message: 'An error occurred', duration: 3000 });
+    } finally {
+      setIsTrapActing(false);
+    }
+  };
+
+  const dismissTrapResult = () => setTrapEncounter(null);
+
   // ── Movement ───────────────────────────────────────────────
 
   const handleMove = async (targetNodeId: string) => {
     if (isMoving) return;
     setIsMoving(true);
     setLastSearchResult(null);
+    const previousNodeId = status?.session?.currentNodeId ?? '';
 
     try {
       const response = await fetch('/api/dungeon/move', {
@@ -463,8 +559,9 @@ export default function DungeonPage() {
 
       if (moveResult.encounter) {
         const enc = moveResult.encounter;
-        const contentInfo = CONTENT_TYPE_INFO[enc.type] || { label: enc.type, color: 'text-white' };
-        const isCombat = COMBAT_ENCOUNTER_TYPES.has(enc.type) || enc.isBoss;
+        const encType = enc.type.toLowerCase();
+        const contentInfo = CONTENT_TYPE_INFO[encType] || { label: enc.type, color: 'text-white' };
+        const isCombat = COMBAT_ENCOUNTER_TYPES.has(encType) || enc.isBoss;
 
         if (isCombat) {
           // Resolve via the resource fracture conflict system
@@ -510,8 +607,43 @@ export default function DungeonPage() {
             message: `${contentInfo.label} — ${opponentIdentity.name} blocks your path!`,
             duration: 4000,
           });
+        } else if (encType === 'trap') {
+          // Trap encounter — systemic resolution
+          const trapDetected = enc.trapDetected ?? false;
+          const trapDifficulty = enc.trapDifficulty ?? 'NORMAL';
+          const trapState: TrapEncounterState = {
+            nodeId: enc.nodeId,
+            difficulty: trapDifficulty,
+            difficultyValue: enc.trapDifficultyValue ?? 50,
+            detected: trapDetected,
+            perceptionRoll: enc.trapPerceptionRoll ?? 0,
+            perceptionTotal: enc.trapPerceptionTotal ?? 0,
+            previousNodeId,
+          };
+
+          if (trapDetected) {
+            // Player detected the trap — show choice panel
+            addToast({
+              type: 'warning',
+              title: 'Trap Detected!',
+              message: `Your perception revealed a ${trapDifficulty.toLowerCase()} trap. Disarm or retreat?`,
+              duration: 4000,
+            });
+            setTrapEncounter(trapState);
+          } else {
+            // Player didn't detect it — auto-trigger damage
+            addToast({
+              type: 'error',
+              title: 'Trap Triggered!',
+              message: 'You failed to notice the trap — triggering it now!',
+              duration: 3000,
+            });
+            // Set encounter state first for the panel to show the result
+            setTrapEncounter(trapState);
+            await handleTrapAction('trigger', trapState);
+          }
         } else {
-          // Non-combat encounter: show toast and auto-clear
+          // Other non-combat encounter: show toast and auto-clear
           addToast({
             type: 'info',
             title: contentInfo.label,
@@ -736,10 +868,11 @@ export default function DungeonPage() {
   const { session, minimap, availableMoves = [], hasAdjacentSecrets, isComplete } = status;
   const currentNode = minimap.nodes.find((n) => n.isCurrent);
   const nodeInfo = currentNode ? NODE_TYPE_INFO[currentNode.type] : null;
-  const contentInfo = currentNode?.contentType ? CONTENT_TYPE_INFO[currentNode.contentType] : null;
+  const contentInfo = currentNode?.contentType ? CONTENT_TYPE_INFO[currentNode.contentType.toLowerCase()] : null;
 
-  // While in a conflict, block navigation
   const inConflict = conflictState !== null;
+  const inTrap = trapEncounter !== null;
+  const blocked = inConflict || inTrap;
 
   return (
     <div className="min-h-screen bg-gray-950 text-white pb-24">
@@ -759,7 +892,7 @@ export default function DungeonPage() {
             variant="ghost"
             size="sm"
             onClick={handleAbandon}
-            disabled={isAbandoning || inConflict}
+            disabled={isAbandoning || blocked}
             className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
           >
             <LogOut className="w-4 h-4 mr-1" />
@@ -770,7 +903,7 @@ export default function DungeonPage() {
 
       <main className="max-w-4xl mx-auto px-4 py-4 space-y-4">
         {/* Completion Banner */}
-        {isComplete && !inConflict && (
+        {isComplete && !blocked && (
           <AnimatedCard variant="panel" className="bg-green-500/20 border border-green-500/40 p-4 rounded-xl">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -815,8 +948,110 @@ export default function DungeonPage() {
           </AnimatedCard>
         )}
 
+        {/* Trap Encounter Panel */}
+        {inTrap && trapEncounter && (
+          <AnimatedCard variant="panel" className="panel-glass rounded-xl overflow-hidden border border-yellow-500/30">
+            <div className="px-4 pt-4 pb-2 flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-yellow-400" />
+              <h3 className="font-semibold text-yellow-400">
+                {trapEncounter.detected ? 'Trap Detected!' : 'Trap Triggered!'}
+              </h3>
+              <span className="ml-auto text-xs px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-300">
+                {trapEncounter.difficulty}
+              </span>
+            </div>
+
+            <div className="px-4 pb-4 space-y-4">
+              {/* Detection info */}
+              <div className="text-sm text-white/70 bg-white/5 rounded-lg p-3">
+                {trapEncounter.detected ? (
+                  <p>
+                    Your perception reveals a hidden trap before you enter the room.{' '}
+                    <span className="text-white/50">
+                      (Perception roll: {trapEncounter.perceptionTotal} vs DC {trapEncounter.difficultyValue})
+                    </span>
+                  </p>
+                ) : (
+                  <p>
+                    You didn&apos;t notice the trap until it was too late.{' '}
+                    <span className="text-white/50">
+                      (Perception roll: {trapEncounter.perceptionTotal} vs DC {trapEncounter.difficultyValue})
+                    </span>
+                  </p>
+                )}
+                <p className="mt-1 text-white/50 text-xs">
+                  Difficulty: {trapEncounter.difficulty} — Damage on trigger:{' '}
+                  {trapEncounter.difficulty === 'EASY' ? '10' : trapEncounter.difficulty === 'NORMAL' ? '25' : '50'} HP
+                </p>
+              </div>
+
+              {/* Result (after action) */}
+              {trapEncounter.result && (
+                <div className={`rounded-lg p-3 text-sm ${
+                  trapEncounter.result.disarmSuccess
+                    ? 'bg-green-500/20 border border-green-500/30 text-green-300'
+                    : trapEncounter.result.action === 'retreat'
+                    ? 'bg-blue-500/20 border border-blue-500/30 text-blue-300'
+                    : 'bg-red-500/20 border border-red-500/30 text-red-300'
+                }`}>
+                  {trapEncounter.result.disarmSuccess && (
+                    <p>Trap successfully disarmed! Roll: {trapEncounter.result.check?.total} vs DC {trapEncounter.result.check?.difficulty}</p>
+                  )}
+                  {!trapEncounter.result.disarmSuccess && trapEncounter.result.action === 'disarm' && (
+                    <p>
+                      Disarm failed! Roll: {trapEncounter.result.check?.total} vs DC {trapEncounter.result.check?.difficulty}.
+                      Took <strong>{trapEncounter.result.damageTaken} HP</strong> damage. HP remaining: {trapEncounter.result.newHp}
+                    </p>
+                  )}
+                  {trapEncounter.result.action === 'trigger' && !('disarmSuccess' in trapEncounter.result) && (
+                    <p>Trap triggered! Took <strong>{trapEncounter.result.damageTaken} HP</strong> damage. HP remaining: {trapEncounter.result.newHp}</p>
+                  )}
+                  {trapEncounter.result.action === 'retreat' && (
+                    <p>You backed away safely. The trap remains.</p>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={dismissTrapResult}
+                    className="mt-2 border-white/20 text-white/70 hover:bg-white/10"
+                  >
+                    Continue
+                  </Button>
+                </div>
+              )}
+
+              {/* Actions (only before resolution) */}
+              {!trapEncounter.result && trapEncounter.detected && (
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => handleTrapAction('disarm', trapEncounter)}
+                    disabled={isTrapActing}
+                    className="flex-1 bg-yellow-600 hover:bg-yellow-700 text-white"
+                  >
+                    {isTrapActing ? 'Working...' : 'Attempt Disarm'}
+                    <span className="ml-2 text-xs opacity-70">(INT + AGI)</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => handleTrapAction('retreat', trapEncounter)}
+                    disabled={isTrapActing}
+                    className="flex-1 border-white/20 text-white hover:bg-white/10"
+                  >
+                    Retreat
+                  </Button>
+                </div>
+              )}
+
+              {/* Auto-processing indicator for undetected traps */}
+              {!trapEncounter.result && !trapEncounter.detected && (
+                <p className="text-sm text-white/40 text-center">Resolving trap...</p>
+              )}
+            </div>
+          </AnimatedCard>
+        )}
+
         {/* Current Room */}
-        {!inConflict && (
+        {!blocked && (
           <AnimatedCard variant="panel" className="panel-glass p-4 rounded-xl">
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3">
@@ -884,13 +1119,13 @@ export default function DungeonPage() {
           <h3 className="font-semibold text-white/80 mb-3">Map</h3>
           <DungeonMinimap
             minimap={minimap}
-            availableMoves={inConflict ? [] : availableMoves}
-            onNodeClick={inConflict ? undefined : handleMove}
+            availableMoves={blocked ? [] : availableMoves}
+            onNodeClick={blocked ? undefined : handleMove}
           />
         </AnimatedCard>
 
-        {/* Available Moves — hidden during combat */}
-        {!inConflict && (
+        {/* Available Moves — hidden during combat or trap encounter */}
+        {!blocked && (
           <AnimatedCard variant="panel" className="panel-glass p-4 rounded-xl">
             <h3 className="font-semibold text-white/80 mb-3">Exits</h3>
             {availableMoves.length === 0 ? (
@@ -900,7 +1135,7 @@ export default function DungeonPage() {
                 {availableMoves.map((move) => {
                   const moveNode = minimap.nodes.find((n) => n.id === move.nodeId);
                   const moveNodeInfo = NODE_TYPE_INFO[move.type] || { label: move.type, icon: <DoorOpen className="w-4 h-4" />, color: 'text-white' };
-                  const moveContentInfo = moveNode?.contentType ? CONTENT_TYPE_INFO[moveNode.contentType] : null;
+                  const moveContentInfo = moveNode?.contentType ? CONTENT_TYPE_INFO[moveNode.contentType.toLowerCase()] : null;
 
                   return (
                     <Button

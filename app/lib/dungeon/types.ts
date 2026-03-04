@@ -107,6 +107,12 @@ export interface MoveResult {
     type: DungeonContentType;
     isBoss: boolean;
     nodeId: string;
+    // Trap-specific detection info (only present when type === 'TRAP')
+    trapDifficulty?: 'EASY' | 'NORMAL' | 'HARD';
+    trapDetected?: boolean;
+    trapPerceptionRoll?: number;
+    trapPerceptionTotal?: number;
+    trapDifficultyValue?: number;
   } | null;
   discoveredNodes?: string[];
   discoveredEdges?: string[];

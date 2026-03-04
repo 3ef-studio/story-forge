@@ -16,6 +16,7 @@ import type {
   DungeonContentType,
 } from '@prisma/client';
 import type { MoveResult } from './types';
+import { getTrapDifficulty, perceptionCheck, TRAP_DIFFICULTY_VALUES } from './trap';
 
 // ============================================================
 // Session Helpers
@@ -245,6 +246,11 @@ export async function dungeonMove(
           edges: true,
         },
       },
+      character: {
+        include: {
+          attributes: true,
+        },
+      },
     },
   });
 
@@ -311,6 +317,29 @@ export async function dungeonMove(
       type: finalNode.contentType,
       isBoss: finalNode.isBoss,
       nodeId: finalNodeId,
+    };
+  }
+
+  // For TRAP encounters: run perception check to determine if player detects it
+  if (encounter?.type === 'TRAP') {
+    const depth = session.floor.depth;
+    const trapDifficulty = getTrapDifficulty(depth);
+
+    const attributeMap: Record<string, number> = {};
+    for (const attr of session.character.attributes) {
+      attributeMap[attr.attributeId] = attr.currentValue;
+    }
+    const perception = attributeMap.perception ?? attributeMap.intelligence ?? 50;
+
+    const detection = perceptionCheck(perception, trapDifficulty);
+
+    encounter = {
+      ...encounter,
+      trapDifficulty,
+      trapDetected: detection.success,
+      trapPerceptionRoll: detection.roll,
+      trapPerceptionTotal: detection.total,
+      trapDifficultyValue: TRAP_DIFFICULTY_VALUES[trapDifficulty],
     };
   }
 
