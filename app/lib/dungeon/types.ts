@@ -98,6 +98,14 @@ export interface EdgeWithState extends DungeonEdge {
 // Movement Types
 // ============================================================
 
+export interface TrapEncounterInfo {
+  trapDifficulty: 'EASY' | 'NORMAL' | 'HARD';
+  trapDetected: boolean;
+  trapPerceptionRoll: number;
+  trapPerceptionTotal: number;
+  trapDifficultyValue: number;
+}
+
 export interface MoveResult {
   success: boolean;
   error?: string;
@@ -107,13 +115,7 @@ export interface MoveResult {
     type: DungeonContentType;
     isBoss: boolean;
     nodeId: string;
-    // Trap-specific detection info (only present when type === 'TRAP')
-    trapDifficulty?: 'EASY' | 'NORMAL' | 'HARD';
-    trapDetected?: boolean;
-    trapPerceptionRoll?: number;
-    trapPerceptionTotal?: number;
-    trapDifficultyValue?: number;
-  } | null;
+  } & Partial<TrapEncounterInfo> | null;
   discoveredNodes?: string[];
   discoveredEdges?: string[];
 }

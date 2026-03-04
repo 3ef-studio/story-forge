@@ -226,6 +226,75 @@ function discoverAdjacent(
 }
 
 // ============================================================
+// Corridor Resolution Helpers
+// ============================================================
+
+/**
+ * Follow a single-exit corridor chain from `fromNodeId` through `corridorId`
+ * and return the ID of the first non-corridor node (or the corridor itself if
+ * the chain dead-ends or branches before reaching one).
+ */
+function resolveCorridorTerminal(
+  fromNodeId: string,
+  corridorId: string,
+  nodes: DungeonNode[],
+  edges: DungeonEdge[],
+  session: DungeonSession
+): string {
+  const visited = new Set<string>([fromNodeId, corridorId]);
+  let currentId = corridorId;
+
+  while (true) {
+    const currentNode = nodes.find((n) => n.id === currentId);
+    if (!currentNode || currentNode.type !== 'CORRIDOR') {
+      return currentId;
+    }
+
+    const nextIds = getConnectedEdges(currentId, edges)
+      .filter((e) => isEdgeDiscovered(e, session))
+      .map((e) => getOtherNodeId(e, currentId))
+      .filter((id) => !visited.has(id));
+
+    if (nextIds.length === 1) {
+      visited.add(nextIds[0]);
+      currentId = nextIds[0];
+    } else {
+      // Dead end or multi-exit junction — stay at this corridor node
+      return currentId;
+    }
+  }
+}
+
+/**
+ * Given a `targetNodeId` that is the terminal of a corridor chain starting
+ * at `currentNodeId`, return the ID of the directly-adjacent corridor that
+ * is the first step in that chain.  Returns `null` if no such path exists.
+ */
+function findCorridorFirstStep(
+  currentNodeId: string,
+  targetNodeId: string,
+  nodes: DungeonNode[],
+  edges: DungeonEdge[],
+  session: DungeonSession
+): string | null {
+  const connectedEdges = getConnectedEdges(currentNodeId, edges).filter((e) =>
+    isEdgeDiscovered(e, session)
+  );
+
+  for (const edge of connectedEdges) {
+    const neighborId = getOtherNodeId(edge, currentNodeId);
+    const neighbor = nodes.find((n) => n.id === neighborId);
+    if (neighbor?.type !== 'CORRIDOR') continue;
+
+    const terminal = resolveCorridorTerminal(currentNodeId, neighborId, nodes, edges, session);
+    if (terminal === targetNodeId) {
+      return neighborId;
+    }
+  }
+  return null;
+}
+
+// ============================================================
 // Main Movement Function
 // ============================================================
 
@@ -261,20 +330,48 @@ export async function dungeonMove(
   const { nodes, edges } = session.floor;
   const currentNodeId = session.currentNodeId;
 
-  // Validate movement
-  const moveCheck = canMoveTo(currentNodeId, targetNodeId, edges, session);
-  if (!moveCheck.valid) {
-    return { success: false, error: moveCheck.error };
+  // Validate movement — direct edge first, then corridor-chain resolution.
+  // getAvailableMoves now resolves corridors to their terminal rooms, so the
+  // client may send a terminal room ID that has no direct edge from the current
+  // node.  In that case we find the adjacent corridor that leads there and use
+  // it as the first step for traversal.
+  const directCheck = canMoveTo(currentNodeId, targetNodeId, edges, session);
+  let firstStep = targetNodeId;
+
+  if (!directCheck.valid) {
+    const corridorStep = findCorridorFirstStep(
+      currentNodeId,
+      targetNodeId,
+      nodes,
+      edges,
+      session
+    );
+    if (!corridorStep) {
+      return { success: false, error: directCheck.error };
+    }
+    firstStep = corridorStep;
   }
 
-  // Calculate traversal path (auto-traverse corridors)
-  const { path, finalNodeId, encounterNodes } = findTraversalPath(
-    currentNodeId,
-    targetNodeId,
-    nodes,
-    edges,
-    session
-  );
+  // Calculate traversal path (auto-traverse corridors from firstStep)
+  const {
+    path: rawPath,
+    finalNodeId: rawFinalNodeId,
+    encounterNodes,
+  } = findTraversalPath(currentNodeId, firstStep, nodes, edges, session);
+
+  // If a corridor encounter (e.g. a trap) lies mid-traversal, stop the
+  // player at that corridor node rather than auto-walking them past it.
+  // Without this, the player would land in the room beyond the trap while
+  // the encounter fires from a corridor they never "stopped" in.
+  let finalNodeId = rawFinalNodeId;
+  let path = rawPath;
+  if (encounterNodes.length > 0 && encounterNodes[0] !== rawFinalNodeId) {
+    const stopIdx = rawPath.indexOf(encounterNodes[0]);
+    if (stopIdx !== -1) {
+      path = rawPath.slice(0, stopIdx + 1);
+      finalNodeId = encounterNodes[0];
+    }
+  }
 
   // Discover adjacent rooms from final position
   const { newNodes, newEdges } = discoverAdjacent(
@@ -396,10 +493,26 @@ export async function getAvailableMoves(
   const { nodes, edges } = session.floor;
   const connectedEdges = getConnectedEdges(session.currentNodeId, edges);
 
-  return connectedEdges
+  const moves = connectedEdges
     .filter((e) => isEdgeDiscovered(e, session))
     .map((e) => {
-      const targetId = getOtherNodeId(e, session.currentNodeId);
+      const adjacentId = getOtherNodeId(e, session.currentNodeId);
+      const adjacentNode = nodes.find((n) => n.id === adjacentId);
+
+      // Resolve corridors to their terminal destination so that exits always
+      // display the actual room the player will land in, not a pass-through
+      // corridor node.
+      let targetId = adjacentId;
+      if (adjacentNode?.type === 'CORRIDOR') {
+        targetId = resolveCorridorTerminal(
+          session.currentNodeId,
+          adjacentId,
+          nodes,
+          edges,
+          session
+        );
+      }
+
       const targetNode = nodes.find((n) => n.id === targetId);
       return {
         nodeId: targetId,
@@ -407,4 +520,10 @@ export async function getAvailableMoves(
         isSecret: e.type === 'SECRET',
       };
     });
+
+  // Deduplicate — multiple corridor paths could theoretically resolve to the
+  // same terminal room.
+  return moves.filter(
+    (move, idx) => moves.findIndex((m) => m.nodeId === move.nodeId) === idx
+  );
 }

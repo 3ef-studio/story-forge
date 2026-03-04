@@ -12,7 +12,7 @@
  * - Combat encounters resolved via the resource fracture conflict system
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/app/components/ui/button';
@@ -112,6 +112,7 @@ interface DungeonStatusResponse {
 }
 
 type TrapDifficulty = 'EASY' | 'NORMAL' | 'HARD';
+type DungeonEncounterType = 'COMBAT' | 'ELITE' | 'TRAP' | 'EVENT' | 'TREASURE';
 
 interface TrapCheckResult {
   success: boolean;
@@ -128,7 +129,8 @@ interface TrapActionResult {
   disarmSuccess?: boolean;
   damageTaken?: number;
   newHp?: number;
-  difficulty: TrapDifficulty;
+  characterDied?: boolean;
+  difficulty?: TrapDifficulty;
   check?: TrapCheckResult;
 }
 
@@ -149,7 +151,7 @@ interface MoveResult {
   newNodeId?: string;
   traversedNodes?: string[];
   encounter?: {
-    type: string;
+    type: DungeonEncounterType;
     isBoss: boolean;
     nodeId: string;
     trapDifficulty?: TrapDifficulty;
@@ -381,7 +383,10 @@ export default function DungeonPage() {
 
   // Trap encounter state
   const [trapEncounter, setTrapEncounter] = useState<TrapEncounterState | null>(null);
+  // Both state (for re-render) and ref (for synchronous guard) — prevents stale-closure
+  // double-firing when handleTrapAction is called programmatically from handleMove.
   const [isTrapActing, setIsTrapActing] = useState(false);
+  const isTrapActingRef = useRef(false);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -408,26 +413,32 @@ export default function DungeonPage() {
     }
   }, [router, addToast]);
 
+  const fetchCharacter = useCallback(async () => {
+    try {
+      const r = await fetch('/api/character/get');
+      if (!r.ok) return;
+      const data = await r.json();
+      if (data?.character) {
+        setCharacter({
+          name: data.character.name,
+          level: data.character.level,
+          attributes: data.character.attributes ?? {},
+          powers: data.character.powers ?? [],
+          heat: data.character.heat ?? 0,
+          leverage: data.character.leverage ?? emptyLeverage(),
+        });
+        setLeverage(data.character.leverage ?? emptyLeverage());
+      }
+    } catch {
+      /* character data is optional for dungeon display */
+    }
+  }, []);
+
   // Load dungeon status + character snapshot on mount
   useEffect(() => {
     fetchStatus();
-    fetch('/api/character/get')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data?.character) {
-          setCharacter({
-            name: data.character.name,
-            level: data.character.level,
-            attributes: data.character.attributes ?? {},
-            powers: data.character.powers ?? [],
-            heat: data.character.heat ?? 0,
-            leverage: data.character.leverage ?? emptyLeverage(),
-          });
-          setLeverage(data.character.leverage ?? emptyLeverage());
-        }
-      })
-      .catch(() => {/* character data is optional for dungeon display */});
-  }, [fetchStatus]);
+    fetchCharacter();
+  }, [fetchStatus, fetchCharacter]);
 
   // ── Conflict handlers ──────────────────────────────────────
 
@@ -481,7 +492,10 @@ export default function DungeonPage() {
     action: 'trigger' | 'disarm' | 'retreat',
     trap: TrapEncounterState
   ) => {
-    if (isTrapActing) return;
+    // Use ref for synchronous guard — prevents stale-closure double-firing
+    // when called programmatically (undetected traps) vs from UI click.
+    if (isTrapActingRef.current) return;
+    isTrapActingRef.current = true;
     setIsTrapActing(true);
 
     try {
@@ -505,16 +519,26 @@ export default function DungeonPage() {
 
       const result: TrapActionResult = data.result;
 
-      // Show result on the panel, then refresh status
-      setTrapEncounter((prev) => (prev ? { ...prev, result } : null));
-
       if (action === 'retreat') {
         addToast({ type: 'info', title: 'You Retreated', message: 'You carefully backed away from the trap.', duration: 3000 });
         setTrapEncounter(null);
-      } else if (action === 'disarm' && result.disarmSuccess) {
-        addToast({ type: 'success', title: 'Trap Disarmed!', message: `Roll: ${result.check?.total} vs DC ${result.check?.difficulty} — safe passage.`, duration: 4000 });
-      } else if (result.damageTaken && result.damageTaken > 0) {
-        addToast({ type: 'warning', title: 'Trap Triggered!', message: `You took ${result.damageTaken} HP damage! HP: ${result.newHp}`, duration: 4000 });
+      } else {
+        // Attach result to the panel so the player can read it before dismissing.
+        setTrapEncounter((prev) => (prev ? { ...prev, result } : null));
+
+        if (result.characterDied) {
+          addToast({ type: 'error', title: 'You Have Fallen!', message: 'The trap was lethal. Your dungeon run has ended.', duration: 5000 });
+          router.push('/game');
+          return;
+        }
+
+        if (action === 'disarm' && result.disarmSuccess) {
+          addToast({ type: 'success', title: 'Trap Disarmed!', message: `Roll: ${result.check?.total} vs DC ${result.check?.difficulty} — safe passage.`, duration: 4000 });
+        } else if (result.damageTaken && result.damageTaken > 0) {
+          addToast({ type: 'warning', title: 'Trap Triggered!', message: `Took ${result.damageTaken} HP damage. Remaining: ${result.newHp} HP`, duration: 4000 });
+          // Refresh character snapshot so HP is accurate for combat initiation
+          await fetchCharacter();
+        }
       }
 
       await fetchStatus();
@@ -522,6 +546,7 @@ export default function DungeonPage() {
       console.error('Trap action error:', err);
       addToast({ type: 'error', title: 'Error', message: 'An error occurred', duration: 3000 });
     } finally {
+      isTrapActingRef.current = false;
       setIsTrapActing(false);
     }
   };
@@ -534,7 +559,9 @@ export default function DungeonPage() {
     if (isMoving) return;
     setIsMoving(true);
     setLastSearchResult(null);
-    const previousNodeId = status?.session?.currentNodeId ?? '';
+    // Captured before the move so retreat can return here.
+    // status.session is guaranteed non-null at this point (render guard above).
+    const previousNodeId = status!.session!.currentNodeId;
 
     try {
       const response = await fetch('/api/dungeon/move', {
@@ -566,11 +593,11 @@ export default function DungeonPage() {
         if (isCombat) {
           // Resolve via the resource fracture conflict system
           const depth = status?.session?.depth ?? 1;
-          const difficulty = enc.isBoss ? depth + 4 : enc.type === 'elite' ? depth + 2 : depth;
+          const difficulty = enc.isBoss ? depth + 4 : encType === 'elite' ? depth + 2 : depth;
 
           const tags = enc.isBoss
             ? ['hostile', 'dungeon', 'boss', 'elite']
-            : enc.type === 'elite'
+            : encType === 'elite'
               ? ['hostile', 'dungeon', 'elite']
               : ['hostile', 'dungeon'];
 
@@ -1003,7 +1030,7 @@ export default function DungeonPage() {
                       Took <strong>{trapEncounter.result.damageTaken} HP</strong> damage. HP remaining: {trapEncounter.result.newHp}
                     </p>
                   )}
-                  {trapEncounter.result.action === 'trigger' && !('disarmSuccess' in trapEncounter.result) && (
+                  {trapEncounter.result.action === 'trigger' && (
                     <p>Trap triggered! Took <strong>{trapEncounter.result.damageTaken} HP</strong> damage. HP remaining: {trapEncounter.result.newHp}</p>
                   )}
                   {trapEncounter.result.action === 'retreat' && (
@@ -1029,7 +1056,7 @@ export default function DungeonPage() {
                     className="flex-1 bg-yellow-600 hover:bg-yellow-700 text-white"
                   >
                     {isTrapActing ? 'Working...' : 'Attempt Disarm'}
-                    <span className="ml-2 text-xs opacity-70">(INT + AGI)</span>
+                    <span className="ml-2 text-xs opacity-70">(avg INT + AGI)</span>
                   </Button>
                   <Button
                     variant="outline"

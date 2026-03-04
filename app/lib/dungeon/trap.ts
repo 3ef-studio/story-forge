@@ -3,7 +3,7 @@
  *
  * Handles trap encounters:
  * - Perception-based detection check
- * - Intelligence + Agility disarm attempts
+ * - Intelligence + Agility disarm attempts (uses average)
  * - HP damage application on failure or undetected trigger
  * - Retreat to previous node
  */
@@ -28,9 +28,11 @@ export const TRAP_DAMAGE: Record<TrapDifficulty, number> = {
   HARD: 50,
 };
 
-// Random roll range: 1-25
-// Combined with 0-100 attributes, this gives meaningful variance
-// vs difficulties of 25/50/75.
+// Random roll range: 1-25.
+// Combined with 0-100 attributes vs difficulties 25/50/75 this gives
+// meaningful variance — high-attribute characters still have a chance of
+// failure on Hard traps, and low-attribute characters can occasionally
+// succeed on Easy ones.
 const ROLL_MAX = 25;
 
 // ============================================================
@@ -69,7 +71,7 @@ export function getTrapDifficulty(depth: number): TrapDifficulty {
 
 /**
  * Perception check to detect a trap before triggering it.
- * Formula: perception + roll(1..25) > difficulty
+ * Formula: perception + roll(1..25) >= DC (25/50/75)
  */
 export function perceptionCheck(
   perception: number,
@@ -78,12 +80,12 @@ export function perceptionCheck(
   const dc = TRAP_DIFFICULTY_VALUES[difficulty];
   const r = trapRoll();
   const total = perception + r;
-  return { success: total > dc, roll: r, attributeValue: perception, total, difficulty: dc };
+  return { success: total >= dc, roll: r, attributeValue: perception, total, difficulty: dc };
 }
 
 /**
  * Disarm check using average of intelligence and agility.
- * Formula: (intelligence + agility) / 2 + roll(1..25) > difficulty
+ * Formula: floor((intelligence + agility) / 2) + roll(1..25) >= DC (25/50/75)
  */
 export function disarmCheck(
   intelligence: number,
@@ -91,10 +93,10 @@ export function disarmCheck(
   difficulty: TrapDifficulty
 ): TrapCheckResult {
   const dc = TRAP_DIFFICULTY_VALUES[difficulty];
-  const avg = Math.round((intelligence + agility) / 2);
+  const avg = Math.floor((intelligence + agility) / 2);
   const r = trapRoll();
   const total = avg + r;
-  return { success: total > dc, roll: r, attributeValue: avg, total, difficulty: dc };
+  return { success: total >= dc, roll: r, attributeValue: avg, total, difficulty: dc };
 }
 
 // ============================================================
@@ -108,7 +110,10 @@ export interface TrapActionResult {
   disarmSuccess?: boolean;
   damageTaken?: number;
   newHp?: number;
-  difficulty: TrapDifficulty;
+  /** Set when the character's HP reaches 0 — caller should end the session. */
+  characterDied?: boolean;
+  /** Present for trigger/disarm; absent for retreat (no damage occurs). */
+  difficulty?: TrapDifficulty;
   check?: TrapCheckResult;
 }
 
@@ -147,7 +152,14 @@ export async function triggerTrap(
     markTrapNodeCleared(sessionId, nodeId),
   ]);
 
-  return { success: true, action: 'trigger', damageTaken: damage, newHp, difficulty };
+  return {
+    success: true,
+    action: 'trigger',
+    damageTaken: damage,
+    newHp,
+    characterDied: newHp === 0,
+    difficulty,
+  };
 }
 
 /**
@@ -177,7 +189,8 @@ export async function disarmTrap(
 
 /**
  * Retreat from the trap room — move character back to the previous node.
- * The trap node is NOT cleared (it can be attempted again later).
+ * The trap node is NOT cleared (the character can attempt it again later).
+ * No difficulty or damage applies.
  */
 export async function retreatFromTrap(
   sessionId: string,
@@ -188,7 +201,7 @@ export async function retreatFromTrap(
     data: { currentNodeId: previousNodeId },
   });
 
-  return { success: true, action: 'retreat', damageTaken: 0, difficulty: 'EASY' };
+  return { success: true, action: 'retreat', damageTaken: 0 };
 }
 
 // ============================================================
