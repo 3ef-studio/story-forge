@@ -36,16 +36,7 @@ export default function Footer() {
           </Link>
         </div>
 
-        <div className="flex items-center sm:text-left justify-end">
-          <a
-            href="https://donate.stripe.com/aFa28s9PvepKelJ4Ok8ww01"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:text-neutral-200 transition-colors"
-          >
-            ☕ Buy the dev team a Coffee
-          </a>
-        </div>
+        
       </div>
     </footer>
   );

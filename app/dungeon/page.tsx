@@ -669,8 +669,35 @@ export default function DungeonPage() {
             setTrapEncounter(trapState);
             await handleTrapAction('trigger', trapState);
           }
+        } else if (encType === 'treasure') {
+          // Treasure encounter — call dedicated endpoint for depth-scaled gold reward
+          const treasureRes = await fetch('/api/dungeon/treasure', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nodeId: enc.nodeId }),
+          });
+          const treasureData = await treasureRes.json();
+
+          if (treasureRes.ok && treasureData.success) {
+            addToast({
+              type: 'success',
+              title: 'Treasure Found!',
+              message: `You claim ${treasureData.goldReward} gold from the hoard.`,
+              duration: 4000,
+            });
+            // Refresh character so gold display stays accurate
+            await fetchCharacter();
+          } else {
+            addToast({
+              type: 'warning',
+              title: 'Treasure',
+              message: treasureData.error || 'You found something, but it slipped away.',
+              duration: 3000,
+            });
+          }
+          await fetchStatus();
         } else {
-          // Other non-combat encounter: show toast and auto-clear
+          // Other non-combat encounter (EVENT, etc.): show toast and auto-clear
           addToast({
             type: 'info',
             title: contentInfo.label,
