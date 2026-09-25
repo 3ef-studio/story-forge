@@ -8,7 +8,9 @@ All numbers below are from a fresh, read-only run performed for this document (2
 
 ```bash
 npx tsc --noEmit   # typecheck
-npx vitest run     # unit tests
+npx vitest run     # unit tests (includes the smoke suite; DB smoke tests skip)
+npm run smoke      # smoke suite only — offline, ~1s
+npm run smoke:db   # read-only database smoke check (needs DATABASE_URL)
 npx eslint .       # lint
 ```
 
@@ -34,7 +36,28 @@ All 5 test files live under `app/lib/game-logic/{conflict,pvp}/__tests__/` — t
 
 `scripts/validate-followups.ts` is a standalone `tsx`-run simulation script that drives the follow-up-action system through synthetic rounds and prints pass/fail checks to stdout. It is **not** part of `npm test` and does not run in any automated context.
 
+## Smoke suite (`tests/smoke/`, added 2026-09-25)
+
+A shallow "are the essential systems basically working?" layer, separate from the detailed unit tests above. It asserts **invariants** (ranges, shapes, round-trips, determinism), deliberately not exact balance numbers, so balance tweaks shouldn't break it.
+
+**Offline tier — `npm run smoke`** (no DB, no OpenAI key, no network; 46 tests, <1s):
+
+| File | Covers |
+|---|---|
+| `core-loop.smoke.test.ts` | Encounter preview/resolution for every approach; a full conflict played to a terminal outcome; PvP combat within the turn cap + zero-sum Elo; follow-up generate→merge→TTL cycle stays deduped/bounded; the seed prompt's few-shot example parses into a valid 4-choice seed, and `personalizeSeed` turns it into an encounter without changing its mechanics |
+| `progression.smoke.test.ts` | Leverage gain/spend/caps, heat clamp, alignment deltas for every deity, intent clamp/bands, energy regen, power XP/levelling and gating, consumable inventory cap + JSON round-trip, store offer generation/refresh |
+| `world.smoke.test.ts` | Default district shares sum to 100; city shares, faction tiers and `checkWinCandidate` agree on a dominated city and find no winner in an untouched one; `computeCityControl` percentages sum to 100; district modifiers preserve sign within ±50; seeded RNG determinism; dungeon trap DC scaling and check consistency |
+| `data.smoke.test.ts` | Every `app/data/*` table loads with unique ids; district adjacency, origin → power/faction/attribute/deity references resolve; every origin can create a character |
+
+Import-safety rules (FACT, verified 2026-09-25): helpers from Prisma-importing modules are safe to import because `app/lib/db.ts` constructs the client lazily. `app/lib/openai.ts` constructs its client **at import time**, so the smoke suite must never import `encounter-seed-generator.ts` or `encounter-generator.ts` — only the deterministic half of the AI pipeline (`encounter-personalizer.ts`, `seed-prompts.ts`) is covered.
+
+**Database tier — `npm run smoke:db`** (opt-in; skipped by `npm test`/`npm run smoke`; also enabled by `SMOKE_DB=1`). Loads `DATABASE_URL` from the environment, `.env.local`, or `.env`, and fails (not skips) if it's missing. All queries run inside a Postgres `READ ONLY` transaction, so the database itself rejects any write. Checks: `SELECT 1`; **every model table and scalar column in `schema.prisma` exists in the live database** (via `information_schema`, a direct check against the schema-drift risk in [DATA_MODEL.md](./DATA_MODEL.md)); one trivial read through the generated Prisma client. It checks schema → DB only; extra objects in the DB are not reported.
+
+Validation performed when this was added (2026-09-25): offline tier passes; three deliberate one-line breakages (win condition, leverage cap, Elo sign) were each caught and reverted; the DB tier was run against a disposable local Postgres 16 built from `prisma migrate diff --from-empty` SQL — passes when healthy, fails with a clear message when `DATABASE_URL` is missing or unreachable, and names the exact table/column when one is dropped; a write attempted inside the same read-only transaction pattern was rejected by Postgres (`25006`). **It has not yet been run against the real Neon database.**
+
 ## What has zero test coverage
+
+The smoke suite above touches many of the modules below at a *does-it-run* level; the list still describes the absence of real unit-test coverage.
 
 Every deterministic system outside the conflict engine and PvP core, including exactly the systems this project's complexity review (Mission 1) identified as its core value:
 
