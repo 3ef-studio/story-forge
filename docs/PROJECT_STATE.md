@@ -68,6 +68,7 @@ Documented here for visibility, and preserved as a historical record while the p
 | `/api/pvp/cleanup` auth fails open when `CRON_SECRET` is unset (it is currently unset) | `app/api/pvp/cleanup/route.ts` | Low — deletes only historical PvP match records, not user-owned state |
 | In-memory, per-instance auth rate limiting — resets on restart, doesn't hold up under serverless/multi-instance deployment | `app/lib/auth-helpers.ts` | Low at current scale |
 | Wide "god row" `Character` model — most simulation state as scalar/JSON columns on one table | `prisma/schema.prisma` | Low today (well-guarded with transactions); growing concern as more systems accrete |
+| Known dependency advisories remain in `next` 16.1.6 (fix ≥16.3.3), `next-auth` beta.30 (fix beta.32), `prisma` CLI config deps, and `vitest` 4.0.18. The only materially applicable ones are Next.js Server Components DoS-class issues. Transitive tooling advisories were remediated 2026-09-25 (lockfile only). | `package.json` / `package-lock.json` | Medium if a production deployment is live, otherwise Low. See [SECURITY_ADVISORIES.md](./SECURITY_ADVISORIES.md) |
 | Dead legacy files | `app/data/origins.ts`, `app/lib/ai/encounter-generator.ts` | Trivial |
 | Unscheduled cache cleanup | `cleanStaleCache()` | Trivial |
 
