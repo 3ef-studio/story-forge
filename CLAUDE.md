@@ -11,6 +11,7 @@ Story Forge is a solo-built browser RPG with durable player data (Postgres/Neon 
 - [docs/DATA_MODEL.md](./docs/DATA_MODEL.md) — schema, migrations, and the drift warning.
 - [docs/DUNGEONS.md](./docs/DUNGEONS.md) — the newest, most actively-changing subsystem.
 - [docs/TESTING.md](./docs/TESTING.md) — what's actually tested (narrow) vs. not.
+- [docs/SECURITY_ADVISORIES.md](./docs/SECURITY_ADVISORIES.md) — point-in-time dependency advisory review (what's applicable, what was patched, what remains and why).
 - [docs/DECISIONS.md](./docs/DECISIONS.md) — recoverable architectural history, with explicit `NEEDS HUMAN CONTEXT` markers (several resolved with author retrospective context as of Mission 3).
 - [docs/LEARNINGS.md](./docs/LEARNINGS.md) — the retrospective/learning record: why the project exists, what it was trying to prove, and why it's parked. Read this for product/process context; it does not change any risk tier or operating rule above.
 - [docs/development/DEFINITION_OF_DONE.md](./docs/development/DEFINITION_OF_DONE.md) — validation checklist by risk tier.
