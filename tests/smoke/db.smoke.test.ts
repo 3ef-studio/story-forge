@@ -36,9 +36,11 @@ describe.skipIf(!enabled)('smoke: database (read-only)', () => {
   });
 
   it('connects and answers SELECT 1', async () => {
+    // Neon can suspend an idle branch; the first query after a cold start pays a
+    // multi-second wake-up cost that Vitest's default 5s test timeout doesn't allow for.
     const rows = await readOnly((tx) => tx.$queryRaw<{ ok: number }[]>`SELECT 1 AS ok`);
     expect(rows[0].ok).toBe(1);
-  });
+  }, 15000);
 
   it('every table and column in schema.prisma exists in the database', async () => {
     const cols = await readOnly((tx) =>
