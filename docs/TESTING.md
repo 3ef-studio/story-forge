@@ -10,17 +10,19 @@ All numbers below are from a fresh, read-only run performed for this document (2
 
 ```bash
 npx tsc --noEmit   # typecheck
-npx vitest run     # unit tests
+npx vitest run     # unit tests (includes the smoke suite; DB smoke tests skip)
+npm run smoke      # smoke suite only — offline, ~1s
+npm run smoke:db   # read-only database smoke check (needs DATABASE_URL)
 npx eslint .       # lint
 ```
 
 There is no `typecheck` or `lint`-in-CI script wired up — these are run manually. `npm test` runs `vitest run`.
 
-## Current results (2026-09-16)
+## Current results (2026-09-25, after merging the 2026-09-16 unit tests and the 2026-09-25 smoke suite)
 
 - **`npx tsc --noEmit`** — 0 errors.
-- **`npx vitest run`** — **13 test files, 233/233 tests passing** (5 pre-existing files / 102 tests, unchanged, + 8 new files / 131 new tests added 2026-09-16).
-- **`npx eslint .`** — 68 problems: **12 errors, 56 warnings** — identical to the 2026-09-13 baseline. The new test files introduce 0 new lint issues. Not fixed as part of this testing mission per scope; see breakdown below.
+- **`npx vitest run`** — **18 test files, 279/279 tests passing, 4 skipped** (13 files / 233 unit tests from 2026-09-16, unchanged, + 5 files / 46 offline smoke tests from 2026-09-25; the 4-test DB tier skips by default and is run separately via `npm run smoke:db`).
+- **`npx eslint .`** — 68 problems: **12 errors, 56 warnings** — identical to the 2026-09-13 baseline across both additions. Not fixed as part of either testing pass per scope; see breakdown below.
 
 ## What's actually tested
 
@@ -57,7 +59,30 @@ There is no `typecheck` or `lint`-in-CI script wired up — these are run manual
 
 `sanitizeText()` in `app/lib/ai/encounter-seed-generator.ts` strips HTML/script tag *markup* but not tag *contents* — `<script>alert(1)</script>X` becomes `alert(1)X`, not `X`. This is correct-by-design for its actual purpose (the sanitized string only ever flows into JSON consumed by React, which escapes on render, so there is no injection vector) but is worth knowing precisely if anyone changes this function's contract later.
 
+## Smoke suite (`tests/smoke/`, added 2026-09-25)
+
+A shallow "are the essential systems basically working?" layer, separate from the detailed unit tests above. It asserts **invariants** (ranges, shapes, round-trips, determinism), deliberately not exact balance numbers, so balance tweaks shouldn't break it.
+
+**Offline tier — `npm run smoke`** (no DB, no OpenAI key, no network; 46 tests, <1s):
+
+| File | Covers |
+|---|---|
+| `core-loop.smoke.test.ts` | Encounter preview/resolution for every approach; a full conflict played to a terminal outcome; PvP combat within the turn cap + zero-sum Elo; follow-up generate→merge→TTL cycle stays deduped/bounded; the seed prompt's few-shot example parses into a valid 4-choice seed, and `personalizeSeed` turns it into an encounter without changing its mechanics |
+| `progression.smoke.test.ts` | Leverage gain/spend/caps, heat clamp, alignment deltas for every deity, intent clamp/bands, energy regen, power XP/levelling and gating, consumable inventory cap + JSON round-trip, store offer generation/refresh |
+| `world.smoke.test.ts` | Default district shares sum to 100; city shares, faction tiers and `checkWinCandidate` agree on a dominated city and find no winner in an untouched one; `computeCityControl` percentages sum to 100; district modifiers preserve sign within ±50; seeded RNG determinism; dungeon trap DC scaling and check consistency |
+| `data.smoke.test.ts` | Every `app/data/*` table loads with unique ids; district adjacency, origin → power/faction/attribute/deity references resolve; every origin can create a character |
+
+Import-safety rules (FACT, verified 2026-09-25): helpers from Prisma-importing modules are safe to import because `app/lib/db.ts` constructs the client lazily. `app/lib/openai.ts` constructs its client **at import time**, so the smoke suite must never import `encounter-seed-generator.ts` or `encounter-generator.ts` — only the deterministic half of the AI pipeline (`encounter-personalizer.ts`, `seed-prompts.ts`) is covered.
+
+**Database tier — `npm run smoke:db`** (opt-in; skipped by `npm test`/`npm run smoke`; also enabled by `SMOKE_DB=1`). Loads `DATABASE_URL` from the environment, `.env.local`, or `.env`, and fails (not skips) if it's missing. All queries run inside a Postgres `READ ONLY` transaction, so the database itself rejects any write. Checks: `SELECT 1`; **every model table and scalar column in `schema.prisma` exists in the live database** (via `information_schema`, a direct check against the schema-drift risk in [DATA_MODEL.md](./DATA_MODEL.md)); one trivial read through the generated Prisma client. It checks schema → DB only; extra objects in the DB are not reported.
+
+Validation performed when this was added (2026-09-25): offline tier passes; three deliberate one-line breakages (win condition, leverage cap, Elo sign) were each caught and reverted; the DB tier was run against a disposable local Postgres 16 built from `prisma migrate diff --from-empty` SQL — passes when healthy, fails with a clear message when `DATABASE_URL` is missing or unreachable, and names the exact table/column when one is dropped; a write attempted inside the same read-only transaction pattern was rejected by Postgres (`25006`).
+
+**Run against the real Neon database (2026-09-25, same day):** the first pass hit a 5s Vitest test-timeout on the connectivity check's first query — the connection had actually succeeded (later queries in the same run completed in a few hundred ms), it was just a cold-started Neon branch taking longer than 5s to wake up. The connectivity test's timeout was bumped to 15s; a clean **4/4 pass** followed, including the schema-drift check — **no drift detected between `schema.prisma` and the live Neon schema** as of this date.
+
 ## What still has zero test coverage
+
+The smoke suite above touches many of the modules below at a *does-it-run* level; it does not replace real unit-test coverage, which remains absent for:
 
 - `district-influence.ts`, `energy-regen.ts`, `power-progression.ts`, `power-gating.ts`, `consumables.ts`, `store.ts`, `goal-manager.ts`, `intent.ts`, `npc-manager.ts`, `patron-reaction.ts`, `rival-generator.ts`, `thread-manager.ts`, `combat/resolve-encounter.ts`
 - `app/lib/world/{cityControl,faction-state,applyDistrictModifiers,applyWorldReactions,applyDeathWorldConsequences,city-updates,seededRng}.ts`
@@ -77,12 +102,11 @@ Errors: mostly `prefer-const` (`conflict/engine.ts:501`, `leverage.ts:120`) and 
 
 ## Priority if a further testing pass is scoped later
 
-The original 2026-09-13 priority list (escalation/victory, district-share math, alignment/leverage, dungeon-generation determinism, an AI-schema eval harness) was fully addressed on 2026-09-16 — see above. If picking this up again, in rough order of value:
+The original 2026-09-13 priority list (escalation/victory, district-share math, alignment/leverage, dungeon-generation determinism, an AI-schema eval harness) was fully addressed on 2026-09-16, and the 2026-09-25 smoke suite added a broad shallow safety net on top. If picking this up again, in rough order of value:
 
-1. Dungeon session lifecycle (`session.ts`: `enterDungeon`, `completeDungeon`, `failDungeon`, `abandonDungeon`) — untested, and it's where the documented faction-control stub lives (see [DUNGEONS.md](./DUNGEONS.md#stub-dungeon-completion-does-not-currently-affect-districtfaction-control)); a mocked-Prisma suite similar to the ones added for `escalationAndVictory`/`districtControlShares` would fit the same pattern.
-2. `energy-regen.ts` / `power-progression.ts` — pure-ish time/XP math, cheap to test, currently untested.
-3. `app/lib/world/applyWorldReactions.ts` / `applyDeathWorldConsequences.ts` — the ripple/counter and death-fallout logic; higher effort (touches districtState + the `seededRng.ts` seeded RNG) but meaningful given it's part of the "living city" system.
-4. `app/lib/ai/encounter-personalizer.ts` — fully deterministic and pure, no mocking needed at all; likely the cheapest remaining high-value target.
-5. A route-level/integration test for at least `POST /api/action/resolve`, given it's the single largest, most consequential handler in the codebase and currently has zero coverage of any kind.
+1. Dungeon session lifecycle (`session.ts`: `enterDungeon`, `completeDungeon`, `failDungeon`, `abandonDungeon`) — still genuinely untested at any level (not touched by the smoke suite either), and it's where the documented faction-control stub lives (see [DUNGEONS.md](./DUNGEONS.md#stub-dungeon-completion-does-not-currently-affect-districtfaction-control)); a mocked-Prisma suite similar to the ones added for `escalationAndVictory`/`districtControlShares` would fit the same pattern.
+2. `app/lib/world/applyWorldReactions.ts` / `applyDeathWorldConsequences.ts` — still genuinely untested at any level; the ripple/counter and death-fallout logic. Higher effort (touches districtState + the `seededRng.ts` seeded RNG) but meaningful given it's part of the "living city" system.
+3. A route-level/integration test for at least `POST /api/action/resolve`, given it's the single largest, most consequential handler in the codebase and currently has zero coverage of any kind, smoke-level included.
+4. `energy-regen.ts` / `power-progression.ts` and `app/lib/ai/encounter-personalizer.ts` — now have smoke-level "does it run and stay in-range" coverage (`progression.smoke.test.ts`, `core-loop.smoke.test.ts`) but no real unit tests. Lower priority than the above since they're no longer *zero* coverage, but still worth detailed tests eventually — all are pure/deterministic and need no mocking.
 
 This is a recommendation for scoping a future testing pass, not a commitment made by this document — see [PROJECT_STATE.md](./PROJECT_STATE.md) for how this fits into the overall risk list.

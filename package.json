@@ -8,7 +8,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "smoke": "vitest run tests/smoke",
+    "smoke:db": "vitest run tests/smoke/db.smoke.test.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
